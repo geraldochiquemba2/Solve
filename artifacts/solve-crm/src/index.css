@@ -435,34 +435,34 @@
 
 /* Solve Corporate command deck theme override */
 :root {
-  --background: 222 28% 96%;
+  --background: 222 24% 98%;
   --foreground: 220 35% 15%;
-  --border: 220 20% 88%;
+  --border: 220 19% 90%;
   --card: 0 0% 100%;
   --card-foreground: 220 35% 15%;
-  --card-border: 220 20% 88%;
-  --sidebar: 222 46% 14%;
-  --sidebar-foreground: 216 22% 80%;
-  --sidebar-border: 222 32% 23%;
+  --card-border: 220 19% 90%;
+  --sidebar: 222 39% 22%;
+  --sidebar-foreground: 216 24% 90%;
+  --sidebar-border: 222 32% 31%;
   --sidebar-primary: 44 96% 62%;
-  --sidebar-primary-foreground: 222 46% 14%;
-  --sidebar-accent: 222 38% 21%;
+  --sidebar-primary-foreground: 222 39% 22%;
+  --sidebar-accent: 222 35% 30%;
   --sidebar-accent-foreground: 0 0% 100%;
   --sidebar-ring: 44 96% 62%;
   --popover: 0 0% 100%;
   --popover-foreground: 220 35% 15%;
   --popover-border: 220 20% 88%;
-  --primary: 222 46% 14%;
+  --primary: 222 39% 22%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 21% 94%;
+  --secondary: 220 20% 96%;
   --secondary-foreground: 220 35% 22%;
-  --muted: 220 17% 93%;
+  --muted: 220 17% 95%;
   --muted-foreground: 220 13% 45%;
   --accent: 44 96% 62%;
   --accent-foreground: 222 46% 14%;
   --destructive: 3 67% 51%;
   --destructive-foreground: 0 0% 100%;
-  --input: 220 20% 84%;
+  --input: 220 18% 86%;
   --ring: 44 96% 62%;
   --chart-1: 222 46% 14%;
   --chart-2: 181 47% 39%;
