@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Solve Corporate CRM"
+description = "A polished frontend-only CRM command center for Solve Corporate, covering operations, commercial pipeline, clients, plans, payments, integrations, automation, access control, and system governance with local demonstration data."
+version = "1.0.0"
+id = "artifacts/solve-crm"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23970
+
+[services.development]
+run = "pnpm --filter @workspace/solve-crm run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/solve-crm", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/solve-crm/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23970"
+BASE_PATH = "/"
