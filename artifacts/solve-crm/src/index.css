@@ -506,7 +506,8 @@ html { background: hsl(var(--background)); }
 body { min-width: 320px; }
 button, a, input, select { transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, transform .18s ease; }
 .mono { font-family: var(--app-font-mono); }
-.shell { min-height: 100dvh; background: hsl(var(--background)); color: hsl(var(--foreground)); }
+.shell { min-height: 100dvh; background: hsl(var(--background)); color: hsl(var(--foreground)); display: flex; }
+.main-area { margin-left: 238px; flex: 1; min-width: 0; }
 .sidebar { background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground)); }
 .sidebar-link { display:flex; align-items:center; gap:.65rem; border-radius:.55rem; padding:.6rem .7rem; font-size:.79rem; font-weight:500; }
 .sidebar-link:hover { background: hsl(var(--sidebar-accent)); color: white; }
@@ -537,6 +538,9 @@ button, a, input, select { transition: background-color .18s ease, border-color 
 .status-warn { color:hsl(33 74% 38%); background:hsl(44 96% 62% / .2); }
 .status-danger { color:hsl(3 67% 45%); background:hsl(3 67% 51% / .11); }
 .status-neutral { color:hsl(var(--muted-foreground)); background:hsl(var(--muted)); }
+@keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.status-live { color:hsl(155 41% 35%); background:hsl(155 41% 43% / .12); }
+.status-live::before { animation: livePulse 1.5s ease-in-out infinite; }
 .metric { padding:1rem; min-height:112px; position:relative; overflow:hidden; }
 .metric::after { content:''; position:absolute; width:72px; height:72px; border-radius:50%; right:-24px; bottom:-34px; border:1px solid hsl(var(--accent) / .45); }
 .metric-value { font-family:var(--app-font-mono); font-size:1.45rem; font-weight:600; letter-spacing:-.05em; margin-top:.35rem; }
@@ -561,7 +565,7 @@ button, a, input, select { transition: background-color .18s ease, border-color 
   .sidebar { position:fixed; inset:0 auto 0 0; z-index:40; width:255px !important; transform:translateX(-102%); transition:transform .2s ease; box-shadow:var(--shadow-lg); }
   .sidebar.open { transform:translateX(0); }
   .mobile-overlay { display:block !important; position:fixed; inset:0; z-index:35; background:hsl(222 46% 14% / .4); }
-  .main-area { margin-left:0 !important; }
+  .main-area { margin-left:0 !important; flex:1; }
   .topbar { padding:.8rem 1rem !important; }
   .page-content { padding:1rem !important; }
   .metric-grid { grid-template-columns:1fr 1fr !important; }
