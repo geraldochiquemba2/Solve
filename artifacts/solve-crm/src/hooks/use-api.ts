@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, useEffect } from 'react';
 
 const API_BASE = 'http://localhost:3000';
+const ACCESS_API = 'https://solve-sqoh.onrender.com';
 
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
@@ -179,7 +180,7 @@ export interface AccessLog {
 export function useAccessStats() {
   return useQuery({
     queryKey: ['access-stats'],
-    queryFn: () => apiGet<{ data: AccessStats }>('/api/v1/access/stats'),
+    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/stats`).then(r => r.json()),
     refetchInterval: 60000,
     retry: false,
   });
@@ -189,7 +190,7 @@ export function useAccessLogs(params?: { client_id?: string; resultado?: string;
   const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
-    queryFn: () => apiGet<{ data: AccessLog[]; pagination: any }>(`/api/v1/access/logs${qs}`),
+    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/logs${qs}`).then(r => r.json()),
     refetchInterval: 30000,
     retry: false,
   });
@@ -270,7 +271,7 @@ export function useSolveAccessStream(onEvent: (event: AccessStreamEvent) => void
   const [history, setHistory] = useState<AccessStreamEvent[]>([]);
 
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/api/v1/access/stream`);
+    const es = new EventSource(`${ACCESS_API}/api/v1/access/stream`);
 
     es.onopen = () => setConnected(true);
 

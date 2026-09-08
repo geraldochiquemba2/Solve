@@ -17,6 +17,8 @@ app.get("/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// ─── Sync: PC da catraca envia acessos ──────────────────────────────────────
+
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
     const { acessos } = req.body;
@@ -44,6 +46,97 @@ app.post("/api/v1/access/sync", async (req, res) => {
   }
 });
 
+// ─── Stats ──────────────────────────────────────────────────────────────────
+
+app.get("/api/v1/access/stats", async (req, res) => {
+  try {
+    const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs");
+    const todayResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
+    const authorizedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND result = 'Autorizado'");
+    const deniedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND result != 'Autorizado'");
+    const recentAccesses = await pool.query(
+      "SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome, access_date as data_acesso, access_time as hora_acesso, access_type as tipo_acesso, result as resultado, reason as motivo FROM solve_access_logs ORDER BY remote_id DESC LIMIT 10"
+    );
+
+    res.json({
+      data: {
+        clients: { total: 0, active: 0, online: 0, blocked: 0 },
+        accesses: {
+          today: parseInt(todayResult.rows[0].cnt),
+          month: parseInt(totalResult.rows[0].cnt),
+          authorizedToday: parseInt(authorizedToday.rows[0].cnt),
+          deniedToday: parseInt(deniedToday.rows[0].cnt),
+        },
+        recentAccesses: recentAccesses.rows,
+        accessByDay: [],
+        peakHours: [],
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Logs ───────────────────────────────────────────────────────────────────
+
+app.get("/api/v1/access/logs", async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const offset = (page - 1) * limit;
+
+    const where = [];
+    const params = [];
+
+    if (req.query.client_id) {
+      where.push("customer_id = $" + (params.length + 1));
+      params.push(parseInt(req.query.client_id));
+    }
+    if (req.query.resultado) {
+      where.push("result = $" + (params.length + 1));
+      params.push(req.query.resultado);
+    }
+    if (req.query.tipo_acesso) {
+      where.push("access_type = $" + (params.length + 1));
+      params.push(req.query.tipo_acesso);
+    }
+
+    const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
+
+    const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs " + whereClause, params);
+    const logs = await pool.query(
+      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
+              access_date as data_acesso, access_time as hora_acesso,
+              access_type as tipo_acesso, result as resultado, reason as motivo
+       FROM solve_access_logs ${whereClause}
+       ORDER BY remote_id DESC LIMIT ${limit} OFFSET ${offset}`,
+      params
+    );
+
+    res.json({
+      data: logs.rows,
+      pagination: { page, limit, total: parseInt(totalResult.rows[0].cnt), totalPages: Math.ceil(parseInt(totalResult.rows[0].cnt) / limit) },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Clients ────────────────────────────────────────────────────────────────
+
+app.get("/api/v1/access/clients", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT DISTINCT customer_id as id_cliente, customer_name as nome FROM solve_access_logs ORDER BY customer_name ASC"
+    );
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── SSE: Streaming de acessos em tempo real ─────────────────────────────────
+
 const sseClients = new Set();
 let lastSyncedId = 0;
 
@@ -57,7 +150,9 @@ app.get("/api/v1/access/stream", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason
+      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
+              access_date as data_acesso, access_time as hora_acesso,
+              access_type as tipo_acesso, result as resultado, reason as motivo
        FROM solve_access_logs ORDER BY remote_id DESC LIMIT 20`
     );
     res.write(`data: ${JSON.stringify({ type: "connected", history: result.rows })}\n\n`);
@@ -70,12 +165,14 @@ app.get("/api/v1/access/stream", async (req, res) => {
 setInterval(async () => {
   try {
     const result = await pool.query(
-      `SELECT id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason
+      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
+              access_date as data_acesso, access_time as hora_acesso,
+              access_type as tipo_acesso, result as resultado, reason as motivo
        FROM solve_access_logs WHERE remote_id > $1 ORDER BY remote_id DESC`,
       [lastSyncedId]
     );
     if (result.rows.length > 0) {
-      lastSyncedId = result.rows[0].remote_id;
+      lastSyncedId = result.rows[0].id_acesso;
       for (const client of sseClients) {
         try { client.write(`data: ${JSON.stringify({ type: "access", data: result.rows })}\n\n`); }
         catch { sseClients.delete(client); }
@@ -83,16 +180,6 @@ setInterval(async () => {
     }
   } catch {}
 }, 3000);
-
-app.get("/api/v1/access/stats", async (req, res) => {
-  try {
-    const total = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs");
-    const today = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
-    res.json({ total: total.rows[0].cnt, today: today.rows[0].cnt });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => console.log(`Server listening on port ${port}`));
