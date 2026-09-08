@@ -1,9 +1,7 @@
 FROM node:20-alpine
 RUN corepack enable && corepack prepare pnpm@9 --activate
-RUN npm install -g esbuild
 WORKDIR /app
 COPY . .
 RUN pnpm install --no-frozen-lockfile
-RUN esbuild artifacts/api-server/src/standalone.ts --bundle --platform=node --format=esm --outfile=dist/server.mjs --external:"*.node" --external:pg-native --sourcemap=linked
 EXPOSE 3000
-CMD ["node", "--enable-source-maps", "./dist/server.mjs"]
+CMD ["node", "--import", "tsx", "artifacts/api-server/src/standalone.ts"]
