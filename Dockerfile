@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY lib/ lib/
 COPY artifacts/api-server/ artifacts/api-server/
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 RUN npx esbuild --version
 RUN pnpm --filter @workspace/api-server run build
 WORKDIR /app/artifacts/api-server
