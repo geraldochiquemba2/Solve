@@ -294,17 +294,20 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function AccessPage() {
+  const [filter, setFilter] = useState('todos');
+  const [page, setPage] = useState(1);
+  const limit = 50;
   const accessStats = useAccessStats();
-  const accessLogs = useAccessLogs();
+  const accessLogs = useAccessLogs({ page, limit });
   const solveDashboard = useSolveAccessDashboard();
   const solveTerminals = useSolveAccessTerminals();
   const solveHealth = useSolveAccessHealth();
   const unlockMutation = useUnlockTurnstile();
   const access = accessStats.data?.data;
   const logs = accessLogs.data?.data ?? [];
+  const pagination = accessLogs.data?.pagination;
   const solveData = solveDashboard.data?.data;
   const terminals = solveTerminals.data?.data;
-  const [filter, setFilter] = useState('todos');
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
 
   const { connected, history } = useSolveAccessStream((event) => {
@@ -312,6 +315,7 @@ function AccessPage() {
   });
 
   const allLogs = useMemo(() => {
+    if (page > 1) return logs;
     const rtMapped = realtimeEvents.map((e, i) => ({
       id_acesso: `rt-${i}`,
       cliente_id: e.cliente_id,
@@ -330,9 +334,11 @@ function AccessPage() {
       seen.add(key);
       return true;
     });
-  }, [realtimeEvents, logs]);
+  }, [realtimeEvents, logs, page]);
 
-  const filteredLogs = allLogs.filter(l => filter === 'todos' || l.resultado === filter || l.tipo_acesso === filter);
+  const filteredLogs = allLogs.filter(l => filter === 'todos' || l.resultado === filter);
+  const entradas = filteredLogs.filter(l => l.tipo_acesso === 'entrada');
+  const saidas = filteredLogs.filter(l => l.tipo_acesso === 'saida');
   const isConnected = solveHealth.data?.success;
 
   const handleUnlock = (tipo: 'entrada' | 'saida') => {
@@ -348,9 +354,15 @@ function AccessPage() {
     <Metric label="Terminais online" value={solveData?.terminais_online?.toString() ?? '—'} note={`${solveData?.total_terminais ?? 0} total`} />
     <Metric label="Acessos hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} autorizados`} />
   </div>
-  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.4fr .85fr', gap: '.8rem' }}>
-    <Section title="Registos de acesso" note={`${filteredLogs.length} entradas${connected ? ' · actualização automática' : ''}`} action={<div style={{ display: 'flex', gap: '.4rem' }}>{['todos', 'autorizado', 'negado'].map(f => <button key={f} className={filter === f ? 'btn-primary' : 'btn-quiet'} onClick={() => setFilter(f)} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>)}</div>}>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Tipo</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{filteredLogs.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.tipo_acesso === 'entrada' ? 'good' : 'neutral'}>{l.tipo_acesso}</Status></td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div></Section>
+  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}>
+    <Section title="Entradas" note={`${entradas.length} registos`} action={<div style={{ display: 'flex', gap: '.4rem' }}>{['todos', 'autorizado', 'negado'].map(f => <button key={f} className={filter === f ? 'btn-primary' : 'btn-quiet'} onClick={() => { setFilter(f); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>)}</div>}>
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{entradas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
+    </Section>
+    <Section title="Saídas" note={`${saidas.length} registos`}>
+    <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{saidas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
+    </Section>
+  </div>
+  <div style={{ display: 'grid', gap: '.8rem', marginTop: '.8rem' }}>
     <div style={{ display: 'grid', gap: '.8rem' }}>
       <Section title="Terminal" note={terminals?.nome_terminal || 'A ligar...'}>
         <div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}>

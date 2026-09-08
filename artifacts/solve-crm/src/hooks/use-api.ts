@@ -186,7 +186,7 @@ export function useAccessStats() {
   });
 }
 
-export function useAccessLogs(params?: { client_id?: string; resultado?: string; tipo_acesso?: string }) {
+export function useAccessLogs(params?: { client_id?: string; resultado?: string; tipo_acesso?: string; page?: number; limit?: number }) {
   const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
