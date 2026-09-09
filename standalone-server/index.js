@@ -84,7 +84,7 @@ app.get("/api/v1/access/stats", async (req, res) => {
 app.get("/api/v1/access/logs", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(500, parseInt(req.query.limit) || 100);
+    const limit = Math.min(1000, parseInt(req.query.limit) || 200);
     const offset = (page - 1) * limit;
 
     const where = [];
