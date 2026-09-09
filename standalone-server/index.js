@@ -52,15 +52,17 @@ app.get("/api/v1/access/stats", async (req, res) => {
   try {
     const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs");
     const todayResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
-    const authorizedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND result = 'Autorizado'");
-    const deniedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND result != 'Autorizado'");
+    const authorizedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND LOWER(result) = 'autorizado'");
+    const deniedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND LOWER(result) != 'autorizado'");
+    const uniqueClients = await pool.query("SELECT COUNT(DISTINCT customer_id) as cnt FROM solve_access_logs");
+    const clientsToday = await pool.query("SELECT COUNT(DISTINCT customer_id) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
     const recentAccesses = await pool.query(
       "SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome, access_date as data_acesso, access_time as hora_acesso, access_type as tipo_acesso, result as resultado, reason as motivo FROM solve_access_logs ORDER BY remote_id DESC LIMIT 10"
     );
 
     res.json({
       data: {
-        clients: { total: 0, active: 0, online: 0, blocked: 0 },
+        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: parseInt(clientsToday.rows[0].cnt), online: 0, blocked: 0 },
         accesses: {
           today: parseInt(todayResult.rows[0].cnt),
           month: parseInt(totalResult.rows[0].cnt),
