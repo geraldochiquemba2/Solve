@@ -17,7 +17,7 @@ import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } f
 import { useAuth } from '@/hooks/use-auth';
 import { LoginPage } from '@/pages/login';
 import '@/lib/api';
-import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream } from '@/hooks/use-api';
+import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth } from '@/hooks/use-api';
 import {
   useListLeads,
   useListCustomers,
@@ -215,22 +215,37 @@ function PaymentsPage() {
 const integrationsData = [{ name: 'OVG', desc: 'Origem e validação de leads', icon: BriefcaseBusiness, state: 'Operacional', sync: 'há 4 min', volume: '1.248 eventos hoje' }, { name: 'Pay4All', desc: 'Pagamentos e reconciliação', icon: CreditCard, state: 'Operacional', sync: 'há 4 min', volume: '86 transacções hoje' }, { name: 'Cademi', desc: 'Acessos e área de membros', icon: KeyRound, state: 'Atenção', sync: 'há 17 min', volume: '2 falhas a reprocessar' }, { name: 'WhatsApp', desc: 'Conversas comerciais', icon: LifeBuoy, state: 'Operacional', sync: 'há 1 min', volume: '38 mensagens hoje' }, { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2, state: 'Operacional', sync: 'há 8 min', volume: '12 leads hoje' }];
 function IntegrationsPage() {
   const { data } = useListIntegrations({ query: { refetchInterval: 30000 } });
+  const ovgSync = useOVGSyncStatus();
+  const ovgHealth = useOVGHealth();
+  const syncNowMut = useOVGSyncNow();
   const apiIntegrations = data?.data ?? [];
+  const ovgSyncData = ovgSync.data?.data;
+  const ovgHealthData = ovgHealth.data?.data;
+  
   const items = useMemo(() => {
     if (apiIntegrations.length > 0) {
       const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, Cademi: KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
-      return apiIntegrations.map(ig => ({
-        name: ig.name ?? '',
-        desc: ig.name ?? '',
-        icon: iconMap[ig.name ?? ''] ?? Link2,
-        state: ig.status === 'operacional' ? 'Operacional' : ig.status === 'atencao' ? 'Atenção' : ig.status === 'erro' ? 'Erro' : 'Inativo',
-        sync: ig.lastSyncAt ?? 'Nunca',
-        volume: ig.errorCount ? `${ig.errorCount} erros` : 'Operacional',
-      }));
+      return apiIntegrations.map(ig => {
+        const isOVG = ig.name === 'OVG';
+        const syncInfo = isOVG && ovgSyncData ? ovgSyncData : null;
+        const healthInfo = isOVG && ovgHealthData ? ovgHealthData : null;
+        
+        return {
+          name: ig.name ?? '',
+          desc: isOVG ? 'Virtual Gym · Sóciros e acessos' : ig.name ?? '',
+          icon: iconMap[ig.name ?? ''] ?? Link2,
+          state: healthInfo ? (healthInfo.connected ? 'Operacional' : 'Erro') : (ig.status === 'operacional' ? 'Operacional' : ig.status === 'atencao' ? 'Atenção' : ig.status === 'erro' ? 'Erro' : 'Inativo'),
+          sync: syncInfo ? (syncInfo.isSyncing ? 'A sincronizar...' : (syncInfo.lastSync ? `há ${Math.round((Date.now() - new Date(syncInfo.lastSync.timestamp).getTime()) / 60000)} min` : 'Nunca')) : (ig.lastSyncAt ?? 'Nunca'),
+          volume: syncInfo ? (syncInfo.lastSync ? `${syncInfo.lastSync.created} criados, ${syncInfo.lastSync.updated} actualizados` : 'Aguardando primeira sincronização') : (ig.errorCount ? `${ig.errorCount} erros` : 'Operacional'),
+          isOVG,
+          syncInfo,
+        };
+      });
     }
-    return integrationsData;
-  }, [apiIntegrations]);
-  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary"><RefreshCw size={14} /> Verificar tudo</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Sincronizado {sync}</span><span>{volume}</span></div><div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary"><RefreshCw size={13} /> Sincronizar</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={['Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
+    return integrationsData.map(ig => ({ ...ig, isOVG: ig.name === 'OVG', syncInfo: null }));
+  }, [apiIntegrations, ovgSyncData, ovgHealthData]);
+  
+  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
 function AutomationsPage() {
@@ -295,17 +310,16 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function AccessPage() {
   const [filter, setFilter] = useState('todos');
+  const [dateFilter, setDateFilter] = useState('hoje');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 50;
   const accessStats = useAccessStats();
-  const accessLogs = useAccessLogs({ page, limit });
   const solveDashboard = useSolveAccessDashboard();
   const solveTerminals = useSolveAccessTerminals();
   const solveHealth = useSolveAccessHealth();
   const unlockMutation = useUnlockTurnstile();
   const access = accessStats.data?.data;
-  const logs = accessLogs.data?.data ?? [];
-  const pagination = accessLogs.data?.pagination;
   const solveData = solveDashboard.data?.data;
   const terminals = solveTerminals.data?.data;
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
@@ -314,29 +328,19 @@ function AccessPage() {
     setRealtimeEvents(prev => [event, ...prev].slice(0, 100));
   });
 
-  const allLogs = useMemo(() => {
-    if (page > 1) return logs;
-    const rtMapped = realtimeEvents.map((e, i) => ({
-      id_acesso: `rt-${i}`,
-      cliente_id: e.cliente_id,
-      cliente_nome: e.cliente_nome,
-      data_acesso: e.data,
-      hora_acesso: e.hora,
-      tipo_acesso: e.tipo_acesso,
-      resultado: e.resultado,
-      motivo: e.mensagem,
-    }));
-    const merged = [...rtMapped, ...logs];
-    const seen = new Set();
-    return merged.filter(l => {
-      const key = `${l.cliente_id}-${l.hora_acesso}-${l.tipo_acesso}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [realtimeEvents, logs, page]);
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
-  const filteredLogs = allLogs.filter(l => filter === 'todos' || l.resultado === filter);
+  const dateFrom = dateFilter === 'hoje' ? today : dateFilter === 'ontem' ? yesterday : dateFilter === 'semana' ? weekAgo : dateFilter === 'mes' ? monthAgo : undefined;
+  const dateTo = dateFilter === 'hoje' ? today : dateFilter === 'ontem' ? yesterday : undefined;
+
+  const accessLogsFiltered = useAccessLogs({ page, limit, date_from: dateFrom, date_to: dateTo, search: search || undefined });
+  const logsFiltered = accessLogsFiltered.data?.data ?? [];
+  const pagination = accessLogsFiltered.data?.pagination;
+
+  const filteredLogs = logsFiltered.filter(l => filter === 'todos' || l.resultado === filter);
   const entradas = filteredLogs.filter(l => l.tipo_acesso === 'entrada');
   const saidas = filteredLogs.filter(l => l.tipo_acesso === 'saida');
   const isConnected = solveHealth.data?.success;
@@ -349,19 +353,33 @@ function AccessPage() {
 
   return <><PageHeader eyebrow="Controlo de Acesso · Solve Access" title="Acesso Físico" subtitle={`Solve Access: ${isConnected ? 'Conectado' : 'Desconectado'} · ${solveHealth.data?.source ?? '—'}`} action={<div style={{ display: 'flex', gap: '.45rem' }}><Status tone={connected ? 'live' : 'danger'}>{connected ? '● Live' : '○ Offline'}</Status><button className="btn-secondary"><RefreshCw size={14} /> Sincronizar</button></div>} />
   <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}>
-    <Metric label="Clientes activos" value={solveData?.clientes_ativos?.toString() ?? access?.clients.active?.toString() ?? '—'} note={`${access?.clients.total ?? 0} total`} />
-    <Metric label="Pessoas hoje" value={solveData?.pessoas_hoje?.toString() ?? '—'} note={`${solveData?.entradas_hoje ?? 0} entradas`} />
-    <Metric label="Terminais online" value={solveData?.terminais_online?.toString() ?? '—'} note={`${solveData?.total_terminais ?? 0} total`} />
+    <Metric label="Clientes activos" value={access?.clients.active?.toString() ?? '—'} note={`${access?.clients.total ?? 0} total`} />
+    <Metric label="Pessoas hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} entradas`} />
+    <Metric label="Terminais online" value={terminals?.online ? '1' : '0'} note={`1 total`} />
     <Metric label="Acessos hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} autorizados`} />
   </div>
+  <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+    <input type="text" placeholder="Pesquisar cliente..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ flex: '1 1 180px', padding: '.45rem .7rem', borderRadius: '.4rem', border: '1px solid hsl(var(--border))', background: 'hsl(var(--background))', fontSize: '.75rem', color: 'hsl(var(--foreground))' }} />
+    <div style={{ display: 'flex', gap: '.3rem' }}>
+      {[{ v: 'hoje', l: 'Hoje' }, { v: 'ontem', l: 'Ontem' }, { v: 'semana', l: '7 dias' }, { v: 'mes', l: '30 dias' }, { v: 'todos', l: 'Tudo' }].map(d => <button key={d.v} className={dateFilter === d.v ? 'btn-primary' : 'btn-quiet'} onClick={() => { setDateFilter(d.v); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{d.l}</button>)}
+    </div>
+    <div style={{ display: 'flex', gap: '.3rem' }}>
+      {[{ v: 'todos', l: 'Todos' }, { v: 'autorizado', l: 'Autorizado' }, { v: 'negado', l: 'Negado' }].map(f => <button key={f.v} className={filter === f.v ? 'btn-primary' : 'btn-quiet'} onClick={() => { setFilter(f.v); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{f.l}</button>)}
+    </div>
+  </div>
   <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}>
-    <Section title="Entradas" note={`${entradas.length} registos`} action={<div style={{ display: 'flex', gap: '.4rem' }}>{['todos', 'autorizado', 'negado'].map(f => <button key={f} className={filter === f ? 'btn-primary' : 'btn-quiet'} onClick={() => { setFilter(f); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>)}</div>}>
+    <Section title="Entradas" note={`${entradas.length} registos`}>
     <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{entradas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
     </Section>
     <Section title="Saídas" note={`${saidas.length} registos`}>
     <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{saidas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
     </Section>
   </div>
+  {pagination && pagination.totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '.5rem', marginTop: '.8rem', fontSize: '.75rem' }}>
+    <button className="btn-quiet" disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ padding: '.35rem .7rem' }}>Anterior</button>
+    <span style={{ color: 'hsl(var(--muted-foreground))' }}>Página {pagination.page} de {pagination.totalPages} ({pagination.total} registos)</span>
+    <button className="btn-quiet" disabled={page >= pagination.totalPages} onClick={() => setPage(p => p + 1)} style={{ padding: '.35rem .7rem' }}>Próxima</button>
+  </div>}
   <div style={{ display: 'grid', gap: '.8rem', marginTop: '.8rem' }}>
     <div style={{ display: 'grid', gap: '.8rem' }}>
       <Section title="Terminal" note={terminals?.nome_terminal || 'A ligar...'}>

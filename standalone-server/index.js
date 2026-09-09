@@ -102,6 +102,18 @@ app.get("/api/v1/access/logs", async (req, res) => {
       where.push("access_type = $" + (params.length + 1));
       params.push(req.query.tipo_acesso);
     }
+    if (req.query.date_from) {
+      where.push("access_date >= $" + (params.length + 1));
+      params.push(req.query.date_from);
+    }
+    if (req.query.date_to) {
+      where.push("access_date <= $" + (params.length + 1));
+      params.push(req.query.date_to);
+    }
+    if (req.query.search) {
+      where.push("(LOWER(customer_name) LIKE $" + (params.length + 1) + " OR customer_id::text LIKE $" + (params.length + 2) + ")");
+      params.push("%" + req.query.search.toLowerCase() + "%", req.query.search);
+    }
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
 

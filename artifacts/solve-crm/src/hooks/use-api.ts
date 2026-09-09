@@ -186,7 +186,7 @@ export function useAccessStats() {
   });
 }
 
-export function useAccessLogs(params?: { client_id?: string; resultado?: string; tipo_acesso?: string; page?: number; limit?: number }) {
+export function useAccessLogs(params?: { client_id?: string; resultado?: string; tipo_acesso?: string; date_from?: string; date_to?: string; search?: string; page?: number; limit?: number }) {
   const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
@@ -295,4 +295,54 @@ export function useSolveAccessStream(onEvent: (event: AccessStreamEvent) => void
   }, []);
 
   return { connected, history };
+}
+
+// ─── OVG Sync ────────────────────────────────────────────────────────────────
+export interface OVGSyncStatus {
+  isSyncing: boolean;
+  lastSync: {
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: string[];
+    timestamp: string;
+  } | null;
+  nextSyncIn: number;
+}
+
+export function useOVGSyncStatus() {
+  return useQuery({
+    queryKey: ['ovg-sync-status'],
+    queryFn: () => apiGet<{ data: OVGSyncStatus }>('/api/v1/ovg/sync/status'),
+    refetchInterval: 10000,
+    retry: false,
+  });
+}
+
+export function useOVGSyncNow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ data: any; message: string }>('/api/v1/ovg/sync/now'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ovg-sync-status'] });
+      qc.invalidateQueries({ queryKey: ['integrations'] });
+    },
+  });
+}
+
+export function useOVGHealth() {
+  return useQuery({
+    queryKey: ['ovg-health'],
+    queryFn: () => apiGet<{ data: { connected: boolean; message: string; details?: string } }>('/api/v1/ovg/health'),
+    refetchInterval: 60000,
+    retry: false,
+  });
+}
+
+export function useOVGMembers() {
+  return useQuery({
+    queryKey: ['ovg-members'],
+    queryFn: () => apiGet<{ data: any[]; total: number }>('/api/v1/ovg/members'),
+    retry: false,
+  });
 }
