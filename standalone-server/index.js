@@ -124,6 +124,32 @@ app.get("/api/v1/access/logs", async (req, res) => {
   }
 });
 
+// ─── Terminal Status ──────────────────────────────────────────────────────────
+
+app.get("/api/v1/terminal/status", async (req, res) => {
+  try {
+    const recentResult = await pool.query(
+      "SELECT MAX(synced_at) as last_sync FROM solve_access_logs"
+    );
+    const lastSync = recentResult.rows[0]?.last_sync;
+    const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 5 * 60 * 1000;
+
+    res.json({
+      data: {
+        nome_terminal: "Solve Access",
+        online: isOnline,
+        ip: "192.168.1.182",
+        porta: 8080,
+        modelo: "ZKTeco",
+        tipo: "Entrada",
+        lastSync: lastSync,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Clients ────────────────────────────────────────────────────────────────
 
 app.get("/api/v1/access/clients", async (req, res) => {
