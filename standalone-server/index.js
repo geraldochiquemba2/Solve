@@ -132,7 +132,7 @@ app.get("/api/v1/terminal/status", async (req, res) => {
       "SELECT MAX(synced_at) as last_sync FROM solve_access_logs"
     );
     const lastSync = recentResult.rows[0]?.last_sync;
-    const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 5 * 60 * 1000;
+    const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 30 * 60 * 1000;
 
     res.json({
       data: {
