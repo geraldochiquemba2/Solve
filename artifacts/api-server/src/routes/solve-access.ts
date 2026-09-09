@@ -64,11 +64,17 @@ router.get('/clientes/:id', async (req: Request, res: Response) => {
 router.get('/acessos', async (req: Request, res: Response) => {
   try {
     const params = new URLSearchParams();
-    if (req.query.limite) params.set('limite', req.query.limite as string);
-    if (req.query.cliente_id) params.set('cliente_id', req.query.cliente_id as string);
+    if (req.query.page) params.set('page', req.query.page as string);
+    if (req.query.limit) params.set('limit', req.query.limit as string);
+    if (req.query.client_id) params.set('client_id', req.query.client_id as string);
+    if (req.query.date_from) params.set('date_from', req.query.date_from as string);
+    if (req.query.date_to) params.set('date_to', req.query.date_to as string);
+    if (req.query.search) params.set('search', req.query.search as string);
+    if (req.query.resultado) params.set('resultado', req.query.resultado as string);
+    if (req.query.tipo_acesso) params.set('tipo_acesso', req.query.tipo_acesso as string);
     const qs = params.toString();
-    const data = await renderFetch(`/api/v1/access/logs${qs ? '?' + qs : ''}`);
-    res.json({ success: true, data: (data as any).data ?? data });
+    const raw = await renderFetch(`/api/v1/access/logs${qs ? '?' + qs : ''}`) as any;
+    res.json({ success: true, data: raw.data ?? raw, pagination: raw.pagination ?? null });
   } catch (e: any) {
     res.status(502).json({ success: false, error: e.message });
   }

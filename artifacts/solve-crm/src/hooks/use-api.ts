@@ -187,10 +187,11 @@ export function useAccessStats() {
 }
 
 export function useAccessLogs(params?: { client_id?: string; resultado?: string; tipo_acesso?: string; date_from?: string; date_to?: string; search?: string; page?: number; limit?: number }) {
-  const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
+  const filtered = params ? Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null && v !== '')) : {};
+  const qs = Object.keys(filtered).length > 0 ? '?' + new URLSearchParams(filtered as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
-    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/logs${qs}`).then(r => r.json()),
+    queryFn: () => apiGet<any>(`/api/v1/solve-access/acessos${qs}`),
     refetchInterval: 30000,
     retry: false,
   });

@@ -313,7 +313,7 @@ function AccessPage() {
   const [dateFilter, setDateFilter] = useState('hoje');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const limit = 50;
+  const limit = 100;
   const accessStats = useAccessStats();
   const solveDashboard = useSolveAccessDashboard();
   const solveTerminals = useSolveAccessTerminals();
