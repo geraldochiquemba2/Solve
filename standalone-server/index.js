@@ -162,6 +162,51 @@ app.get("/api/v1/terminal/status", async (req, res) => {
   }
 });
 
+// ─── Terminal Unlock ───────────────────────────────────────────────────────
+
+app.post("/api/v1/terminal/unlock", async (req, res) => {
+  try {
+    const { door, tipo } = req.body;
+    console.log(`[UNLOCK] Pedido de desbloqueio: porta ${door} (${tipo})`);
+
+    try {
+      const http = await import("http");
+      const doorId = door || 1;
+      const postData = JSON.stringify({ door: doorId, action: "open" });
+
+      const unlockResult = await new Promise((resolve, reject) => {
+        const request = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: 8080,
+            path: `/api/remoteOpen`,
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(postData) },
+            timeout: 5000,
+          },
+          (response) => {
+            let data = "";
+            response.on("data", (chunk) => (data += chunk));
+            response.on("end", () => resolve({ status: response.statusCode, body: data }));
+          }
+        );
+        request.on("error", reject);
+        request.on("timeout", () => { request.destroy(); reject(new Error("timeout")); });
+        request.write(postData);
+        request.end();
+      });
+
+      console.log(`[UNLOCK] Resultado:`, unlockResult);
+      res.json({ ok: true, message: `Catraca ${tipo || "entrada"} desbloqueada`, detail: unlockResult });
+    } catch (e) {
+      console.log(`[UNLOCK] Erro ao contactar ZKTeco: ${e.message}`);
+      res.json({ ok: true, message: `Pedido de desbloqueio enviado para ${tipo || "entrada"}`, warning: e.message });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Clients ────────────────────────────────────────────────────────────────
 
 app.get("/api/v1/access/clients", async (req, res) => {
@@ -171,6 +216,33 @@ app.get("/api/v1/access/clients", async (req, res) => {
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── É-kwanza Webhook (Multicaixa Express callback) ────────────────────────
+
+app.post("/webhooks/ekwanza", async (req, res) => {
+  try {
+    const body = req.body;
+    console.log("[EKWANZA-WEBHOOK] Callback recebido:", JSON.stringify(body).slice(0, 500));
+
+    const { merchantTransactionId, ekwanzaTransactionId, operationStatus, operationData } = body;
+
+    const statusMap = { 1: "confirmado", 3: "rejeitado", 4: "rejeitado", 5: "rejeitado" };
+    const mappedStatus = statusMap[operationStatus] || "pendente";
+
+    if (merchantTransactionId && mappedStatus !== "pendente") {
+      await pool.query(
+        `UPDATE payments SET status = $1, ekwanza_operation_code = $2, paid_at = ${mappedStatus === "confirmado" ? "NOW()" : "paid_at"}, reconciled_at = ${mappedStatus === "confirmado" ? "NOW()" : "reconciled_at"}, updated_at = NOW() WHERE code = $3`,
+        [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
+      );
+      console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error("[EKWANZA-WEBHOOK] Erro:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

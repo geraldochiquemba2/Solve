@@ -132,7 +132,25 @@ router.get('/clientes/:id/enroll-digital/:tipo/status', async (req: Request, res
 
 router.post('/terminais/:tipo/unlock', async (req: Request, res: Response) => {
   try {
-    res.json({ success: true, data: { message: `Catraca ${req.params.tipo} - desbloqueio pendente` } });
+    const { tipo } = req.params;
+    const SOLVE_ACCESS_URL = process.env.SOLVE_ACCESS_URL || 'http://192.168.1.182:8080';
+    const door = tipo === 'entrada' ? 1 : 2;
+
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const r = await fetch(`${SOLVE_ACCESS_URL}/api/v1/terminal/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ door, tipo }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const data = await r.json().catch(() => ({ message: 'OK' }));
+      res.json({ success: true, data: { message: `Catraca ${tipo} desbloqueada`, response: data } });
+    } catch (e: any) {
+      res.status(502).json({ success: false, error: `Não foi possível contactar a catraca em ${SOLVE_ACCESS_URL}: ${e.message}` });
+    }
   } catch (e: any) {
     res.status(502).json({ success: false, error: e.message });
   }
