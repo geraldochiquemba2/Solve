@@ -278,7 +278,7 @@ async function getEkwanzaToken() {
 app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const paymentResult = await pool.query("SELECT * FROM payments WHERE id = $1 OR code = $1", [id]);
+    const paymentResult = await pool.query("SELECT * FROM payments WHERE code = $1", [id]);
     if (paymentResult.rows.length === 0) {
       return res.status(404).json({ error: "Pagamento não encontrado" });
     }
