@@ -14,6 +14,16 @@ import { ekwanzaClient } from "./lib/ekwanza";
 
 const app: Express = express();
 
+// SSE clients for real-time payment updates
+const paymentSSEClients = new Set<express.Response>();
+
+export function broadcastPaymentUpdate(data: any) {
+  for (const client of paymentSSEClients) {
+    try { client.write(`data: ${JSON.stringify(data)}\n\n`); }
+    catch { paymentSSEClients.delete(client); }
+  }
+}
+
 // Trust proxy (Render, Cloudflare, etc.)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
@@ -80,6 +90,19 @@ app.use("/api/v1/webhooks/pay4all", webhookRateLimit);
 // API routes (versioned)
 app.use("/api/v1", router);
 
+// SSE: Real-time payment updates
+app.get("/api/v1/payments/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+  paymentSSEClients.add(res);
+  req.on("close", () => paymentSSEClients.delete(res));
+});
+
 // É-kwanza webhook (public, no auth, outside /api/v1)
 app.post("/webhooks/ekwanza", express.json(), async (req, res) => {
   try {
@@ -100,6 +123,9 @@ app.post("/webhooks/ekwanza", express.json(), async (req, res) => {
       if (mappedStatus === "confirmado") { updateData.paidAt = new Date(); updateData.reconciledAt = new Date(); }
       await db.update(paymentsTable).set(updateData).where(eq(paymentsTable.code, merchantTransactionId));
       logger.info({ paymentId: payment.id, newStatus: mappedStatus }, "Payment updated from callback");
+
+      // Broadcast to SSE clients
+      broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
     }
 
     res.json({ received: true });

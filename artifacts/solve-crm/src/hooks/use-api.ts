@@ -325,6 +325,33 @@ export function useSolveAccessStream(onEvent: (event: AccessStreamEvent) => void
   return { connected, history };
 }
 
+// ─── SSE Payment Stream ──────────────────────────────────────────────────────
+export function usePaymentStream(onUpdate: (data: { code: string; status: string }) => void) {
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const es = new EventSource(`${apiBase}/api/v1/payments/stream`);
+
+    es.onopen = () => setConnected(true);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'payment_updated') {
+          onUpdate(data);
+        }
+      } catch {}
+    };
+
+    es.onerror = () => setConnected(false);
+
+    return () => es.close();
+  }, []);
+
+  return { connected };
+}
+
 // ─── OVG Sync ────────────────────────────────────────────────────────────────
 export interface OVGSyncStatus {
   isSyncing: boolean;

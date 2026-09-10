@@ -17,7 +17,7 @@ import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } f
 import { useAuth } from '@/hooks/use-auth';
 import { LoginPage } from '@/pages/login';
 import '@/lib/api';
-import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useListCustomersManual, useImportCustomerDates } from '@/hooks/use-api';
+import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -339,7 +339,12 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
 }
 
 function PaymentsPage() {
-  const { data } = useListPayments(undefined, { query: { refetchInterval: 30000 } });
+  const { data, refetch } = useListPayments(undefined, { query: { refetchInterval: 10000 } });
+  
+  // Real-time SSE updates
+  usePaymentStream((update) => {
+    refetch();
+  });
   const apiPayments = data?.data ?? [];
   const payments = useMemo(() =>
     apiPayments.length > 0

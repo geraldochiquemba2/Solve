@@ -150,6 +150,8 @@ router.post(
           updatedAt: new Date(),
         }).where(eq(paymentsTable.id, payment.id));
         payment = { ...payment, status: "confirmado" };
+        const { broadcastPaymentUpdate } = await import("../app");
+        broadcastPaymentUpdate({ type: "payment_updated", code, status: "confirmado" });
       } else if (gpoStatus === "Failed" || gpoStatus === "Cancelled" || gpoStatus === "Expired") {
         await db.update(paymentsTable).set({
           status: "rejeitado",
@@ -157,6 +159,8 @@ router.post(
           updatedAt: new Date(),
         }).where(eq(paymentsTable.id, payment.id));
         payment = { ...payment, status: "rejeitado" };
+        const { broadcastPaymentUpdate } = await import("../app");
+        broadcastPaymentUpdate({ type: "payment_updated", code, status: "rejeitado" });
       }
 
       res.status(201).json({ data: { payment, gpo: result } });
@@ -299,6 +303,9 @@ router.get(
         }
         await db.update(paymentsTable).set(updateData).where(eq(paymentsTable.id, id));
         logger.info({ paymentId: id, oldStatus: payment.status, newStatus, ekwanzaStatus: chargeStatus.status }, "Payment status synced from É-kwanza");
+        // Broadcast real-time update
+        const { broadcastPaymentUpdate } = await import("../app");
+        broadcastPaymentUpdate({ type: "payment_updated", code: payment.code, status: newStatus });
       }
 
       res.json({

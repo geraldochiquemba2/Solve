@@ -230,6 +230,29 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   }
 });
 
+// ─── SSE: Payment Updates ────────────────────────────────────────────────────
+
+const paymentSSEClients = new Set();
+
+app.get("/api/v1/payments/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+  paymentSSEClients.add(res);
+  req.on("close", () => paymentSSEClients.delete(res));
+});
+
+function broadcastPaymentUpdate(data) {
+  for (const client of paymentSSEClients) {
+    try { client.write(`data: ${JSON.stringify(data)}\n\n`); }
+    catch { paymentSSEClients.delete(client); }
+  }
+}
+
 // ─── É-kwanza Webhook (Multicaixa Express callback) ────────────────────────
 
 app.post("/webhooks/ekwanza", async (req, res) => {
@@ -248,6 +271,7 @@ app.post("/webhooks/ekwanza", async (req, res) => {
         [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
       );
       console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
+      broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
     }
 
     res.json({ received: true });
@@ -306,6 +330,7 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
         [newStatus, payment.code]
       );
       console.log(`[CHECK-STATUS] ${payment.code}: ${payment.status} -> ${newStatus}`);
+      broadcastPaymentUpdate({ type: "payment_updated", code: payment.code, status: newStatus });
     }
     res.json({
       paymentId: id,
