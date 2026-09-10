@@ -86,7 +86,7 @@ router.post(
       const code = merchantTransactionId;
 
       // Create payment record (pendente)
-      const [payment] = await db
+      let [payment] = await db
         .insert(paymentsTable)
         .values({
           code,
@@ -111,6 +111,26 @@ router.post(
       );
 
       logger.info({ code, customerId, amount, phoneNumber: cleanPhone }, "GPO charge initiated");
+
+      // Extract reference number from É-kwanza response for reference payments
+      const gpoData = result as Record<string, unknown>;
+      const respStatus = (gpoData.responseStatus as Record<string, unknown>) || {};
+      const refData = (respStatus.reference as Record<string, unknown>) || null;
+      const ekwanzaReferenceNumber = refData?.referenceNumber as string | undefined;
+      const ekwanzaDueDate = refData?.dueDate as string | undefined;
+
+      // Update payment with É-kwanza reference if available
+      if (ekwanzaReferenceNumber) {
+        await db
+          .update(paymentsTable)
+          .set({
+            referenceCode: ekwanzaReferenceNumber,
+            ekwanzaCode: ekwanzaReferenceNumber,
+            metadata: JSON.stringify({ dueDate: ekwanzaDueDate, ekwanzaReference: refData }),
+          })
+          .where(eq(paymentsTable.id, payment.id));
+        payment = { ...payment, referenceCode: ekwanzaReferenceNumber, ekwanzaCode: ekwanzaReferenceNumber };
+      }
 
       res.status(201).json({ data: { payment, gpo: result } });
     } catch (err) {
