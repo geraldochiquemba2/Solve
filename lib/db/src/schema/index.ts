@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
 export const leadStatusEnum = pgEnum("lead_status", ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"]);
@@ -49,12 +50,14 @@ export const customersTable = pgTable("customers", {
   phone: varchar("phone", { length: 50 }),
   company: varchar("company", { length: 255 }),
   nif: varchar("nif", { length: 50 }),
+  gender: varchar("gender", { length: 20 }),
   birthDate: timestamp("birth_date"),
   state: customerStateEnum("state").notNull().default("activo"),
   ovgId: varchar("ovg_id", { length: 100 }),
   cademiId: varchar("cademi_id", { length: 100 }),
   whatsappPhone: varchar("whatsapp_phone", { length: 50 }),
   leadId: uuid("lead_id").references(() => leadsTable.id),
+  joinedAt: timestamp("joined_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -93,6 +96,7 @@ export const paymentsTable = pgTable("payments", {
   method: varchar("method", { length: 50 }),
   status: paymentStatusEnum("status").notNull().default("pendente"),
   referenceCode: varchar("reference_code", { length: 100 }),
+  entity: varchar("entity", { length: 50 }),
   ekwanzaCode: varchar("ekwanza_code", { length: 100 }),
   ekwanzaOperationCode: varchar("ekwanza_operation_code", { length: 100 }),
   paidAt: timestamp("paid_at"),
@@ -228,3 +232,15 @@ export const solveAccessLogsTable = pgTable("solve_access_logs", {
   reason: text("reason"),
   syncedAt: timestamp("synced_at").notNull().defaultNow(),
 });
+
+// ─── Relations ────────────────────────────────────────────────────────────────
+export const paymentsRelations = relations(paymentsTable, ({ one }) => ({
+  customer: one(customersTable, {
+    fields: [paymentsTable.customerId],
+    references: [customersTable.id],
+  }),
+}));
+
+export const customersRelations = relations(customersTable, ({ many }) => ({
+  payments: many(paymentsTable),
+}));

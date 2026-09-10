@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, useEffect } from 'react';
 
-const API_BASE = 'http://localhost:3000';
-const ACCESS_API = 'https://solve-sqoh.onrender.com';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const ACCESS_API = import.meta.env.VITE_ACCESS_API_URL || 'https://solve-sqoh.onrender.com';
+const ACCESS_API_KEY = import.meta.env.VITE_ACCESS_API_KEY || 'solve-crm-api-key-2024';
 
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
@@ -12,8 +13,32 @@ function getHeaders(): HeadersInit {
   };
 }
 
+function getAccessHeaders(): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    'X-API-Key': ACCESS_API_KEY,
+  };
+}
+
+let _isHandling401 = false;
+
+async function handleUnauthorized() {
+  if (_isHandling401) return;
+  _isHandling401 = true;
+  const token = localStorage.getItem('token');
+  localStorage.removeItem('token');
+  try {
+    await fetch(`${API_BASE}/api/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {}
+  if (token) window.location.href = '/login';
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Não autenticado'); }
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -24,6 +49,7 @@ async function apiMutate<T>(path: string, method: string, body?: unknown): Promi
     headers: getHeaders(),
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) { handleUnauthorized(); throw new Error('Não autenticado'); }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
     throw new Error(err.error || `API error: ${res.status}`);
@@ -105,11 +131,12 @@ export interface AuditLog {
   createdAt: string;
 }
 
-export function useListAuditLogs(entity?: string) {
+export function useListAuditLogs(entity?: string, options?: { refetchInterval?: number }) {
   const params = entity ? `?entity=${entity}` : '';
   return useQuery({
     queryKey: ['audit-logs', entity],
     queryFn: () => apiGet<{ data: AuditLog[]; total: number }>(`/api/v1/audit-logs${params}`),
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -180,7 +207,7 @@ export interface AccessLog {
 export function useAccessStats() {
   return useQuery({
     queryKey: ['access-stats'],
-    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/stats`).then(r => r.json()),
+    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/stats`, { headers: getAccessHeaders() }).then(r => r.json()),
     refetchInterval: 60000,
     retry: false,
   });
@@ -272,7 +299,7 @@ export function useSolveAccessStream(onEvent: (event: AccessStreamEvent) => void
   const [history, setHistory] = useState<AccessStreamEvent[]>([]);
 
   useEffect(() => {
-    const es = new EventSource(`${ACCESS_API}/api/v1/access/stream`);
+    const es = new EventSource(`${ACCESS_API}/api/v1/access/stream?api_key=${ACCESS_API_KEY}`);
 
     es.onopen = () => setConnected(true);
 
@@ -337,6 +364,35 @@ export function useOVGHealth() {
     queryFn: () => apiGet<{ data: { connected: boolean; message: string; details?: string } }>('/api/v1/ovg/health'),
     refetchInterval: 60000,
     retry: false,
+  });
+}
+
+// ─── Customers (manual fallback) ────────────────────────────────────────────
+export interface CustomerData {
+  id: string; code: string; name: string; email: string; phone: string;
+  company: string | null; nif: string | null; state: string; planName: string | null;
+  subscriptionEnd: string | null; createdAt: string; updatedAt: string;
+  ovgId: string | null; cademiId: string | null; leadId: string | null;
+}
+
+export function useListCustomersManual() {
+  return useQuery({
+    queryKey: ['customers-manual'],
+    queryFn: () => apiGet<{ data: CustomerData[]; total: number }>('/api/v1/customers'),
+    refetchInterval: 30000,
+  });
+}
+
+export function useImportCustomerDates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (rows: Array<{ code?: string; ovg_id?: string; name?: string; joined_at?: string }>) =>
+      apiMutate<{ data: { updated: number; notFound: number; errors: string[]; total: number }; message: string }>(
+        '/api/v1/customers/import-dates', 'POST', { rows }
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers-manual'] });
+    },
   });
 }
 

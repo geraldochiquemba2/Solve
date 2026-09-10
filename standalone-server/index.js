@@ -9,6 +9,16 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
+
+function requireAuth(req, res, next) {
+  const key = req.headers["x-api-key"] || req.query.api_key;
+  if (key !== API_KEY) {
+    return res.status(401).json({ error: "API key inválida" });
+  }
+  next();
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -48,7 +58,7 @@ app.post("/api/v1/access/sync", async (req, res) => {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
-app.get("/api/v1/access/stats", async (req, res) => {
+app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
   try {
     const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs");
     const todayResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
@@ -81,7 +91,7 @@ app.get("/api/v1/access/stats", async (req, res) => {
 
 // ─── Logs ───────────────────────────────────────────────────────────────────
 
-app.get("/api/v1/access/logs", async (req, res) => {
+app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(1000, parseInt(req.query.limit) || 200);
@@ -138,7 +148,7 @@ app.get("/api/v1/access/logs", async (req, res) => {
 
 // ─── Terminal Status ──────────────────────────────────────────────────────────
 
-app.get("/api/v1/terminal/status", async (req, res) => {
+app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
   try {
     const recentResult = await pool.query(
       "SELECT MAX(synced_at) as last_sync FROM solve_access_logs"
@@ -209,7 +219,7 @@ app.post("/api/v1/terminal/unlock", async (req, res) => {
 
 // ─── Clients ────────────────────────────────────────────────────────────────
 
-app.get("/api/v1/access/clients", async (req, res) => {
+app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT DISTINCT customer_id as id_cliente, customer_name as nome FROM solve_access_logs ORDER BY customer_name ASC"
@@ -252,7 +262,7 @@ app.post("/webhooks/ekwanza", async (req, res) => {
 const sseClients = new Set();
 let lastSyncedId = 0;
 
-app.get("/api/v1/access/stream", async (req, res) => {
+app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",

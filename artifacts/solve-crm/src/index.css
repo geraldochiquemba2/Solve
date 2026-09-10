@@ -571,3 +571,4 @@ button, a, input, select { transition: background-color .18s ease, border-color 
   .metric-grid { grid-template-columns:1fr 1fr !important; }
   .toolbar { flex-direction:column; align-items:stretch !important; }
 }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

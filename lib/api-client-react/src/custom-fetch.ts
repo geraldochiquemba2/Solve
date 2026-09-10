@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _onUnauthorized: (() => void) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,14 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a callback that fires when any request receives a 401 response.
+ * Useful for forcing re-login when the session expires.
+ */
+export function setOnUnauthorized(callback: (() => void) | null): void {
+  _onUnauthorized = callback;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -360,10 +369,13 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const response = await fetch(input, { ...init, method, headers, credentials: 'include' });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (response.status === 401 && _onUnauthorized) {
+      _onUnauthorized();
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 

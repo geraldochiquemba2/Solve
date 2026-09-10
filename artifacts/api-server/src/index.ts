@@ -1,5 +1,7 @@
+import "dotenv/config";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startBackgroundSync } from "./lib/ovg-sync";
 
 const rawPort = process.env["PORT"];
 
@@ -13,6 +15,11 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// Start OVG background sync (disabled in dev for testing)
+if (process.env.NODE_ENV !== "development") {
+  startBackgroundSync();
 }
 
 app.listen(port, (err) => {

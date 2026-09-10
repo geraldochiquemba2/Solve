@@ -1,36 +1,1884 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
-  title: Api
-  version: 0.1.0
-  description: API specification
+  title: Solve Corporate CRM API
+  version: 1.0.0
+  description: API do CRM Solve Corporate - Ecossistema Digital Integrado
 servers:
-  - url: /api
-    description: Base API path
+  - url: /api/v1
+    description: API v1
 tags:
-  - name: health
-    description: Health operations
+  - name: auth
+    description: Autenticação
+  - name: leads
+    description: Gestão de leads
+  - name: customers
+    description: Gestão de clientes
+  - name: plans
+    description: Gestão de planos
+  - name: payments
+    description: Pagamentos
+  - name: integrations
+    description: Integrações externas
+  - name: webhooks
+    description: Webhooks
+  - name: dashboard
+    description: Dashboard
+  - name: users
+    description: Utilizadores
+  - name: access
+    description: Gestão de acessos
+  - name: checkins
+    description: Check-ins
+  - name: api-keys
+    description: Chaves de API
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          description: Invalid credentials
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [administrador, gestor, comercial, financeiro, operacional]
+                  default: comercial
+                phone:
+                  type: string
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "409":
+          description: Email already exists
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      summary: List all leads
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [novo_lead, contacto, qualificado, proposta, negociacao, convertido, perdido]
+        - name: source
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Leads list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Lead"
+                  total:
+                    type: integer
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create lead
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                company:
+                  type: string
+                source:
+                  type: string
+                status:
+                  type: string
+                  enum: [novo_lead, contacto, qualificado, proposta, negociacao, convertido, perdido]
+                  default: novo_lead
+                ownerId:
+                  type: string
+                  format: uuid
+                estimatedValue:
+                  type: integer
+                notes:
+                  type: string
+      responses:
+        "201":
+          description: Lead created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Lead"
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get lead by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Lead"
+        "404":
+          description: Lead not found
+    patch:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update lead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Lead updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Lead"
+        "404":
+          description: Lead not found
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete lead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Lead deleted
+        "404":
+          description: Lead not found
+  /leads/{id}/convert:
+    post:
+      operationId: convertLead
+      tags: [leads]
+      summary: Convert lead to customer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lead converted
+        "400":
+          description: Lead already converted
+        "404":
+          description: Lead not found
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Customers list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Customer"
+                  total:
+                    type: integer
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create customer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                company:
+                  type: string
+                nif:
+                  type: string
+                birthDate:
+                  type: string
+                  format: date
+                state:
+                  type: string
+                  enum: [activo, inactivo, em_atraso, suspenso]
+                  default: activo
+                leadId:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Customer"
+        "409":
+          description: Customer already exists
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Customer details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/CustomerDetail"
+        "404":
+          description: Customer not found
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerUpdate"
+      responses:
+        "200":
+          description: Customer updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Customer"
+        "404":
+          description: Customer not found
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete customer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Customer deleted
+        "404":
+          description: Customer not found
+  /plans:
+    get:
+      operationId: listPlans
+      tags: [plans]
+      summary: List all plans
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Plan"
+                  total:
+                    type: integer
+    post:
+      operationId: createPlan
+      tags: [plans]
+      summary: Create plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                description:
+                  type: string
+                price:
+                  type: integer
+                  minimum: 0
+                periodicity:
+                  type: string
+                  enum: [mensal, trimestral, semestral, anual]
+                  default: mensal
+                duration:
+                  type: integer
+                active:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Plan"
+  /plans/{id}:
+    get:
+      operationId: getPlan
+      tags: [plans]
+      summary: Get plan by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Plan details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Plan"
+        "404":
+          description: Plan not found
+    patch:
+      operationId: updatePlan
+      tags: [plans]
+      summary: Update plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlanUpdate"
+      responses:
+        "200":
+          description: Plan updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Plan"
+        "404":
+          description: Plan not found
+    delete:
+      operationId: deletePlan
+      tags: [plans]
+      summary: Delete plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Plan deleted
+        "404":
+          description: Plan not found
+  /plans/{id}/toggle:
+    patch:
+      operationId: togglePlan
+      tags: [plans]
+      summary: Toggle plan active status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Plan toggled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Plan"
+        "404":
+          description: Plan not found
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List all payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pendente, confirmado, rejeitado, reembolsado, em_atraso]
+      responses:
+        "200":
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payment"
+                  total:
+                    type: integer
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Create payment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, amount]
+              properties:
+                customerId:
+                  type: string
+                  format: uuid
+                subscriptionId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: integer
+                  minimum: 0
+                method:
+                  type: string
+                referenceCode:
+                  type: string
+      responses:
+        "201":
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payment"
+  /payments/{id}:
+    get:
+      operationId: getPayment
+      tags: [payments]
+      summary: Get payment by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payment"
+        "404":
+          description: Payment not found
+  /payments/{id}/reconcile:
+    patch:
+      operationId: reconcilePayment
+      tags: [payments]
+      summary: Reconcile payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payment reconciled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Payment"
+        "404":
+          description: Payment not found
+  /integrations:
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      summary: List all integrations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Integrations list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Integration"
+                  total:
+                    type: integer
+  /integrations/{name}:
+    get:
+      operationId: getIntegration
+      tags: [integrations]
+      summary: Get integration by name
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Integration"
+        "404":
+          description: Integration not found
+    patch:
+      operationId: updateIntegration
+      tags: [integrations]
+      summary: Update integration config
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [operacional, atencao, erro, inativo]
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Integration updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Integration"
+        "404":
+          description: Integration not found
+  /integrations/{name}/sync:
+    post:
+      operationId: syncIntegration
+      tags: [integrations]
+      summary: Sync integration
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sync started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Integration"
+                  message:
+                    type: string
+        "404":
+          description: Integration not found
+  /webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [webhooks]
+      summary: List all webhooks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Webhooks list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Webhook"
+                  total:
+                    type: integer
+    post:
+      operationId: createWebhook
+      tags: [webhooks]
+      summary: Create webhook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, event]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                event:
+                  type: string
+                active:
+                  type: boolean
+                  default: true
+                secret:
+                  type: string
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Webhook"
+  /webhooks/{id}:
+    delete:
+      operationId: deleteWebhook
+      tags: [webhooks]
+      summary: Delete webhook
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Webhook deleted
+        "404":
+          description: Webhook not found
+  /webhooks/{id}/deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [webhooks]
+      summary: List webhook deliveries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deliveries list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookDelivery"
+                  total:
+                    type: integer
+  /webhooks/deliveries/{id}/reprocess:
+    post:
+      operationId: reprocessDelivery
+      tags: [webhooks]
+      summary: Reprocess failed delivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Delivery reprocessed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookDelivery"
+        "404":
+          description: Delivery not found
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DashboardStats"
+  /dashboard/charts:
+    get:
+      operationId: getDashboardCharts
+      tags: [dashboard]
+      summary: Get dashboard charts data
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Charts data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DashboardCharts"
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+                  total:
+                    type: integer
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "404":
+          description: User not found
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "404":
+          description: User not found
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Deactivate user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: User deactivated
+        "404":
+          description: User not found
+  /users/{id}/toggle:
+    patch:
+      operationId: toggleUser
+      tags: [users]
+      summary: Toggle user active status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User toggled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "404":
+          description: User not found
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
-    HealthStatus:
+    User:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [administrador, gestor, comercial, financeiro, operacional]
+        phone:
+          type: string
+        active:
+          type: boolean
+        lastLoginAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [administrador, gestor, comercial, financeiro, operacional]
+        phone:
+          type: string
+        active:
+          type: boolean
+    Lead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        company:
+          type: string
+        source:
+          type: string
         status:
           type: string
-      required:
-        - status
-
+          enum: [novo_lead, contacto, qualificado, proposta, negociacao, convertido, perdido]
+        ownerId:
+          type: string
+          format: uuid
+        estimatedValue:
+          type: integer
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    LeadUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+          enum: [novo_lead, contacto, qualificado, proposta, negociacao, convertido, perdido]
+        ownerId:
+          type: string
+          format: uuid
+        estimatedValue:
+          type: integer
+        notes:
+          type: string
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        company:
+          type: string
+        nif:
+          type: string
+        state:
+          type: string
+          enum: [activo, inactivo, em_atraso, suspenso]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CustomerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Customer"
+        - type: object
+          properties:
+            subscriptions:
+              type: array
+              items:
+                $ref: "#/components/schemas/Subscription"
+            payments:
+              type: array
+              items:
+                $ref: "#/components/schemas/Payment"
+    CustomerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+        nif:
+          type: string
+        state:
+          type: string
+          enum: [activo, inactivo, em_atraso, suspenso]
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: integer
+        periodicity:
+          type: string
+          enum: [mensal, trimestral, semestral, anual]
+        duration:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PlanUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        description:
+          type: string
+        price:
+          type: integer
+          minimum: 0
+        periodicity:
+          type: string
+          enum: [mensal, trimestral, semestral, anual]
+        duration:
+          type: integer
+        active:
+          type: boolean
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        customerId:
+          type: string
+          format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+        method:
+          type: string
+        status:
+          type: string
+          enum: [pendente, confirmado, rejeitado, reembolsado, em_atraso]
+        referenceCode:
+          type: string
+        paidAt:
+          type: string
+          format: date-time
+        reconciledAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    Integration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [operacional, atencao, erro, inativo]
+        config:
+          type: object
+        lastSyncAt:
+          type: string
+          format: date-time
+        errorCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        event:
+          type: string
+        active:
+          type: boolean
+        lastTriggeredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhookId:
+          type: string
+          format: uuid
+        event:
+          type: string
+        payload:
+          type: object
+        status:
+          type: string
+          enum: [pendente, entregue, falha, reprocessado]
+        responseCode:
+          type: integer
+        attempts:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    DashboardStats:
+      type: object
+      properties:
+        overview:
+          type: object
+          properties:
+            totalCustomers:
+              type: integer
+            activeCustomers:
+              type: integer
+            totalLeads:
+              type: integer
+            revenueLast30Days:
+              type: integer
+            pendingPayments:
+              type: integer
+            latePayments:
+              type: integer
+        leadsByStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              count:
+                type: integer
+        integrations:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+              lastSyncAt:
+                type: string
+                format: date-time
+    DashboardCharts:
+      type: object
+      properties:
+        revenueByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              value:
+                type: integer
+        leadsBySource:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              count:
+                type: integer
+        conversionRate:
+          type: number
+        paymentMethods:
+          type: array
+          items:
+            type: object
+            properties:
+              method:
+                type: string
+              count:
+                type: integer
+  /access:
+    get:
+      operationId: listAccess
+      tags: [access]
+      summary: Listar acessos
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: platform
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista de acessos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Access"
+                  total:
+                    type: integer
+    post:
+      operationId: createAccess
+      tags: [access]
+      summary: Criar acesso
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessInput"
+      responses:
+        "201":
+          description: Acesso criado
+  /access/{id}:
+    get:
+      operationId: getAccess
+      tags: [access]
+      summary: Obter acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Acesso encontrado
+    patch:
+      operationId: updateAccess
+      tags: [access]
+      summary: Atualizar acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessInput"
+      responses:
+        "200":
+          description: Acesso atualizado
+    delete:
+      operationId: deleteAccess
+      tags: [access]
+      summary: Eliminar acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Acesso eliminado
+  /checkins:
+    get:
+      operationId: listCheckins
+      tags: [checkins]
+      summary: Listar check-ins
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de check-ins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Checkin"
+                  total:
+                    type: integer
+    post:
+      operationId: createCheckin
+      tags: [checkins]
+      summary: Criar check-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckinInput"
+      responses:
+        "201":
+          description: Check-in criado
+  /checkins/{id}:
+    get:
+      operationId: getCheckin
+      tags: [checkins]
+      summary: Obter check-in
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Check-in encontrado
+    delete:
+      operationId: deleteCheckin
+      tags: [checkins]
+      summary: Eliminar check-in
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Check-in eliminado
+  /api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [api-keys]
+      summary: Listar chaves de API
+      responses:
+        "200":
+          description: Lista de chaves
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+                  total:
+                    type: integer
+    post:
+      operationId: createApiKey
+      tags: [api-keys]
+      summary: Criar chave de API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "201":
+          description: Chave criada
+  /api-keys/{id}:
+    get:
+      operationId: getApiKey
+      tags: [api-keys]
+      summary: Obter chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chave encontrada
+    patch:
+      operationId: updateApiKey
+      tags: [api-keys]
+      summary: Atualizar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "200":
+          description: Chave atualizada
+    delete:
+      operationId: deleteApiKey
+      tags: [api-keys]
+      summary: Eliminar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Chave eliminada
+  /api-keys/{id}/toggle:
+    patch:
+      operationId: toggleApiKey
+      tags: [api-keys]
+      summary: Ativar/desativar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chave atualizada
+components:
+  schemas:
+    Access:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        status:
+          type: string
+        ovgAccessId:
+          type: string
+        cademiAccessId:
+          type: string
+        activatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    AccessInput:
+      type: object
+      required: [customerId, platform, status]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        status:
+          type: string
+        ovgAccessId:
+          type: string
+        cademiAccessId:
+          type: string
+        activatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    Checkin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        location:
+          type: string
+        ovgCheckinId:
+          type: string
+        checkedInAt:
+          type: string
+          format: date-time
+    CheckinInput:
+      type: object
+      required: [customerId]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        location:
+          type: string
+        ovgCheckinId:
+          type: string
+        checkedInAt:
+          type: string
+          format: date-time
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        keyPreview:
+          type: string
+        active:
+          type: boolean
+        lastUsedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ApiKeyInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time

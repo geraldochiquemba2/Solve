@@ -3,12 +3,14 @@ import { Router, Request, Response } from 'express';
 const router = Router();
 
 const RENDER_URL = process.env.RENDER_URL || 'https://solve-sqoh.onrender.com';
+const RENDER_API_KEY = process.env.RENDER_API_KEY || 'solve-crm-api-key-2024';
 
 async function renderFetch(path: string, options: RequestInit = {}): Promise<unknown> {
   const res = await fetch(`${RENDER_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'X-API-Key': RENDER_API_KEY,
       ...(options.headers as Record<string, string> || {}),
     },
   });
