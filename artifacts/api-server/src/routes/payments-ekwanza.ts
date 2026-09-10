@@ -85,7 +85,8 @@ router.post(
       const merchantTransactionId = `SC${String(81000 + count + 1).padStart(5, "0")}`;
       const code = merchantTransactionId;
 
-      // Create payment record (pendente)
+      // Create payment record (pendente) - expires in 24h
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
       let [payment] = await db
         .insert(paymentsTable)
         .values({
@@ -96,6 +97,7 @@ router.post(
           status: "pendente",
           referenceCode: referenceCode || code,
           entity: entity || null,
+          expiresAt,
         })
         .returning();
 

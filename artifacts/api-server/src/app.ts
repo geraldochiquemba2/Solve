@@ -120,4 +120,23 @@ app.use("/api", (req, res, next) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Periodic expiration check for payments (every 5 minutes)
+setInterval(async () => {
+  try {
+    const { db } = await import("@workspace/db");
+    const { paymentsTable } = await import("@workspace/db/schema");
+    const { and, eq, lt } = await import("drizzle-orm");
+    const result = await db
+      .update(paymentsTable)
+      .set({ status: "expirado", updatedAt: new Date() })
+      .where(and(eq(paymentsTable.status, "pendente"), lt(paymentsTable.expiresAt, new Date())))
+      .returning({ code: paymentsTable.code });
+    if (result.length > 0) {
+      logger.info({ count: result.length, codes: result.map(r => r.code) }, "Expired payments marked");
+    }
+  } catch (err) {
+    logger.error({ err }, "Error checking expired payments");
+  }
+}, 5 * 60 * 1000);
+
 export default app;

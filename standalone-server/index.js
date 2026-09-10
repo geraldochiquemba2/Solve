@@ -374,3 +374,17 @@ setInterval(async () => {
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => console.log(`Server listening on port ${port}`));
+
+// Periodic expiration check for payments (every 5 minutes)
+setInterval(async () => {
+  try {
+    const result = await pool.query(
+      "UPDATE payments SET status = 'expirado', updated_at = NOW() WHERE status = 'pendente' AND expires_at < NOW() RETURNING code"
+    );
+    if (result.rows.length > 0) {
+      console.log(`[EXPIRY] Marked ${result.rows.length} expired payments:`, result.rows.map(r => r.code));
+    }
+  } catch (err) {
+    console.error("[EXPIRY] Error:", err.message);
+  }
+}, 5 * 60 * 1000);

@@ -4,7 +4,7 @@ import { relations } from "drizzle-orm";
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
 export const leadStatusEnum = pgEnum("lead_status", ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"]);
 export const customerStateEnum = pgEnum("customer_state", ["activo", "inactivo", "em_atraso", "suspenso"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["pendente", "confirmado", "rejeitado", "reembolsado", "em_atraso"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["pendente", "confirmado", "rejeitado", "reembolsado", "em_atraso", "expirado"]);
 export const integrationStatusEnum = pgEnum("integration_status", ["operacional", "atencao", "erro", "inativo"]);
 export const planPeriodicityEnum = pgEnum("plan_periodicity", ["mensal", "trimestral", "semestral", "anual"]);
 export const webhookStatusEnum = pgEnum("webhook_status", ["pendente", "entregue", "falha", "reprocessado"]);
@@ -101,6 +101,7 @@ export const paymentsTable = pgTable("payments", {
   ekwanzaOperationCode: varchar("ekwanza_operation_code", { length: 100 }),
   paidAt: timestamp("paid_at"),
   reconciledAt: timestamp("reconciled_at"),
+  expiresAt: timestamp("expires_at"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
