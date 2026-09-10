@@ -171,12 +171,14 @@ class EkwanzaClient {
     const paymentMethod = phoneNumber
       ? `GPO_${this.gpoPaymentMethod}`
       : `REF_${this.refPaymentMethod}`;
+    const callbackUrl = process.env.EKWANZA_CALLBACK_URL || "";
     const body: Record<string, unknown> = {
       amount,
       currency: "AOA",
       description,
       merchantTransactionId,
       paymentMethod,
+      notificationUrl: callbackUrl,
       options: {
         MerchantIdentifier: this.accountNumber,
         ApiKey: this.apiKey,
