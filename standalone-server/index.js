@@ -257,6 +257,75 @@ app.post("/webhooks/ekwanza", async (req, res) => {
   }
 });
 
+// ─── É-kwanza Check Status ───────────────────────────────────────────────
+
+async function getEkwanzaToken() {
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: process.env.EKWANZA_CLIENT_ID,
+    client_secret: process.env.EKWANZA_CLIENT_SECRET,
+    resource: process.env.EKWANZA_RESOURCE,
+  });
+  const resp = await fetch("https://login.microsoftonline.com/auth.appypay.co.ao/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  const data = await resp.json();
+  return data.access_token;
+}
+
+app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const paymentResult = await pool.query("SELECT * FROM payments WHERE id = $1 OR code = $1", [id]);
+    if (paymentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Pagamento não encontrado" });
+    }
+    const payment = paymentResult.rows[0];
+    const token = await getEkwanzaToken();
+    const chargeResp = await fetch(`https://gwy-api.appypay.co.ao/v2.0/charges?merchantTransactionId=${encodeURIComponent(payment.code)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    if (!chargeResp.ok) {
+      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "QUERY_FAILED", currentStatus: payment.status });
+    }
+    const chargeData = await chargeResp.json();
+    const charge = chargeData.payments?.[0];
+    if (!charge) {
+      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "NOT_FOUND", currentStatus: payment.status });
+    }
+    const statusMap = { Success: "confirmado", Pending: "pendente", Failed: "rejeitado", Cancelled: "rejeitado", Expired: "rejeitado" };
+    const newStatus = statusMap[charge.status] || payment.status;
+    const changed = newStatus !== payment.status;
+    if (changed) {
+      const paidAt = charge.status === "Success" ? "NOW()" : "paid_at";
+      const reconciledAt = charge.status === "Success" ? "NOW()" : "reconciled_at";
+      await pool.query(
+        `UPDATE payments SET status = $1, paid_at = ${paidAt}, reconciled_at = ${reconciledAt}, updated_at = NOW() WHERE code = $2`,
+        [newStatus, payment.code]
+      );
+      console.log(`[CHECK-STATUS] ${payment.code}: ${payment.status} -> ${newStatus}`);
+    }
+    res.json({
+      paymentId: id,
+      code: payment.code,
+      ekwanzaStatus: charge.status,
+      previousStatus: payment.status,
+      newStatus,
+      changed,
+      amount: charge.amount,
+      paymentMethod: charge.paymentMethod,
+      createdDate: charge.createdDate,
+      updatedDate: charge.updatedDate,
+      reference: charge.reference,
+    });
+  } catch (err) {
+    console.error("[CHECK-STATUS] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── SSE: Streaming de acessos em tempo real ─────────────────────────────────
 
 const sseClients = new Set();
