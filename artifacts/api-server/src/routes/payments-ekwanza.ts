@@ -118,6 +118,7 @@ router.post(
       const refData = (respStatus.reference as Record<string, unknown>) || null;
       const ekwanzaReferenceNumber = refData?.referenceNumber as string | undefined;
       const ekwanzaDueDate = refData?.dueDate as string | undefined;
+      const ekwanzaEntity = refData?.entity as string | undefined;
 
       // Update payment with É-kwanza reference if available
       if (ekwanzaReferenceNumber) {
@@ -126,10 +127,11 @@ router.post(
           .set({
             referenceCode: ekwanzaReferenceNumber,
             ekwanzaCode: ekwanzaReferenceNumber,
+            entity: ekwanzaEntity || entity || null,
             metadata: JSON.stringify({ dueDate: ekwanzaDueDate, ekwanzaReference: refData }),
           })
           .where(eq(paymentsTable.id, payment.id));
-        payment = { ...payment, referenceCode: ekwanzaReferenceNumber, ekwanzaCode: ekwanzaReferenceNumber };
+        payment = { ...payment, referenceCode: ekwanzaReferenceNumber, ekwanzaCode: ekwanzaReferenceNumber, entity: ekwanzaEntity || entity || null };
       }
 
       // Update status from synchronous GPO response
