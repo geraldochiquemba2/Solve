@@ -132,6 +132,29 @@ router.post(
         payment = { ...payment, referenceCode: ekwanzaReferenceNumber, ekwanzaCode: ekwanzaReferenceNumber };
       }
 
+      // Update status from synchronous GPO response
+      const gpoStatus = respStatus.status as string | undefined;
+      const gpoSuccessful = respStatus.successful as boolean | undefined;
+      const gpoProviderTxId = (respStatus.gpo as Record<string, unknown>)?.providerTransactionId as string | undefined;
+
+      if (gpoStatus === "Success" || gpoSuccessful === true) {
+        await db.update(paymentsTable).set({
+          status: "confirmado",
+          paidAt: new Date(),
+          reconciledAt: new Date(),
+          ekwanzaOperationCode: gpoProviderTxId || null,
+          updatedAt: new Date(),
+        }).where(eq(paymentsTable.id, payment.id));
+        payment = { ...payment, status: "confirmado" };
+      } else if (gpoStatus === "Failed" || gpoStatus === "Cancelled" || gpoStatus === "Expired") {
+        await db.update(paymentsTable).set({
+          status: "rejeitado",
+          ekwanzaOperationCode: gpoProviderTxId || null,
+          updatedAt: new Date(),
+        }).where(eq(paymentsTable.id, payment.id));
+        payment = { ...payment, status: "rejeitado" };
+      }
+
       res.status(201).json({ data: { payment, gpo: result } });
     } catch (err) {
       if (err instanceof EkwanzaError) {
