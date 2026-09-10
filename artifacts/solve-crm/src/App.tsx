@@ -276,6 +276,22 @@ function PlansPage() {
 }
 
 function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () => void }) {
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<any>(null);
+
+  const checkStatus = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/ekwanza/check-status/${payment.raw?.id || payment.id}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setCheckResult(data);
+        if (data.changed) window.location.reload();
+      }
+    } catch (e) { console.error(e); }
+    setChecking(false);
+  };
+
   const fmtDate = (d: string | null) => {
     if (!d) return '—';
     try { return new Date(d).toLocaleString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return d; }
@@ -306,6 +322,17 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
         </div>
       ))}
       {Object.keys(meta).length > 0 && <div style={{ marginTop: '.3rem' }}><div className="eyebrow" style={{ marginBottom: '.35rem' }}>Metadados</div>{Object.entries(meta).map(([k, v]) => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '.4rem .65rem', background: 'hsl(var(--secondary) / .3)', borderRadius: '.3rem', marginBottom: '.2rem' }}><span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{k}</span><span className="mono" style={{ fontSize: '.67rem' }}>{String(v)}</span></div>)}</div>}
+      <div style={{ marginTop: '.5rem', display: 'flex', gap: '.5rem' }}>
+        <button className="btn-secondary" onClick={checkStatus} disabled={checking} style={{ flex: 1 }}>
+          {checking ? 'Verificando...' : 'Verificar Estado no É-kwanza'}
+        </button>
+      </div>
+      {checkResult && (
+        <div style={{ marginTop: '.4rem', padding: '.5rem .65rem', background: checkResult.changed ? 'hsl(142 70% 45% / .15)' : 'hsl(var(--secondary) / .45)', borderRadius: '.4rem', fontSize: '.72rem' }}>
+          <strong>É-kwanza:</strong> {checkResult.ekwanzaStatus} {checkResult.changed && `(atualizado de ${checkResult.previousStatus})`}
+          {checkResult.reference && <div style={{ marginTop: '.2rem', fontSize: '.68rem' }}>Ref: {checkResult.reference.referenceNumber} | Entity: {checkResult.reference.entity}</div>}
+        </div>
+      )}
     </div>
   </Modal>;
 }

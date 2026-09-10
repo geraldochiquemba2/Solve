@@ -230,6 +230,69 @@ router.get(
   },
 );
 
+// Check payment status from É-kwanza API
+router.get(
+  "/payments/ekwanza/check-status/:id",
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const payment = await db.query.paymentsTable.findFirst({
+        where: eq(paymentsTable.id, id),
+      });
+
+      if (!payment) throw new AppError(404, "Pagamento não encontrado");
+
+      const chargeStatus = await ekwanzaClient.getChargeStatus(payment.code);
+
+      if (!chargeStatus) {
+        res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "NOT_FOUND", currentStatus: payment.status });
+        return;
+      }
+
+      const statusMap: Record<string, string> = {
+        Success: "confirmado",
+        Pending: "pendente",
+        Failed: "rejeitado",
+        Cancelled: "rejeitado",
+        Expired: "rejeitado",
+      };
+
+      const newStatus = statusMap[chargeStatus.status] || payment.status;
+      const changed = newStatus !== payment.status;
+
+      if (changed) {
+        const updateData: Record<string, any> = {
+          status: newStatus,
+          updatedAt: new Date(),
+        };
+        if (chargeStatus.status === "Success") {
+          updateData.paidAt = new Date();
+          updateData.reconciledAt = new Date();
+        }
+        await db.update(paymentsTable).set(updateData).where(eq(paymentsTable.id, id));
+        logger.info({ paymentId: id, oldStatus: payment.status, newStatus, ekwanzaStatus: chargeStatus.status }, "Payment status synced from É-kwanza");
+      }
+
+      res.json({
+        paymentId: id,
+        code: payment.code,
+        ekwanzaStatus: chargeStatus.status,
+        previousStatus: payment.status,
+        newStatus,
+        changed,
+        amount: chargeStatus.amount,
+        paymentMethod: chargeStatus.paymentMethod,
+        createdDate: chargeStatus.createdDate,
+        updatedDate: chargeStatus.updatedDate,
+        reference: chargeStatus.reference,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // GPO payment callback webhook
 router.post(
   "/webhooks/ekwanza",

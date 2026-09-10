@@ -171,14 +171,12 @@ class EkwanzaClient {
     const paymentMethod = phoneNumber
       ? `GPO_${this.gpoPaymentMethod}`
       : `REF_${this.refPaymentMethod}`;
-    const callbackUrl = process.env.EKWANZA_CALLBACK_URL || "";
     const body: Record<string, unknown> = {
       amount,
       currency: "AOA",
       description,
       merchantTransactionId,
       paymentMethod,
-      notificationUrl: callbackUrl,
       options: {
         MerchantIdentifier: this.accountNumber,
         ApiKey: this.apiKey,
@@ -215,6 +213,23 @@ class EkwanzaClient {
     return data;
   }
 
+  // Query charge status from AppyPay production API
+  async getChargeStatus(merchantTransactionId: string): Promise<ChargeStatusResponse | null> {
+    const token = await this.getAccessToken();
+    const prodUrl = process.env.EKWANZA_GPO_URL?.replace("-tst.", ".") || "https://gwy-api.appypay.co.ao/v2.0";
+    const url = `${prodUrl}/charges?merchantTransactionId=${encodeURIComponent(merchantTransactionId)}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as { payments: ChargeStatusResponse[] };
+    return data.payments?.[0] || null;
+  }
+
   verifyCallback(body: CallbackPayload): boolean {
     const { merchantTransactionId, ekwanzaTransactionId, operationStatus } = body;
     // Basic validation - in production, verify signature from headers
@@ -241,6 +256,7 @@ export interface PaymentStatusResponse { Amount: string; Code: string; CreationD
 export interface SendToCustomerResponse { ekzOperationCode: string; ekzTransactionCode: string; status: number; }
 export interface KWiKStatusResponse { ekzOperationCode: string; ekzTransactionCode: string; status: number; OperationStatus: string; }
 export interface GPOChargeResponse { id: string; status: string; [key: string]: unknown; }
+export interface ChargeStatusResponse { id: string; merchantTransactionId: string; status: string; amount: number; currency: string; paymentMethod: string; createdDate: string; updatedDate: string; reference?: { referenceNumber: string; dueDate: string; entity: string; }; }
 export interface CallbackPayload { merchantTransactionId: string; ekwanzaTransactionId: number; operationStatus: number; operationData: { amount: number; merchantIdentifier: string; referenceType: string; }; }
 
 export const ekwanzaClient = new EkwanzaClient();
