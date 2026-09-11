@@ -356,36 +356,46 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
 }
 
 function PaymentsPage() {
-  const { data, refetch } = useListPayments(undefined, { query: { refetchInterval: 10000 } });
+  const [paymentsData, setPaymentsData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  // Real-time SSE updates
-  usePaymentStream((update) => {
-    refetch();
-  });
-  const apiPayments = data?.data ?? [];
+  const fetchPayments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBase}/api/v1/payments`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPaymentsData(json.data || []);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchPayments(); }, []);
+
   const payments = useMemo(() =>
-    apiPayments.length > 0
-      ? apiPayments.map(p => ({
-          id: p.code ?? p.id ?? '',
-          customer: (p as any).customer_name ?? (p as any).customerName ?? p.customerId ?? '',
-          amount: p.amount ?? 0,
-          method: p.method ?? '',
-          state: p.status === 'confirmado' ? 'Confirmado' : p.status === 'pendente' ? 'Pendente' : p.status === 'em_atraso' ? 'Em atraso' : p.status === 'rejeitado' ? 'Cancelado' : p.status === 'reembolsado' ? 'Reembolsado' : p.status === 'expirado' ? 'Expirado' : p.status ?? '',
-          date: p.paidAt ?? p.createdAt ?? '',
-          referenceCode: p.referenceCode ?? '',
-          entity: (p as any).entity ?? '',
-          ekwanzaCode: (p as any).ekwanzaCode ?? '',
-          ekwanzaOperationCode: (p as any).ekwanzaOperationCode ?? '',
-          customerName: (p as any).customer_name ?? (p as any).customerName ?? '',
-          customerPhone: (p as any).customerPhone ?? '',
-          customerEmail: (p as any).customerEmail ?? '',
-          createdAt: p.createdAt ?? '',
-          paidAt: p.paidAt ?? '',
-          expiresAt: (p as any).expiresAt ?? '',
-          raw: p,
-        }))
-      : []
-  , [apiPayments]);
+    paymentsData.map((p: any) => ({
+      id: p.code ?? p.id ?? '',
+      customer: p.customer_name ?? 'Cliente',
+      amount: p.amount ?? 0,
+      method: p.method ?? '',
+      state: p.status === 'confirmado' ? 'Confirmado' : p.status === 'pendente' ? 'Pendente' : p.status === 'em_atraso' ? 'Em atraso' : p.status === 'rejeitado' ? 'Cancelado' : p.status === 'reembolsado' ? 'Reembolsado' : p.status === 'expirado' ? 'Expirado' : p.status ?? '',
+      date: p.paid_at ?? p.created_at ?? '',
+      referenceCode: p.reference_code ?? '',
+      entity: p.entity ?? '',
+      ekwanzaCode: p.ekwanza_code ?? '',
+      ekwanzaOperationCode: p.ekwanza_operation_code ?? '',
+      customerName: p.customer_name ?? '',
+      createdAt: p.created_at ?? '',
+      paidAt: p.paid_at ?? '',
+      expiresAt: p.expires_at ?? '',
+      raw: p,
+    }))
+  , [paymentsData]);
   const [filter, setFilter] = useState('Todas');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
