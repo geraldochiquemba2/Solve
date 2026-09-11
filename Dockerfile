@@ -1,7 +1,7 @@
 FROM node:20-alpine AS frontend
 WORKDIR /frontend
 COPY artifacts/solve-crm/package*.json ./
-RUN npm ci
+RUN npm install
 COPY artifacts/solve-crm/ .
 ENV PORT=5173
 ENV BASE_PATH=/
