@@ -325,19 +325,23 @@ app.get("/api/v1/access/sync-status", async (req, res) => {
 
 app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
   try {
-    const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs");
-    const todayResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
-    const authorizedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND LOWER(result) = 'autorizado'");
-    const deniedToday = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD') AND LOWER(result) != 'autorizado'");
-    const uniqueClients = await pool.query("SELECT COUNT(DISTINCT customer_id) as cnt FROM solve_access_logs");
-    const clientsToday = await pool.query("SELECT COUNT(DISTINCT customer_id) as cnt FROM solve_access_logs WHERE access_date = to_char(CURRENT_DATE, 'YYYY-MM-DD')");
+    const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM acessos");
+    const todayResult = await pool.query("SELECT COUNT(*) as cnt FROM acessos WHERE data_acesso::date = CURRENT_DATE");
+    const authorizedToday = await pool.query("SELECT COUNT(*) as cnt FROM acessos WHERE data_acesso::date = CURRENT_DATE AND LOWER(resultado) = 'autorizado'");
+    const deniedToday = await pool.query("SELECT COUNT(*) as cnt FROM acessos WHERE data_acesso::date = CURRENT_DATE AND LOWER(resultado) != 'autorizado'");
+    const uniqueClients = await pool.query("SELECT COUNT(DISTINCT cliente_id) as cnt FROM acessos");
+    const clientsToday = await pool.query("SELECT COUNT(DISTINCT cliente_id) as cnt FROM acessos WHERE data_acesso::date = CURRENT_DATE");
+    const onlineNow = await pool.query("SELECT COUNT(*) as cnt FROM clientes WHERE online = true");
     const recentAccesses = await pool.query(
-      "SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome, access_date as data_acesso, access_time as hora_acesso, access_type as tipo_acesso, result as resultado, reason as motivo FROM solve_access_logs ORDER BY remote_id DESC LIMIT 10"
+      `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text, a.hora_acesso,
+              a.tipo_acesso, a.resultado, a.motivo
+       FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
+       ORDER BY a.id_acesso DESC LIMIT 10`
     );
 
     res.json({
       data: {
-        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: parseInt(clientsToday.rows[0].cnt), online: 0, blocked: 0 },
+        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: parseInt(clientsToday.rows[0].cnt), online: parseInt(onlineNow.rows[0].cnt), blocked: 0 },
         accesses: {
           today: parseInt(todayResult.rows[0].cnt),
           month: parseInt(totalResult.rows[0].cnt),
@@ -366,39 +370,41 @@ app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
     const params = [];
 
     if (req.query.client_id) {
-      where.push("customer_id = $" + (params.length + 1));
+      where.push("a.cliente_id = $" + (params.length + 1));
       params.push(parseInt(req.query.client_id));
     }
     if (req.query.resultado) {
-      where.push("result = $" + (params.length + 1));
-      params.push(req.query.resultado);
+      where.push("LOWER(a.resultado) = $" + (params.length + 1));
+      params.push(req.query.resultado.toLowerCase());
     }
     if (req.query.tipo_acesso) {
-      where.push("access_type = $" + (params.length + 1));
+      where.push("a.tipo_acesso = $" + (params.length + 1));
       params.push(req.query.tipo_acesso);
     }
     if (req.query.date_from) {
-      where.push("access_date >= $" + (params.length + 1));
+      where.push("a.data_acesso >= $" + (params.length + 1));
       params.push(req.query.date_from);
     }
     if (req.query.date_to) {
-      where.push("access_date <= $" + (params.length + 1));
+      where.push("a.data_acesso <= $" + (params.length + 1));
       params.push(req.query.date_to);
     }
     if (req.query.search) {
-      where.push("(LOWER(customer_name) LIKE $" + (params.length + 1) + " OR customer_id::text LIKE $" + (params.length + 2) + ")");
+      where.push("(LOWER(c.nome) LIKE $" + (params.length + 1) + " OR a.cliente_id::text LIKE $" + (params.length + 2) + ")");
       params.push("%" + req.query.search.toLowerCase() + "%", req.query.search);
     }
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
 
-    const totalResult = await pool.query("SELECT COUNT(*) as cnt FROM solve_access_logs " + whereClause, params);
+    const totalResult = await pool.query(
+      "SELECT COUNT(*) as cnt FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente " + whereClause, params
+    );
     const logs = await pool.query(
-      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
-              access_date as data_acesso, access_time as hora_acesso,
-              access_type as tipo_acesso, result as resultado, reason as motivo
-       FROM solve_access_logs ${whereClause}
-       ORDER BY remote_id DESC LIMIT ${limit} OFFSET ${offset}`,
+      `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text as data_acesso, a.hora_acesso,
+              a.tipo_acesso, a.resultado, a.motivo
+       FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
+       ${whereClause}
+       ORDER BY a.id_acesso DESC LIMIT ${limit} OFFSET ${offset}`,
       params
     );
 
@@ -416,10 +422,12 @@ app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
 app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
   try {
     const recentResult = await pool.query(
-      "SELECT MAX(synced_at) as last_sync FROM solve_access_logs"
+      "SELECT MAX(data_acesso || ' ' || hora_acesso) as last_sync FROM acessos"
     );
     const lastSync = recentResult.rows[0]?.last_sync;
     const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 30 * 60 * 1000;
+
+    const onlineClients = await pool.query("SELECT COUNT(*) as cnt FROM clientes WHERE online = true");
 
     res.json({
       data: {
@@ -430,6 +438,7 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
         modelo: "ZKTeco",
         tipo: "Entrada",
         lastSync: lastSync,
+        onlineClients: parseInt(onlineClients.rows[0].cnt),
       },
     });
   } catch (err) {
@@ -488,13 +497,17 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT
-        a.customer_id as id_cliente,
-        a.customer_name as nome,
-        MAX(a.access_date) as ultimo_acesso,
-        MAX(a.access_time) as ultimo_hora,
+        a.cliente_id as id_cliente,
+        c.nome as nome,
+        MAX(a.data_acesso::text) as ultimo_acesso,
+        MAX(a.hora_acesso) as ultimo_hora,
         COUNT(*) as total_acessos,
-        COUNT(*) FILTER (WHERE LOWER(a.result) = 'autorizado') as acessos_autorizados,
-        COUNT(*) FILTER (WHERE LOWER(a.result) != 'autorizado') as acessos_negados,
+        COUNT(*) FILTER (WHERE LOWER(a.resultado) = 'autorizado') as acessos_autorizados,
+        COUNT(*) FILTER (WHERE LOWER(a.resultado) != 'autorizado') as acessos_negados,
+        c.online,
+        c.bloqueado,
+        c.numero_entradas,
+        c.status as cliente_status,
         o.sex as ovg_sex,
         o.email as ovg_email,
         o.mobile_number as ovg_phone,
@@ -502,10 +515,11 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
         o.status as ovg_status,
         o.last_entry as ovg_last_entry,
         o.entry_date as ovg_entry_date
-       FROM solve_access_logs a
-       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
-       GROUP BY a.customer_id, a.customer_name, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
-       ORDER BY a.customer_name ASC`
+       FROM acessos a
+       LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
+       LEFT JOIN ovg_members o ON o.customer_number = CAST(c.numero_cartao AS TEXT)
+       GROUP BY a.cliente_id, c.nome, c.online, c.bloqueado, c.numero_entradas, c.status, c.numero_cartao, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
+       ORDER BY c.nome ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
@@ -519,25 +533,30 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT
-        a.customer_id as id,
-        a.customer_name as name,
-        MAX(a.access_date) as "joinedAt",
-        MAX(a.access_date) as "createdAt",
-        MAX(a.access_date) as "updatedAt",
+        c.id_cliente as id,
+        c.nome as name,
+        MAX(a.data_acesso::text) as "joinedAt",
+        MAX(a.data_acesso::text) as "createdAt",
+        MAX(a.data_acesso::text) as "updatedAt",
         o.email,
         o.mobile_number as phone,
         o.sex as gender,
         o.entry_date as "entryDate",
         o.nif,
         o.status as state,
+        c.status as client_status,
+        c.online,
+        c.bloqueado,
+        c.numero_entradas,
         '' as company,
         null as "planName",
         null as "subscriptionEnd",
-        o.customer_number as code
-       FROM solve_access_logs a
-       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
-       GROUP BY a.customer_id, a.customer_name, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
-       ORDER BY a.customer_name ASC`
+        c.numero_cartao as code
+       FROM clientes c
+       LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
+       LEFT JOIN ovg_members o ON o.customer_number = c.numero_cartao
+       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
+       ORDER BY c.nome ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
@@ -549,20 +568,25 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT
-        a.customer_id as id,
-        a.customer_name as name,
-        MAX(a.access_date) as "joinedAt",
+        c.id_cliente as id,
+        c.nome as name,
+        MAX(a.data_acesso::text) as "joinedAt",
         o.email,
         o.mobile_number as phone,
         o.sex as gender,
         o.entry_date as "entryDate",
         o.nif,
         o.status as state,
+        c.status as client_status,
+        c.online,
+        c.bloqueado,
+        c.numero_entradas,
         '' as company
-       FROM solve_access_logs a
-       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
-       WHERE a.customer_id = $1
-       GROUP BY a.customer_id, a.customer_name, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status`,
+       FROM clientes c
+       LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
+       LEFT JOIN ovg_members o ON o.customer_number = c.numero_cartao
+       WHERE c.id_cliente = $1
+       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number`,
       [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
