@@ -65,6 +65,20 @@ pool.query(`CREATE TABLE IF NOT EXISTS sync_log (
   source TEXT DEFAULT 'sync_crm'
 )`).catch(() => {});
 
+// Create ovg_members table on startup
+pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
+  customer_number TEXT PRIMARY KEY,
+  name TEXT,
+  sex TEXT,
+  nif TEXT,
+  mobile_number TEXT,
+  email TEXT,
+  status TEXT,
+  club TEXT,
+  last_entry TEXT,
+  synced_at TIMESTAMPTZ DEFAULT NOW()
+)`).catch(() => {});
+
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
     const { acessos } = req.body;
@@ -90,6 +104,50 @@ app.post("/api/v1/access/sync", async (req, res) => {
     pool.query("INSERT INTO sync_log (synced_at, records_synced) VALUES (NOW(), $1)", [inserted]).catch(() => {});
 
     res.json({ ok: true, inserted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── OVG Sync: PC envia membros OVG ────────────────────────────────────────
+app.post("/api/v1/access/ovg-sync", async (req, res) => {
+  try {
+    const { members } = req.body;
+    if (!Array.isArray(members) || members.length === 0) {
+      res.status(400).json({ error: "Array 'members' vazio" });
+      return;
+    }
+    let upserted = 0;
+    for (const m of members) {
+      try {
+        await pool.query(
+          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, synced_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+           ON CONFLICT (customer_number) DO UPDATE SET
+             name = EXCLUDED.name, sex = EXCLUDED.sex, nif = EXCLUDED.nif,
+             mobile_number = EXCLUDED.mobile_number, email = EXCLUDED.email,
+             status = EXCLUDED.status, club = EXCLUDED.club, last_entry = EXCLUDED.last_entry,
+             synced_at = NOW()`,
+          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null,
+           m.mobile_number || null, m.email || null, m.status || null,
+           m.club || null, m.last_entry || null]
+        );
+        upserted++;
+      } catch (e) { console.error("ovg upsert error:", e.message); }
+    }
+    pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg')", [upserted]).catch(() => {});
+    res.json({ ok: true, upserted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// OVG Sync status
+app.get("/api/v1/access/ovg-status", async (req, res) => {
+  try {
+    const count = await pool.query("SELECT COUNT(*) as cnt FROM ovg_members");
+    const last = await pool.query("SELECT MAX(synced_at) as last_sync FROM ovg_members");
+    res.json({ total: parseInt(count.rows[0].cnt), lastSync: last.rows[0].last_sync });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -278,16 +336,23 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT
-        customer_id as id_cliente,
-        customer_name as nome,
-        MAX(access_date) as ultimo_acesso,
-        MAX(access_time) as ultimo_hora,
+        a.customer_id as id_cliente,
+        a.customer_name as nome,
+        MAX(a.access_date) as ultimo_acesso,
+        MAX(a.access_time) as ultimo_hora,
         COUNT(*) as total_acessos,
-        COUNT(*) FILTER (WHERE LOWER(result) = 'autorizado') as acessos_autorizados,
-        COUNT(*) FILTER (WHERE LOWER(result) != 'autorizado') as acessos_negados
-       FROM solve_access_logs
-       GROUP BY customer_id, customer_name
-       ORDER BY customer_name ASC`
+        COUNT(*) FILTER (WHERE LOWER(a.result) = 'autorizado') as acessos_autorizados,
+        COUNT(*) FILTER (WHERE LOWER(a.result) != 'autorizado') as acessos_negados,
+        o.sex as ovg_sex,
+        o.email as ovg_email,
+        o.mobile_number as ovg_phone,
+        o.nif as ovg_nif,
+        o.status as ovg_status,
+        o.last_entry as ovg_last_entry
+       FROM solve_access_logs a
+       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
+       GROUP BY a.customer_id, a.customer_name, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry
+       ORDER BY a.customer_name ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
