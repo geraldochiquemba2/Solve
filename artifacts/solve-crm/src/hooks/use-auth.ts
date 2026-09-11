@@ -35,6 +35,22 @@ function isTokenExpired(token: string): boolean {
   return Date.now() >= payload.exp * 1000;
 }
 
+function getLandingUser(): User | null {
+  try {
+    const raw = localStorage.getItem('samora_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id: string; name: string; email: string; role: string };
+    return {
+      id: parsed.id ?? '',
+      name: parsed.name ?? '',
+      email: parsed.email ?? '',
+      role: (parsed.role === 'admin' ? 'admin' : 'admin') as any,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function useAuth() {
   const [token, setToken] = useState<string | null>(() => {
     // Try to get token from cookie or localStorage (fallback)
@@ -45,7 +61,8 @@ export function useAuth() {
   });
   const [user, setUser] = useState<User | null>(() => {
     if (token) return getUserFromToken(token);
-    return null;
+    // Fallback: check landing page auth
+    return getLandingUser();
   });
 
   useEffect(() => {
@@ -106,6 +123,6 @@ export function useAuth() {
     token,
     login,
     logout,
-    isAuthenticated: !!token && !!user,
+    isAuthenticated: (!!token && !!user) || (!!user && !token && !!localStorage.getItem('samora_user')),
   };
 }

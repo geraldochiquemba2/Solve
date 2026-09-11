@@ -15,8 +15,18 @@ import {
 } from 'lucide-react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
-import { LoginPage } from '@/pages/login';
 import '@/lib/api';
+
+// Landing page
+import LandingLayout from '@/landing/LandingLayout';
+import Landing from '@/landing/Landing';
+import LandingLogin from '@/landing/Login';
+import FitMotivacao from '@/landing/FitMotivacao';
+import Formacao from '@/landing/Formacao';
+import Store from '@/landing/Store';
+import ProductDetail from '@/landing/ProductDetail';
+import FitWorkout from '@/landing/FitWorkout';
+import FitStudio from '@/landing/FitStudio';
 import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
 import {
   useListLeads,
@@ -614,9 +624,58 @@ function CRM() {
     }
   }, [leadsQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/leads" component={() => <LeadsPage leads={leads} setLeads={setLocalLeads} userName={userName} />} /><Route path="/pipeline" component={() => <PipelinePage leads={leads} setLeads={setLocalLeads} />} /><Route path="/clientes/:id" component={() => <CustomerDetail customers={customers} />} />      <Route path="/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} />} /><Route path="/planos" component={PlansPage} /><Route path="/pagamentos" component={PaymentsPage} /><Route path="/integracoes" component={IntegrationsPage} /><Route path="/automacoes" component={AutomationsPage} /><Route path="/api-webhooks" component={ApiPage} /><Route path="/utilizadores" component={UsersPage} /><Route path="/auditoria" component={AuditPage} /><Route path="/definicoes" component={SettingsPage} /><Route path="/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} setLeads={setLocalLeads} userName={userName} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} setLeads={setLocalLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
-function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><ErrorBoundary><Switch><Route path="/login" component={LoginPage} /><Route component={() => <ProtectedRoute><CRM /></ProtectedRoute>} /></Switch></ErrorBoundary></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>; }
+function LandingPage() {
+  return (
+    <LandingLayout>
+      <Landing />
+    </LandingLayout>
+  );
+}
+
+function LandingLoginPage() {
+  return (
+    <LandingLayout>
+      <LandingLogin />
+    </LandingLayout>
+  );
+}
+
+function LandingSubPage({ children }: { children: ReactNode }) {
+  return (
+    <LandingLayout>
+      {children}
+    </LandingLayout>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <ErrorBoundary>
+            <Switch>
+              {/* Landing pages */}
+              <Route path="/login" component={LandingLoginPage} />
+              <Route path="/" component={LandingPage} />
+              <Route path="/fit-motivacao" component={() => <LandingSubPage><FitMotivacao /></LandingSubPage>} />
+              <Route path="/formacao" component={() => <LandingSubPage><Formacao /></LandingSubPage>} />
+              <Route path="/store" component={() => <LandingSubPage><Store /></LandingSubPage>} />
+              <Route path="/store/:id" component={() => <LandingSubPage><ProductDetail /></LandingSubPage>} />
+              <Route path="/fit-workout" component={() => <LandingSubPage><FitWorkout /></LandingSubPage>} />
+              <Route path="/fit-studio" component={() => <LandingSubPage><FitStudio /></LandingSubPage>} />
+              {/* CRM (protected) */}
+              <Route component={() => <ProtectedRoute><CRM /></ProtectedRoute>} />
+            </Switch>
+          </ErrorBoundary>
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
 export default App;
 
 

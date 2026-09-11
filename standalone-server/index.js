@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import pg from "pg";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 const { Pool } = pg;
 
@@ -10,13 +13,30 @@ const pool = new Pool({
 });
 
 const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
+const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
+const SALT_ROUNDS = 10;
 
 function requireAuth(req, res, next) {
-  const key = req.headers["x-api-key"] || req.query.api_key;
-  if (key !== API_KEY) {
-    return res.status(401).json({ error: "API key inválida" });
+  const authHeader = req.headers.authorization;
+  let token;
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.cookies?.token) {
+    token = req.cookies.token;
   }
-  next();
+  if (!token) {
+    const key = req.headers["x-api-key"] || req.query.api_key;
+    if (key === API_KEY) return next();
+    return res.status(401).json({ error: "Token de autenticação necessário" });
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido ou expirado" });
+  }
 }
 
 const app = express();
@@ -226,6 +246,159 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Auth: Login ────────────────────────────────────────────────────────────
+
+app.post("/api/v1/auth/login", async (req, res) => {
+  try {
+    const { email, phone, password } = req.body;
+    if (!password || (!email && !phone)) {
+      return res.status(400).json({ error: "Dados inválidos" });
+    }
+
+    let user;
+    if (email) {
+      const result = await pool.query("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+      user = result.rows[0];
+    } else if (phone) {
+      const result = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+      user = result.rows[0];
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: "Credenciais inválidas" });
+    }
+
+    if (user.active === false) {
+      return res.status(403).json({ error: "Conta desactivada" });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: "Credenciais inválidas" });
+    }
+
+    const payload = { userId: user.id, role: user.role, email: user.email };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+
+    await pool.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    });
+  } catch (err) {
+    console.error("[AUTH LOGIN] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Auth: Register ─────────────────────────────────────────────────────────
+
+app.post("/api/v1/auth/register", async (req, res) => {
+  try {
+    const { name, email, password, role, phone } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Nome, email e password são obrigatórios" });
+    }
+
+    const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "Email já registado" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const userRole = role || "comercial";
+
+    const result = await pool.query(
+      "INSERT INTO users (name, email, password_hash, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role",
+      [name, email, passwordHash, userRole, phone || null]
+    );
+    const user = result.rows[0];
+
+    const payload = { userId: user.id, role: user.role, email: user.email };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    res.status(201).json({ token, user });
+  } catch (err) {
+    console.error("[AUTH REGISTER] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Auth: Logout ───────────────────────────────────────────────────────────
+
+app.post("/api/v1/auth/logout", (_req, res) => {
+  res.clearCookie("token", { path: "/" });
+  res.json({ message: "Sessão terminada" });
+});
+
+// ─── Auth: Forgot Password ──────────────────────────────────────────────────
+
+app.post("/api/v1/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email é obrigatório" });
+
+    const result = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await pool.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [`password_reset_${user.id}`, JSON.stringify({ token: resetToken, expiresAt: expiresAt.toISOString() })]
+      );
+      console.log(`[PASSWORD RESET] Token for ${email}: ${resetToken}`);
+    }
+
+    res.json({ message: "Se o email existir, receberá um link de recuperação" });
+  } catch (err) {
+    console.error("[AUTH FORGOT] Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Auth: Reset Password ───────────────────────────────────────────────────
+
+app.post("/api/v1/auth/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: "Token e password são obrigatórios" });
+
+    const result = await pool.query("SELECT key, value FROM settings WHERE key LIKE 'password_reset_%'");
+    let resetEntry = null;
+    for (const row of result.rows) {
+      try {
+        const data = typeof row.value === "string" ? JSON.parse(row.value) : row.value;
+        if (data.token === token) { resetEntry = { key: row.key, data }; break; }
+      } catch {}
+    }
+
+    if (!resetEntry) return res.status(400).json({ error: "Token inválido ou expirado" });
+    if (new Date(resetEntry.data.expiresAt) < new Date()) return res.status(400).json({ error: "Token inválido ou expirado" });
+
+    const userId = resetEntry.key.replace("password_reset_", "");
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [passwordHash, userId]);
+    await pool.query("DELETE FROM settings WHERE key = $1", [resetEntry.key]);
+
+    res.json({ message: "Password atualizada com sucesso" });
+  } catch (err) {
+    console.error("[AUTH RESET] Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
