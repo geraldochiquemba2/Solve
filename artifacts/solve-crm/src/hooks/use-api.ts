@@ -416,6 +416,7 @@ export interface CustomerData {
   company: string | null; nif: string | null; state: string; planName: string | null;
   subscriptionEnd: string | null; createdAt: string; updatedAt: string;
   ovgId: string | null; cademiId: string | null; leadId: string | null;
+  gender?: string;
 }
 
 export function useListCustomersManual() {
@@ -429,30 +430,42 @@ export function useListCustomersManual() {
     queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string; ultimo_acesso: string; ultimo_hora: string; total_acessos: number; acessos_autorizados: number; acessos_negados: number }>; total: number }>('/api/v1/access/clients'),
     retry: false,
   });
+  const ovgQuery = useQuery({
+    queryKey: ['customers-ovg'],
+    queryFn: () => apiGet<{ data: Array<{ customer_number: string; name: string; sex: string; mobile_number: string; email: string; nif: string; status: string; last_entry: string }>; total: number }>('/api/v1/ovg/members'),
+    retry: false,
+  });
   return useMemo(() => {
     const apiCustomers = apiQuery.data?.data ?? [];
-    const accessCustomers = (accessQuery.data?.data ?? []).map((c: any) => ({
-      id: String(c.id_cliente),
-      code: String(c.id_cliente),
-      name: c.nome ?? '',
-      email: '',
-      phone: '',
-      company: '',
-      nif: null,
-      state: (c.acessos_negados > c.acessos_autorizados) ? 'em_atraso' : 'activo',
-      planName: null,
-      subscriptionEnd: null,
-      createdAt: c.ultimo_acesso || '',
-      updatedAt: c.ultimo_acesso || '',
-      ovgId: null,
-      cademiId: null,
-      leadId: null,
-      _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
-    }));
+    const accessRows = accessQuery.data?.data ?? [];
+    const ovgMap = new Map<string, any>();
+    (ovgQuery.data?.data ?? []).forEach((m: any) => { ovgMap.set(String(m.customer_number), m); });
+    const accessCustomers = accessRows.map((c: any) => {
+      const ovg = ovgMap.get(String(c.id_cliente));
+      return {
+        id: String(c.id_cliente),
+        code: String(c.id_cliente),
+        name: c.nome ?? ovg?.name ?? '',
+        email: ovg?.email ?? '',
+        phone: ovg?.mobile_number ?? '',
+        company: '',
+        nif: ovg?.nif ?? null,
+        state: ovg?.status === 'ATIVO' ? 'activo' : ovg?.status === 'INATIVO' ? 'inactivo' : (c.acessos_negados > c.acessos_autorizados) ? 'em_atraso' : 'activo',
+        planName: null,
+        subscriptionEnd: null,
+        createdAt: c.ultimo_acesso || ovg?.last_entry || '',
+        updatedAt: c.ultimo_acesso || '',
+        ovgId: String(c.id_cliente),
+        cademiId: null,
+        leadId: null,
+        gender: ovg?.sex || '',
+        _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
+      };
+    });
     const seen = new Set(apiCustomers.map((c: CustomerData) => c.id));
-    const merged = [...apiCustomers, ...accessCustomers.filter((c: CustomerData) => !seen.has(c.id))];
-    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading };
-  }, [apiQuery.data, accessQuery.data, apiQuery.isLoading, accessQuery.isLoading]);
+    const merged = [...apiCustomers, ...accessCustomers.filter((c: any) => !seen.has(c.id))];
+    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading || ovgQuery.isLoading };
+  }, [apiQuery.data, accessQuery.data, ovgQuery.data, apiQuery.isLoading, accessQuery.isLoading, ovgQuery.isLoading]);
 }
 
 export function useImportCustomerDates() {
