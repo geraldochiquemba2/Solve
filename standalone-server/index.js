@@ -851,10 +851,55 @@ async function getEkwanzaToken() {
 
 app.get("/api/v1/payments", requireAuth, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM payments ORDER BY id DESC LIMIT 100");
-    res.json({ data: result.rows, total: result.rows.length });
+    const where = [];
+    const params = [];
+
+    if (req.query.status) {
+      where.push("p.status = $" + (params.length + 1));
+      params.push(req.query.status);
+    }
+    if (req.query.customer_name) {
+      where.push("LOWER(c.nome) LIKE $" + (params.length + 1));
+      params.push("%" + req.query.customer_name.toLowerCase() + "%");
+    }
+    if (req.query.date_from) {
+      where.push("p.created_at >= $" + (params.length + 1));
+      params.push(req.query.date_from);
+    }
+    if (req.query.date_to) {
+      where.push("p.created_at <= $" + (params.length + 1));
+      params.push(req.query.date_to);
+    }
+    if (req.query.min_amount) {
+      where.push("p.amount >= $" + (params.length + 1));
+      params.push(parseFloat(req.query.min_amount));
+    }
+    if (req.query.max_amount) {
+      where.push("p.amount <= $" + (params.length + 1));
+      params.push(parseFloat(req.query.max_amount));
+    }
+
+    const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
+    const result = await pool.query(
+      `SELECT p.*, c.nome as customer_name FROM payments p
+       LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text
+       ${whereClause} ORDER BY p.id DESC LIMIT 200`, params
+    );
+    
+    const total = await pool.query("SELECT COUNT(*) as cnt FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause, params);
+    const sum = await pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause, params);
+    const byStatus = await pool.query(
+      "SELECT p.status, COUNT(*) as cnt, COALESCE(SUM(p.amount), 0) as total FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause + " GROUP BY p.status", params
+    );
+
+    res.json({ 
+      data: result.rows, 
+      total: parseInt(total.rows[0].cnt),
+      sum: parseFloat(sum.rows[0].total),
+      byStatus: byStatus.rows
+    });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    res.json({ data: [], total: 0, sum: 0, byStatus: [] });
   }
 });
 

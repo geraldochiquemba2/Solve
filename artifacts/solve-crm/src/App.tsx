@@ -367,7 +367,7 @@ function PaymentsPage() {
     apiPayments.length > 0
       ? apiPayments.map(p => ({
           id: p.code ?? p.id ?? '',
-          customer: (p as any).customerName ?? p.customerId ?? '',
+          customer: (p as any).customer_name ?? (p as any).customerName ?? p.customerId ?? '',
           amount: p.amount ?? 0,
           method: p.method ?? '',
           state: p.status === 'confirmado' ? 'Confirmado' : p.status === 'pendente' ? 'Pendente' : p.status === 'em_atraso' ? 'Em atraso' : p.status === 'rejeitado' ? 'Cancelado' : p.status === 'reembolsado' ? 'Reembolsado' : p.status === 'expirado' ? 'Expirado' : p.status ?? '',
@@ -376,7 +376,7 @@ function PaymentsPage() {
           entity: (p as any).entity ?? '',
           ekwanzaCode: (p as any).ekwanzaCode ?? '',
           ekwanzaOperationCode: (p as any).ekwanzaOperationCode ?? '',
-          customerName: (p as any).customerName ?? '',
+          customerName: (p as any).customer_name ?? (p as any).customerName ?? '',
           customerPhone: (p as any).customerPhone ?? '',
           customerEmail: (p as any).customerEmail ?? '',
           createdAt: p.createdAt ?? '',
@@ -387,9 +387,25 @@ function PaymentsPage() {
       : []
   , [apiPayments]);
   const [filter, setFilter] = useState('Todas');
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<any>(null);
-  const visible = payments.filter(p => filter === 'Todas' || p.state === filter);
-  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<button className="btn-secondary" onClick={() => window.location.reload()}><RefreshCw size={14} /> Sincronizar Pay4All</button>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div><Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option></select>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }}>{p.id}</td><td style={{ fontWeight: 700 }}>{p.customer}</td><td>{p.method}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))' }}>{p.date}</td><td>{p.state === 'Confirmado' && <span style={{ color: 'hsl(155 41% 35%)', fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)}><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}</>;
+  const visible = payments.filter(p => {
+    if (filter !== 'Todas' && p.state !== filter) return false;
+    if (search && !p.customer.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (dateFrom && p.date && p.date < dateFrom) return false;
+    if (dateTo && p.date && p.date > dateTo + 'T23:59:59') return false;
+    return true;
+  });
+  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<button className="btn-secondary" onClick={() => window.location.reload()}><RefreshCw size={14} /> Sincronizar Pay4All</button>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
+  <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', flexWrap: 'wrap' }}>
+    <input className="input" placeholder="Pesquisar cliente ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
+    <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '140px' }} />
+    <input className="input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '140px' }} />
+    {(search || dateFrom || dateTo) && <button className="btn-secondary" onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}><RefreshCw size={12} /> Limpar</button>}
+  </div>
+  <Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option><option>Reembolsado</option></select>}>><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }}>{p.id}</td><td style={{ fontWeight: 700 }}>{p.customer}</td><td>{p.method}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))' }}>{p.date}</td><td>{p.state === 'Confirmado' && <span style={{ color: 'hsl(155 41% 35%)', fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)}><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}</>;
 }
 
 const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof BriefcaseBusiness }[] = [
