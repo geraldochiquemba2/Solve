@@ -1,4 +1,4 @@
-FROM node:20-alpine AS frontend
+FROM node:20 AS frontend
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /frontend
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -11,7 +11,7 @@ ENV PORT=5173
 ENV BASE_PATH=/
 RUN pnpm --filter @workspace/solve-crm run build
 
-FROM node:20-alpine
+FROM node:20
 WORKDIR /app
 COPY standalone-server/ .
 RUN npm install
