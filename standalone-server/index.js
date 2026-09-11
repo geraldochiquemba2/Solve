@@ -435,6 +435,94 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Customers (legacy endpoint for frontend compatibility) ─────────────────
+
+app.get("/api/v1/customers", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT
+        a.customer_id as id,
+        a.customer_name as name,
+        MAX(a.access_date) as "joinedAt",
+        MAX(a.access_date) as "createdAt",
+        MAX(a.access_date) as "updatedAt",
+        o.email,
+        o.mobile_number as phone,
+        o.sex as gender,
+        o.entry_date as "entryDate",
+        o.nif,
+        o.status as state,
+        '' as company,
+        null as "planName",
+        null as "subscriptionEnd",
+        o.customer_number as code
+       FROM solve_access_logs a
+       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
+       GROUP BY a.customer_id, a.customer_name, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
+       ORDER BY a.customer_name ASC`
+    );
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT
+        a.customer_id as id,
+        a.customer_name as name,
+        MAX(a.access_date) as "joinedAt",
+        o.email,
+        o.mobile_number as phone,
+        o.sex as gender,
+        o.entry_date as "entryDate",
+        o.nif,
+        o.status as state,
+        '' as company
+       FROM solve_access_logs a
+       LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
+       WHERE a.customer_id = $1
+       GROUP BY a.customer_id, a.customer_name, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "No rows provided" });
+    }
+    let updated = 0, notFound = 0, errors = [];
+    for (const row of rows) {
+      try {
+        const dateStr = row.joined_at;
+        if (!dateStr) { notFound++; continue; }
+        let customerId = null;
+        if (row.code) customerId = row.code;
+        else if (row.ovg_id) customerId = row.ovg_id;
+        if (!customerId) { notFound++; continue; }
+        const r = await pool.query(
+          `UPDATE ovg_members SET entry_date = $1 WHERE customer_number = $2`,
+          [dateStr, String(customerId)]
+        );
+        if (r.rowCount > 0) updated++;
+        else notFound++;
+      } catch (e) { errors.push(e.message); }
+    }
+    res.json({ data: { updated, notFound, errors, total: rows.length }, message: `${updated} actualizados, ${notFound} não encontrados` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Auth: Login ────────────────────────────────────────────────────────────
 
 app.post("/api/v1/auth/login", async (req, res) => {
