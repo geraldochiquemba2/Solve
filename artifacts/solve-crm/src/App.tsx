@@ -27,7 +27,7 @@ import Store from '@/landing/Store';
 import ProductDetail from '@/landing/ProductDetail';
 import FitWorkout from '@/landing/FitWorkout';
 import FitStudio from '@/landing/FitStudio';
-import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
+import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -516,14 +516,29 @@ function IntegrationsPage() {
   const ovgSync = useOVGSyncStatus();
   const ovgHealth = useOVGHealth();
   const syncNowMut = useOVGSyncNow();
+  const cademiHealth = useCademiHealth();
+  const cademiSyncMut = useCademiSync();
   const apiIntegrations = data?.data ?? [];
   const ovgSyncData = ovgSync.data?.data;
   const ovgHealthData = ovgHealth.data?.data;
+  const cademiHealthData = cademiHealth.data;
   
   const items = useMemo(() => {
+    const applyCademi = (list: any[]) => list.map(item => {
+      if (item.name !== 'Cademi') return item;
+      if (!cademiHealthData) return item;
+      return {
+        ...item,
+        state: cademiHealthData.connected ? 'Operacional' : 'Erro',
+        sync: cademiHealthData.connected ? 'Ligado' : 'Falha',
+        volume: cademiHealthData.connected ? `${cademiHealthData.products ?? 0} produtos` : (cademiHealthData.message || 'Não configurado'),
+        isCademi: true,
+        cademi: cademiHealthData,
+      };
+    });
     if (apiIntegrations.length > 0) {
       const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, Cademi: KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
-      return apiIntegrations.map(ig => {
+      return applyCademi(apiIntegrations.map(ig => {
         const isOVG = ig.name === 'OVG';
         const syncInfo = isOVG && ovgSyncData ? ovgSyncData : null;
         const healthInfo = isOVG && ovgHealthData ? ovgHealthData : null;
@@ -538,9 +553,9 @@ function IntegrationsPage() {
           isOVG,
           syncInfo,
         };
-      });
+      }));
     }
-    return INTEGRATION_DEFAULTS.map(ig => ({
+    return applyCademi(INTEGRATION_DEFAULTS.map(ig => ({
       ...ig,
       icon: ig.icon,
       state: 'Inativo',
@@ -548,10 +563,10 @@ function IntegrationsPage() {
       volume: 'Aguardando configuração',
       isOVG: ig.name === 'OVG',
       syncInfo: null,
-    }));
-  }, [apiIntegrations, ovgSyncData, ovgHealthData]);
+    })));
+  }, [apiIntegrations, ovgSyncData, ovgHealthData, cademiHealthData]);
   
-  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
+  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `Cademi OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : isCademi ? cademiSyncMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : isCademi ? (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
 function AutomationsPage() {

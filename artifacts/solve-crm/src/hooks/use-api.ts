@@ -410,6 +410,49 @@ export function useOVGHealth() {
   });
 }
 
+// ─── Cademi (plataforma de cursos) ─────────────────────────────────────────
+export interface CademiHealth {
+  connected: boolean;
+  message: string;
+  products?: number;
+}
+
+export function useCademiHealth() {
+  return useQuery({
+    queryKey: ['cademi-health'],
+    queryFn: () => apiGet<CademiHealth>('/api/v1/cademi/health'),
+    refetchInterval: 60000,
+    retry: false,
+  });
+}
+
+export function useCademiProducts() {
+  return useQuery({
+    queryKey: ['cademi-products'],
+    queryFn: () => apiGet<{ data: Array<{ id: number; nome: string }>; total: number }>('/api/v1/cademi/products'),
+    retry: false,
+  });
+}
+
+export function useCademiUsers() {
+  return useQuery({
+    queryKey: ['cademi-users'],
+    queryFn: () => apiGet<{ data: Array<{ id: number; nome: string; email: string; ultimo_acesso_em: string | null }>; total: number }>('/api/v1/cademi/users'),
+    retry: false,
+  });
+}
+
+export function useCademiSync() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ ok: boolean; cademiUsers: number; matched: number }>('/api/v1/cademi/sync'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cademi-users'] });
+      qc.invalidateQueries({ queryKey: ['customers-manual'] });
+    },
+  });
+}
+
 // ─── Customers (manual fallback) ────────────────────────────────────────────
 export interface CustomerData {
   id: string; code: string; name: string; email: string; phone: string;
