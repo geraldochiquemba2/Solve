@@ -277,7 +277,17 @@ app.post("/api/v1/terminal/unlock", async (req, res) => {
 app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT DISTINCT customer_id as id_cliente, customer_name as nome FROM solve_access_logs ORDER BY customer_name ASC"
+      `SELECT DISTINCT
+        customer_id as id_cliente,
+        customer_name as nome,
+        MAX(access_date) as ultimo_acesso,
+        MAX(access_time) as ultimo_hora,
+        COUNT(*) as total_acessos,
+        COUNT(*) FILTER (WHERE LOWER(result) = 'autorizado') as acessos_autorizados,
+        COUNT(*) FILTER (WHERE LOWER(result) != 'autorizado') as acessos_negados
+       FROM solve_access_logs
+       GROUP BY customer_id, customer_name
+       ORDER BY customer_name ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {

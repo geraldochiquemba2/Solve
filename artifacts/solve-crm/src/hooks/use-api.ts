@@ -426,7 +426,7 @@ export function useListCustomersManual() {
   });
   const accessQuery = useQuery({
     queryKey: ['customers-access'],
-    queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string }>; total: number }>('/api/v1/access/clients'),
+    queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string; ultimo_acesso: string; ultimo_hora: string; total_acessos: number; acessos_autorizados: number; acessos_negados: number }>; total: number }>('/api/v1/access/clients'),
     retry: false,
   });
   return useMemo(() => {
@@ -439,14 +439,15 @@ export function useListCustomersManual() {
       phone: '',
       company: '',
       nif: null,
-      state: 'activo',
+      state: (c.acessos_negados > c.acessos_autorizados) ? 'em_atraso' : 'activo',
       planName: null,
       subscriptionEnd: null,
-      createdAt: '',
-      updatedAt: '',
+      createdAt: c.ultimo_acesso || '',
+      updatedAt: c.ultimo_acesso || '',
       ovgId: null,
       cademiId: null,
       leadId: null,
+      _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
     }));
     const seen = new Set(apiCustomers.map((c: CustomerData) => c.id));
     const merged = [...apiCustomers, ...accessCustomers.filter((c: CustomerData) => !seen.has(c.id))];

@@ -46,7 +46,7 @@ import type { Lead as ApiLead, Plan as ApiPlan, Payment as ApiPayment, Integrati
 const queryClient = new QueryClient();
 
 type Lead = { id: string; name: string; company: string; source: string; status: string; owner: string; value: number; last: string; email: string };
-type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string };
+type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
 
 function mapApiLead(l: ApiLead): Lead {
   return {
@@ -78,9 +78,12 @@ function mapApiCustomer(c: any): Customer {
       return formatDate(d);
     } catch { return formatDate(d); }
   };
+  const isAccessClient = !!c._accessStats;
   const joinedRaw: string | null = c.joinedAt ?? c.subscriptionEnd ?? c.createdAt ?? null;
   let joined = '';
-  if (c.joinedAt) {
+  if (isAccessClient && c._accessStats?.ultimoAcesso) {
+    joined = relativeDate(c._accessStats.ultimoAcesso);
+  } else if (c.joinedAt) {
     joined = relativeDate(c.joinedAt);
   } else if (c.subscriptionEnd) {
     const endDate = new Date(c.subscriptionEnd);
@@ -93,13 +96,14 @@ function mapApiCustomer(c: any): Customer {
     id: c.code ?? c.id ?? '',
     name: c.name ?? '',
     company: c.company ?? '',
-    plan: c.planName ?? '',
+    plan: isAccessClient ? 'Solve Access' : (c.planName ?? ''),
     state: c.state === 'activo' ? 'Activo' : c.state === 'inactivo' ? 'Inactivo' : c.state === 'em_atraso' ? 'Em atraso' : c.state === 'suspenso' ? 'Suspenso' : c.state ?? '',
     joined,
-    expires: formatDate(c.subscriptionEnd ?? null),
+    expires: isAccessClient ? '' : formatDate(c.subscriptionEnd ?? null),
     email: c.email ?? '',
     phone: c.phone ?? '',
     gender: c.gender === 'M' ? 'Masculino' : c.gender === 'F' ? 'Feminino' : c.gender ?? '',
+    _accessStats: c._accessStats ?? null,
   };
 }
 
