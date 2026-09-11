@@ -57,6 +57,14 @@ app.get("/healthz", (_req, res) => {
 
 // ─── Sync: PC da catraca envia acessos ──────────────────────────────────────
 
+// Create sync_log table on startup
+pool.query(`CREATE TABLE IF NOT EXISTS sync_log (
+  id SERIAL PRIMARY KEY,
+  synced_at TIMESTAMPTZ DEFAULT NOW(),
+  records_synced INT DEFAULT 0,
+  source TEXT DEFAULT 'sync_crm'
+)`).catch(() => {});
+
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
     const { acessos } = req.body;
@@ -78,7 +86,26 @@ app.post("/api/v1/access/sync", async (req, res) => {
       } catch (e) { console.error("insert error:", e.message); }
     }
 
+    // Log sync event
+    pool.query("INSERT INTO sync_log (synced_at, records_synced) VALUES (NOW(), $1)", [inserted]).catch(() => {});
+
     res.json({ ok: true, inserted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sync status endpoint
+app.get("/api/v1/access/sync-status", async (req, res) => {
+  try {
+    const last = await pool.query("SELECT synced_at, records_synced FROM sync_log ORDER BY id DESC LIMIT 1");
+    const totalSyncs = await pool.query("SELECT COUNT(*) as cnt FROM sync_log");
+    const todaySyncs = await pool.query("SELECT COUNT(*) as cnt FROM sync_log WHERE synced_at::date = CURRENT_DATE");
+    res.json({
+      lastSync: last.rows[0] || null,
+      totalSyncs: parseInt(totalSyncs.rows[0].cnt),
+      todaySyncs: parseInt(todaySyncs.rows[0].cnt),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
