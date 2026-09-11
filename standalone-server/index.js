@@ -158,28 +158,38 @@ app.get("/api/v1/access/ovg-status", async (req, res) => {
 });
 
 // ─── OVG Re-seed: fetches directly from OnVirtualGym API ──────────────────
-const OVG_API_URL = process.env.OVG_API_URL || "https://samorafitstudio.onvirtualgym.com";
-const OVG_USERNAME = process.env.OVG_USERNAME || "";
-const OVG_PASSWORD = process.env.OVG_PASSWORD || "";
-const OVG_CLUB_CODE = process.env.OVG_CLUB_CODE || "LUA";
+const OVG_API_URL = (process.env.OVG_API_URL || "https://samorafitstudio.onvirtualgym.com").trim();
+const OVG_USERNAME = (process.env.OVG_USERNAME || "").trim();
+const OVG_PASSWORD = (process.env.OVG_PASSWORD || "").trim();
+const OVG_CLUB_CODE = (process.env.OVG_CLUB_CODE || "LUA").trim();
 
 async function ovgLogin() {
-  const resp = await fetch(`${OVG_API_URL}/APIControlAccess`, {
+  const url = `${OVG_API_URL}/APIControlAccess`;
+  console.log("OVG login:", url);
+  const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: OVG_USERNAME, password: OVG_PASSWORD }),
   });
-  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status}`);
-  const data = await resp.json();
-  return data.token || data.data?.token || data;
+  const body = await resp.text();
+  console.log("OVG login status:", resp.status, "body:", body.substring(0, 200));
+  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status} ${body}`);
+  const data = JSON.parse(body);
+  const token = data.token || data.Token || data.access_token;
+  if (!token) throw new Error("OVG: no token in response");
+  return token;
 }
 
 async function ovgGetMembers(token) {
-  const resp = await fetch(`${OVG_API_URL}/ListOfCustomersDataDetailed/${OVG_CLUB_CODE}`, {
+  const url = `${OVG_API_URL}/ListOfCustomersDataDetailed/${OVG_CLUB_CODE}`;
+  console.log("OVG members:", url);
+  const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
-  if (!resp.ok) throw new Error(`OVG members fetch failed: ${resp.status}`);
-  const data = await resp.json();
+  const body = await resp.text();
+  console.log("OVG members status:", resp.status, "body length:", body.length);
+  if (!resp.ok) throw new Error(`OVG members failed: ${resp.status} ${body.substring(0, 200)}`);
+  const data = JSON.parse(body);
   return data.clients_data || data.data?.clients_data || [];
 }
 
