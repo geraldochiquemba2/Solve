@@ -92,9 +92,8 @@ app.get("/healthz", (_req, res) => {
 // ─── Diagnostic: list all tables ────────────────────────────────────────────
 app.get("/api/v1/db-acessos", async (req, res) => {
   try {
-    const cols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='acessos' ORDER BY ordinal_position");
-    const r = await pool.query('SELECT * FROM acessos ORDER BY id DESC LIMIT 30');
-    res.json({ columns: cols.rows.map(c => c.column_name), total: r.rows.length, data: r.rows });
+    const r = await pool.query('SELECT * FROM acessos LIMIT 30');
+    res.json({ total: r.rows.length, columns: r.fields.map(f => f.name), data: r.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -102,9 +101,8 @@ app.get("/api/v1/db-acessos", async (req, res) => {
 
 app.get("/api/v1/db-clientes", async (req, res) => {
   try {
-    const cols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='clientes' ORDER BY ordinal_position");
-    const r = await pool.query('SELECT * FROM clientes ORDER BY id DESC LIMIT 10');
-    res.json({ columns: cols.rows.map(c => c.column_name), total: r.rows.length, data: r.rows });
+    const r = await pool.query('SELECT * FROM clientes LIMIT 10');
+    res.json({ total: r.rows.length, columns: r.fields.map(f => f.name), data: r.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
