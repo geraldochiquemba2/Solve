@@ -62,6 +62,22 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return apiMutate<T>(path, 'POST', body);
 }
 
+async function accessGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${ACCESS_API}${path}`, { headers: getAccessHeaders() });
+  if (!res.ok) throw new Error(`Access API error: ${res.status}`);
+  return res.json();
+}
+
+async function accessPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${ACCESS_API}${path}`, {
+    method: 'POST',
+    headers: getAccessHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`Access API error: ${res.status}`);
+  return res.json();
+}
+
 // Shared polling interval (30 seconds)
 const POLL_INTERVAL = 30000;
 
@@ -224,11 +240,11 @@ export function useAccessLogs(params?: { client_id?: string; resultado?: string;
   });
 }
 
-// Solve Access (Terminal Control)
+// Solve Access (Terminal Control) — calls Render standalone server directly
 export function useSolveAccessDashboard() {
   return useQuery({
     queryKey: ['solve-access-dashboard'],
-    queryFn: () => apiGet<{ success: boolean; data: any }>('/api/v1/solve-access/dashboard'),
+    queryFn: () => accessGet<{ success: boolean; data: any }>('/api/v1/access/stats'),
     refetchInterval: 30000,
     retry: false,
   });
@@ -237,7 +253,7 @@ export function useSolveAccessDashboard() {
 export function useSolveAccessTerminals() {
   return useQuery({
     queryKey: ['solve-access-terminals'],
-    queryFn: () => apiGet<{ success: boolean; data: any }>('/api/v1/solve-access/terminais'),
+    queryFn: () => accessGet<{ success: boolean; data: any }>('/api/v1/terminal/status'),
     refetchInterval: 15000,
     retry: false,
   });
@@ -247,7 +263,7 @@ export function useSolveAccessClients(params?: { busca?: string; pagina?: number
   const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
   return useQuery({
     queryKey: ['solve-access-clients', params],
-    queryFn: () => apiGet<{ success: boolean; data: any }>(`/api/v1/solve-access/clientes${qs}`),
+    queryFn: () => accessGet<{ success: boolean; data: any }>(`/api/v1/access/clients${qs}`),
     retry: false,
   });
 }
@@ -256,7 +272,7 @@ export function useSolveAccessLogs(params?: { limite?: number; cliente_id?: numb
   const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
   return useQuery({
     queryKey: ['solve-access-logs', params],
-    queryFn: () => apiGet<{ success: boolean; data: any }>(`/api/v1/solve-access/acessos${qs}`),
+    queryFn: () => accessGet<{ success: boolean; data: any; pagination?: any }>(`/api/v1/access/logs${qs}`),
     refetchInterval: 10000,
     retry: false,
   });
@@ -265,7 +281,7 @@ export function useSolveAccessLogs(params?: { limite?: number; cliente_id?: numb
 export function useSolveAccessHealth() {
   return useQuery({
     queryKey: ['solve-access-health'],
-    queryFn: () => apiGet<{ success: boolean; data: any; source: string }>('/api/v1/solve-access/health'),
+    queryFn: () => accessGet<{ success: boolean; data: any; source: string }>('/healthz'),
     refetchInterval: 30000,
     retry: false,
   });
@@ -275,7 +291,7 @@ export function useUnlockTurnstile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (tipo: 'entrada' | 'saida') =>
-      apiPost<{ success: boolean; data: any }>(`/api/v1/solve-access/terminais/${tipo}/unlock`),
+      accessPost<{ success: boolean; data: any }>(`/api/v1/terminal/unlock`, { tipo }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solve-access-terminals'] });
     },
