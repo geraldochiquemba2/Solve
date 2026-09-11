@@ -735,9 +735,11 @@ import { existsSync } from "fs";
 const staticDir = join(__dirname, "public");
 if (existsSync(staticDir)) {
   app.use(express.static(staticDir));
-  app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api/") && !req.path.startsWith("/healthz")) {
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/healthz")) {
       res.sendFile(join(staticDir, "index.html"));
+    } else {
+      next();
     }
   });
 }
