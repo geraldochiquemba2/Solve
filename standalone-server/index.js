@@ -859,7 +859,7 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
       params.push(req.query.status);
     }
     if (req.query.customer_name) {
-      where.push("LOWER(c.nome) LIKE $" + (params.length + 1));
+      where.push("(LOWER(p.code) LIKE $" + (params.length + 1) + " OR p.customer_id::text LIKE $" + (params.length + 1) + ")");
       params.push("%" + req.query.customer_name.toLowerCase() + "%");
     }
     if (req.query.date_from) {
@@ -881,15 +881,16 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
-      `SELECT p.*, c.nome as customer_name FROM payments p
-       LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text
+      `SELECT p.*, COALESCE(c.nome, 'Cliente') as customer_name
+       FROM payments p
+       LEFT JOIN customers c ON c.id::text = SUBSTRING(p.customer_id::text FROM '[0-9]+')
        ${whereClause} ORDER BY p.id DESC LIMIT 200`, params
     );
     
-    const total = await pool.query("SELECT COUNT(*) as cnt FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause, params);
-    const sum = await pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause, params);
+    const total = await pool.query("SELECT COUNT(*) as cnt FROM payments p " + whereClause, params);
+    const sum = await pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p " + whereClause, params);
     const byStatus = await pool.query(
-      "SELECT p.status, COUNT(*) as cnt, COALESCE(SUM(p.amount), 0) as total FROM payments p LEFT JOIN clientes c ON c.id_cliente::text = p.customer_id::text " + whereClause + " GROUP BY p.status", params
+      "SELECT p.status, COUNT(*) as cnt, COALESCE(SUM(p.amount), 0) as total FROM payments p " + whereClause + " GROUP BY p.status", params
     );
 
     res.json({ 
