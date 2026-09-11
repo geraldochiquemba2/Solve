@@ -539,68 +539,22 @@ app.post("/api/edge/evento", async (req, res) => {
       return res.status(400).json({ autorizado: false, mensagem: "Dados inválidos" });
     }
 
-    // Look up customer by PIN (customer_id)
-    const customerResult = await pool.query(
-      "SELECT DISTINCT customer_id, customer_name FROM solve_access_logs WHERE customer_id::text = $1 LIMIT 1",
-      [String(pin)]
-    );
-
-    const customerName = customerResult.rows[0]?.customer_name || `Cliente ${pin}`;
-    const accessDate = timestamp ? new Date(timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-    const accessTime = timestamp ? new Date(timestamp).toISOString().split('T')[1] : new Date().toISOString().split('T')[1];
+    const customerName = `Cliente ${pin}`;
+    const now = timestamp ? new Date(timestamp) : new Date();
+    const accessDate = now.toISOString().split('T')[0];
+    const accessTime = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
     const remoteId = Date.now();
-
-    // Determine access type
     const accessType = tipo === "entrada" ? "entrada" : "saida";
 
-    // Check if customer has active subscription (basic check)
-    let authorized = true;
-    let reason = null;
-
-    // Check for duplicate: same type in last 5 seconds
-    const duplicateCheck = await pool.query(
-      `SELECT id FROM solve_access_logs
-       WHERE customer_id::text = $1 AND access_type = $2
-       AND access_date = $3 AND (NOW() - (access_date || ' ' || access_time)::timestamp) < interval '5 seconds'`,
-      [String(pin), accessType, accessDate]
-    );
-
-    if (duplicateCheck.rows.length > 0) {
-      authorized = false;
-      reason = `Acesso duplicado ignorado`;
-    }
-
-    // Store in database
     await pool.query(
-      `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (remote_id) DO NOTHING`,
-      [remoteId, parseInt(pin) || 0, customerName, accessDate, accessTime, accessType, authorized ? "autorizado" : "negado", reason]
+      `INSERT INTO solve_access_logs (remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, 'autorizado', NULL)`,
+      [remoteId, parseInt(pin) || 0, customerName, accessDate, accessTime, accessType]
     );
 
-    // Broadcast to SSE clients
-    const eventData = {
-      tipo: "access",
-      cliente_id: parseInt(pin) || 0,
-      cliente_nome: customerName,
-      tipo_acesso: accessType,
-      resultado: authorized ? "autorizado" : "negado",
-      mensagem: reason || "Acesso processado",
-      hora: accessTime?.slice(0, 5) || "",
-      data: accessDate,
-    };
-    for (const client of sseClients) {
-      try { client.write(`data: ${JSON.stringify(eventData)}\n\n`); }
-      catch { sseClients.delete(client); }
-    }
+    console.log(`[EDGE] ${accessType} pin=${pin}`);
 
-    console.log(`[EDGE] ${accessType} pin=${pin} ${authorized ? "AUTORIZADO" : "NEGADO"}${reason ? ' (' + reason + ')' : ''}`);
-
-    res.json({
-      autorizado: authorized,
-      mensagem: reason || (authorized ? "Acesso autorizado" : "Acesso negado"),
-      unlock: authorized,
-    });
+    res.json({ autorizado: true, mensagem: "Acesso autorizado", unlock: true });
   } catch (err) {
     console.error("[EDGE EVENTO] Error:", err.message);
     res.status(500).json({ autorizado: false, mensagem: err.message });
