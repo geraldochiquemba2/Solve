@@ -4,6 +4,8 @@ import pg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 const { Pool } = pg;
 
@@ -40,7 +42,9 @@ function requireAuth(req, res, next) {
 }
 
 const app = express();
-const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com";
 app.use(cors({
   origin: CORS_ORIGIN.split(",").map(s => s.trim()),
   credentials: true,
@@ -623,6 +627,18 @@ setInterval(async () => {
     }
   } catch {}
 }, 3000);
+
+// ─── Serve frontend (built files) ─────────────────────────────────────────
+import { existsSync } from "fs";
+const staticDir = join(__dirname, "public");
+if (existsSync(staticDir)) {
+  app.use(express.static(staticDir));
+  app.get("*", (req, res) => {
+    if (!req.path.startsWith("/api/") && !req.path.startsWith("/healthz")) {
+      res.sendFile(join(staticDir, "index.html"));
+    }
+  });
+}
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => console.log(`Server listening on port ${port}`));
