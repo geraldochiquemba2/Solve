@@ -113,7 +113,7 @@ const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/planos', label: 'Planos', icon: Package }, { href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
-  { label: 'Ecossistema', items: [{ href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
+  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Academia', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
   { label: 'Controlo de Acesso', items: [{ href: '/admin/acesso-fisico', label: 'Solve Access', icon: LockKeyhole }] },
   { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }, { href: '/admin/auditoria', label: 'Auditoria', icon: ShieldCheck }, { href: '/admin/definicoes', label: 'Definições', icon: Settings }] },
 ];
@@ -569,6 +569,103 @@ function IntegrationsPage() {
   return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `Cademi OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : isCademi ? cademiSyncMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : isCademi ? (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
+function AcademiaPage() {
+  const apiKey = 'solve-crm-api-key-2024';
+  const apiBase = import.meta.env.VITE_API_URL || '';
+  const [products, setProducts] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<any>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+
+  const fetchAll = async () => {
+    setLoading(true);
+    try {
+      const [p, u] = await Promise.all([
+        fetch(`${apiBase}/api/v1/cademi/products`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json()),
+        fetch(`${apiBase}/api/v1/cademi/users`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json()),
+      ]);
+      setProducts(p.data || []);
+      setStudents(u.data || []);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAll(); }, []);
+
+  const openStudent = async (s: any) => {
+    setSelected(s);
+    setDetail(null);
+    setLoadingDetail(true);
+    try {
+      const a: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/access`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+      const acessos = a.data?.acesso || [];
+      const withProgress = await Promise.all(acessos.map(async (ac: any) => {
+        try {
+          const pr: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/progress/${ac.produto.id}`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+          return { ...ac, progresso: pr.data || null };
+        } catch { return { ...ac, progresso: null }; }
+      }));
+      setDetail({ ...a.data, acesso: withProgress });
+    } catch (e) { console.error(e); }
+    setLoadingDetail(false);
+  };
+
+  const sync = async () => {
+    setSyncing(true);
+    setSyncMsg('');
+    try {
+      const r: any = await fetch(`${apiBase}/api/v1/cademi/sync`, { method: 'POST', headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+      setSyncMsg(`${r.matched ?? 0} alunos ligados de ${r.cademiUsers ?? 0} na Cademi`);
+    } catch (e: any) { setSyncMsg('Erro: ' + e.message); }
+    setSyncing(false);
+  };
+
+  const visible = students.filter(s => !search || (s.nome || '').toLowerCase().includes(search.toLowerCase()) || (s.email || '').toLowerCase().includes(search.toLowerCase()));
+  const fmtD = (d: string | null) => { if (!d) return '—'; try { return new Date(d).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } };
+
+  return <><PageHeader eyebrow="Ecossistema · Formação" title="Academia" subtitle="Cursos e alunos da plataforma Cademi." action={<div style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
+  {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
+  {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados da Cademi...</div> : <>
+    <Section title="Cursos" note={`${products.length} produtos`}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '.8rem' }}>
+        {products.map(p => <div className="card" key={p.id} style={{ padding: '1rem' }}>
+          <div className="eyebrow">ID {p.id}</div>
+          <h2 style={{ fontSize: '1rem', marginTop: '.3rem' }}>{p.nome}</h2>
+          {p.vitrine && <div className="section-note" style={{ marginTop: '.3rem' }}>Vitrine: {p.vitrine.nome}</div>}
+        </div>)}
+        {products.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>Nenhum curso encontrado</div>}
+      </div>
+    </Section>
+    <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', marginTop: '.8rem' }}>
+      <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+    </div>
+    <Section title="Alunos" note={`${visible.length} de ${students.length}`}>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>Aluno</th><th>Email</th><th>Telemóvel</th><th>Último acesso</th><th /></tr></thead>
+      <tbody>{visible.map(s => <tr key={s.id}><td style={{ fontWeight: 700 }}>{s.nome}</td><td>{s.email}</td><td>{s.celular || '—'}</td><td>{s.ultimo_acesso_em ? fmtD(s.ultimo_acesso_em) : 'Nunca'}</td><td><button className="btn-quiet" onClick={() => openStudent(s)} title="Ver acessos e progresso"><ChevronRight size={14} /></button></td></tr>)}</tbody></table></div>
+    </Section>
+  </>}
+  {selected && <div className="modal-overlay" onClick={() => setSelected(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+    <h3 style={{ marginBottom: '.2rem' }}>{selected.nome}</h3>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>{selected.email}</div>
+    {loadingDetail ? <div style={{ padding: '1.5rem', textAlign: 'center' }}>A carregar acessos...</div> :
+    (detail?.acesso?.length > 0 ? detail.acesso.map((ac: any, i: number) => {
+      const pct = parseFloat(String(ac.progresso?.total || '0').replace('%', '')) || 0;
+      return <div key={i} className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .6)', padding: '.8rem', marginBottom: '.6rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong style={{ fontSize: '.82rem' }}>{ac.produto?.nome}</strong><Status tone={ac.encerrado ? 'warn' : 'good'}>{ac.encerrado ? 'Encerrado' : (ac.duracao_tipo === 'vitalicio' ? 'Vitalício' : 'Ativo')}</Status></div>
+        <div style={{ fontSize: '.7rem', color: 'hsl(var(--muted-foreground))', marginTop: '.3rem' }}>Início: {fmtD(ac.comecou_em)}{ac.encerra_em ? ` · Fim: ${fmtD(ac.encerra_em)}` : ''}</div>
+        {ac.progresso && <div style={{ marginTop: '.5rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.7rem' }}><span>Progresso</span><strong>{ac.progresso.total}</strong></div><div style={{ height: 6, borderRadius: 3, background: 'hsl(var(--muted))', marginTop: '.25rem' }}><div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: 3, background: 'hsl(var(--accent))' }} /></div><div style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))', marginTop: '.25rem' }}>{ac.progresso.completas ?? 0} de {(ac.progresso.completas ?? 0) + 0} aulas completas · {ac.progresso.assistidas ?? 0} assistidas</div></div>}
+      </div>;
+    }) : <div style={{ padding: '1rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Sem acessos a cursos</div>)}
+    <div style={{ display: 'flex', marginTop: '.5rem' }}><button className="btn-secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>Fechar</button></div>
+  </div></div>}
+  </>;
+}
+
 function AutomationsPage() {
   const { data } = useListAutomations({ query: { refetchInterval: 30000 } });
   const toggleMut = useToggleAutomation();
@@ -758,7 +855,7 @@ function CRM() {
     }
   }, [leadsQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} setLeads={setLocalLeads} userName={userName} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} setLeads={setLocalLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} setLeads={setLocalLeads} userName={userName} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} setLeads={setLocalLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
 function LandingPage() {
   return (
