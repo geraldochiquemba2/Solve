@@ -14,6 +14,40 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// ─── BASE DE DADOS — MAPA DE TABELAS ────────────────────────────────────────
+// Tabelas criadas pelo AGENTE (sync directo SQLite → Neon via pg_sync.py):
+//   clientes (294)         — espelho da BD local do ZKTeco
+//   acessos (1595)         — log de acessos da catraca (mirror local)
+//   terminais (3)          — dispositivos registados
+//   admin (2)              — dados de admin local
+//   sync_state (3)         — controlo de último ID sincronizado
+//   checkins (0)           — checkins (vazio)
+//   fila_sincronizacao_ovg (0) — fila OVG (vazio)
+//
+// Tabelas criadas pelo SERVIDOR (Render API):
+//   solve_access_logs      — acessos enviados via sync_crm.py POST /api/v1/access/sync
+//   ovg_members (279)      — membros OnVirtualGym via sync_ovg.py
+//   sync_log (292)         — log de syncs do sync_crm.py
+//   customers (264)        — clientes CRM (API principal)
+//   users                  — utilizadores do CRM (auth/login)
+//   payments (25)          — pagamentos
+//   plans (3)              — planos de subscrição
+//   leads                  — leads comerciais
+//   automations            — regras de automação
+//   audit_logs             — log de auditoria
+//   settings               — definições
+//   api_keys               — chaves de API
+//   integrations (5)       — integrações activas
+//   webhooks               — webhooks registados
+//   webhook_deliveries     — entregas de webhooks
+//
+// FLUXOS DE DADOS:
+//   1. ZKTeco catraca → sync_crm.py → POST /api/v1/access/sync → solve_access_logs
+//   2. ZKTeco catraca → pg_sync.py → INSERT directo Neon → clientes, acessos, terminais
+//   3. OnVirtualGym API → sync_ovg.py → POST /api/v1/access/ovg-sync → ovg_members
+//   4. Frontend CRM → GET/POST endpoints → customers, leads, plans, etc.
+// ────────────────────────────────────────────────────────────────────────────
+
 const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
 const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
