@@ -40,7 +40,11 @@ function requireAuth(req, res, next) {
 }
 
 const app = express();
-app.use(cors());
+const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173";
+app.use(cors({
+  origin: CORS_ORIGIN.split(",").map(s => s.trim()),
+  credentials: true,
+}));
 app.use(express.json());
 
 app.get("/healthz", (_req, res) => {

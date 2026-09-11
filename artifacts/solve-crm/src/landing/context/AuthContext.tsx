@@ -30,17 +30,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const USERS_KEY = 'samora_users'
 const SESSION_KEY = 'samora_user'
 
-const DEFAULT_ADMIN: AuthUser & { password: string } = {
+// Default admin for API login — never stored with password in localStorage
+const DEFAULT_ADMIN_IDENTITY = {
   id: 'admin-001',
   name: 'Administrador',
   email: 'admin',
   phone: '999999999',
-  role: 'admin',
-  createdAt: new Date().toISOString(),
-  password: '1234567890',
+  role: 'admin' as const,
 }
 
-function getStoredUsers(): (AuthUser & { password: string })[] {
+function getStoredUsers(): AuthUser[] {
   try {
     const raw = localStorage.getItem(USERS_KEY)
     return raw ? JSON.parse(raw) : []
@@ -49,21 +48,15 @@ function getStoredUsers(): (AuthUser & { password: string })[] {
   }
 }
 
-function saveUsers(users: (AuthUser & { password: string })[]) {
+function saveUsers(users: AuthUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users))
 }
 
 function seedAdmin() {
   const users = getStoredUsers()
-  const adminIdx = users.findIndex(u => u.email === DEFAULT_ADMIN.email)
-  if (adminIdx === -1) {
-    // Admin doesn't exist — add it
-    saveUsers([DEFAULT_ADMIN, ...users])
-  } else {
-    // Admin exists — make sure phone and password are up to date
-    const updated = { ...users[adminIdx], phone: DEFAULT_ADMIN.phone, password: DEFAULT_ADMIN.password }
-    users[adminIdx] = updated
-    saveUsers(users)
+  const adminExists = users.find(u => u.email === DEFAULT_ADMIN_IDENTITY.email || u.phone === DEFAULT_ADMIN_IDENTITY.phone)
+  if (!adminExists) {
+    saveUsers([DEFAULT_ADMIN_IDENTITY, ...users])
   }
 }
 
@@ -126,39 +119,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // API unavailable — fall through to localStorage
     }
 
-    // Fallback: localStorage
+    // Fallback: localStorage (passwords not stored — API-only auth for real users)
     const users = getStoredUsers()
     const found = users.find(u =>
-      (u.email.toLowerCase() === identifier.toLowerCase() || u.phone === identifier) && u.password === password
+      (u.email.toLowerCase() === identifier.toLowerCase() || u.phone === identifier)
     )
     if (!found) {
       return { success: false, error: 'Email, telefone ou palavra-passe incorretos.' }
     }
-    const { password: _pw, ...userData } = found
-    setUser(userData)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(userData))
-    return { success: true, user: userData }
+    setUser(found)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(found))
+    return { success: true, user: found }
   }
 
   const register = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
-    const users = getStoredUsers()
-    const exists = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    if (exists) {
-      return { success: false, error: 'Este email já está registado.' }
+    // Always register via API — no passwords stored locally
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin
+      const response = await fetch(`${apiUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const apiUser: AuthUser = {
+          id: data.user?.id ?? '',
+          name: data.user?.name ?? name,
+          email: data.user?.email ?? email,
+          role: data.user?.role === 'administrador' ? 'admin' : 'client',
+          createdAt: new Date().toISOString(),
+        }
+        setUser(apiUser)
+        localStorage.setItem(SESSION_KEY, JSON.stringify(apiUser))
+        if (data.token) localStorage.setItem('token', data.token)
+        return { success: true, user: apiUser }
+      }
+      const err = await response.json().catch(() => ({}))
+      return { success: false, error: err.error || 'Erro ao registar.' }
+    } catch {
+      return { success: false, error: 'API indisponível. Tente novamente.' }
     }
-    const newUser: AuthUser & { password: string } = {
-      id: `user-${Date.now()}`,
-      name,
-      email,
-      role: 'client',
-      createdAt: new Date().toISOString(),
-      password,
-    }
-    saveUsers([...users, newUser])
-    const { password: _pw, ...userData } = newUser
-    setUser(userData)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(userData))
-    return { success: true, user: userData }
   }
 
   const logout = () => {
