@@ -157,6 +157,65 @@ app.get("/api/v1/access/ovg-status", async (req, res) => {
   }
 });
 
+// ─── OVG Re-seed: fetches directly from OnVirtualGym API ──────────────────
+const OVG_API_URL = process.env.OVG_API_URL || "https://samorafitstudio.onvirtualgym.com";
+const OVG_USERNAME = process.env.OVG_USERNAME || "";
+const OVG_PASSWORD = process.env.OVG_PASSWORD || "";
+const OVG_CLUB_CODE = process.env.OVG_CLUB_CODE || "LUA";
+
+async function ovgLogin() {
+  const resp = await fetch(`${OVG_API_URL}/APIControlAccess`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: OVG_USERNAME, password: OVG_PASSWORD }),
+  });
+  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status}`);
+  const data = await resp.json();
+  return data.token || data.data?.token || data;
+}
+
+async function ovgGetMembers(token) {
+  const resp = await fetch(`${OVG_API_URL}/ListOfCustomersDataDetailed/${OVG_CLUB_CODE}`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  if (!resp.ok) throw new Error(`OVG members fetch failed: ${resp.status}`);
+  const data = await resp.json();
+  return data.clients_data || data.data?.clients_data || [];
+}
+
+app.post("/api/v1/access/ovg-reseed", async (req, res) => {
+  if (!OVG_USERNAME || !OVG_PASSWORD) {
+    return res.status(400).json({ error: "OVG credentials not configured" });
+  }
+  try {
+    const token = await ovgLogin();
+    const members = await ovgGetMembers(token);
+    let upserted = 0;
+    for (const m of members) {
+      try {
+        await pool.query(
+          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+           ON CONFLICT (customer_number) DO UPDATE SET
+             name = EXCLUDED.name, sex = EXCLUDED.sex, nif = EXCLUDED.nif,
+             mobile_number = EXCLUDED.mobile_number, email = EXCLUDED.email,
+             status = EXCLUDED.status, club = EXCLUDED.club, last_entry = EXCLUDED.last_entry,
+             entry_date = EXCLUDED.entry_date,
+             synced_at = NOW()`,
+          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null,
+           m.mobile_number || null, m.email || null, m.status || null,
+           m.club_cod || m.club || null, m.last_entry || null, m.entry_date || null]
+        );
+        upserted++;
+      } catch (e) { console.error("ovg reseed error:", e.message); }
+    }
+    pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg-reseed')", [upserted]).catch(() => {});
+    res.json({ ok: true, upserted, total: members.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Sync status endpoint
 app.get("/api/v1/access/sync-status", async (req, res) => {
   try {

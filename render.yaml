@@ -10,5 +10,13 @@ services:
         value: production
       - key: PORT
         value: 3000
+      - key: OVG_API_URL
+        value: https://samorafitstudio.onvirtualgym.com
+      - key: OVG_USERNAME
+        value: solvecorporate@partners.onvirtualgym.com
+      - key: OVG_PASSWORD
+        value: e9k1vx_iju6n_g:_
+      - key: OVG_CLUB_CODE
+        value: LUA
     healthCheckPath: /api/v1/health
     autoDeploy: true
