@@ -881,9 +881,7 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
-      `SELECT p.*, COALESCE(c.nome, 'Cliente') as customer_name
-       FROM payments p
-       LEFT JOIN customers c ON c.id::text = SUBSTRING(p.customer_id::text FROM '[0-9]+')
+      `SELECT p.* FROM payments p
        ${whereClause} ORDER BY p.id DESC LIMIT 200`, params
     );
     
