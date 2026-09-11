@@ -547,8 +547,8 @@ app.post("/api/edge/evento", async (req, res) => {
     const accessType = tipo === "entrada" ? "entrada" : "saida";
 
     await pool.query(
-      `INSERT INTO solve_access_logs (remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-       VALUES ($1, $2, $3, $4, $5, $6, 'autorizado', NULL)`,
+      `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'autorizado', NULL)`,
       [remoteId, parseInt(pin) || 0, customerName, accessDate, accessTime, accessType]
     );
 
