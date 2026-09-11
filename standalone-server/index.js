@@ -847,6 +847,39 @@ async function getEkwanzaToken() {
   return data.access_token;
 }
 
+// ─── Payments ──────────────────────────────────────────────────────────────
+
+app.get("/api/v1/payments", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM payments ORDER BY id DESC LIMIT 100");
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+// ─── Plans ─────────────────────────────────────────────────────────────────
+
+app.get("/api/v1/plans", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM plans ORDER BY id DESC");
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+// ─── Subscriptions ─────────────────────────────────────────────────────────
+
+app.get("/api/v1/subscriptions", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 100");
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
 app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
