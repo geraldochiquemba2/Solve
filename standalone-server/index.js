@@ -546,13 +546,16 @@ app.post("/api/edge/evento", async (req, res) => {
     const remoteId = Date.now();
     const accessType = tipo === "entrada" ? "entrada" : "saida";
 
-    await pool.query(
+    // Use the same INSERT as the /api/v1/access/sync endpoint
+    const result = await pool.query(
       `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'autorizado', NULL)`,
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'autorizado', NULL)
+       ON CONFLICT (remote_id) DO NOTHING
+       RETURNING remote_id`,
       [remoteId, parseInt(pin) || 0, customerName, accessDate, accessTime, accessType]
     );
 
-    console.log(`[EDGE] ${accessType} pin=${pin}`);
+    console.log(`[EDGE] ${accessType} pin=${pin} remote_id=${remoteId} rows=${result.rowCount}`);
 
     res.json({ autorizado: true, mensagem: "Acesso autorizado", unlock: true });
   } catch (err) {
