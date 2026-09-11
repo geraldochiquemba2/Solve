@@ -234,7 +234,7 @@ export function useAccessLogs(params?: { client_id?: string; resultado?: string;
   const qs = Object.keys(filtered).length > 0 ? '?' + new URLSearchParams(filtered as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
-    queryFn: () => apiGet<any>(`/api/v1/solve-access/acessos${qs}`),
+    queryFn: () => accessGet<any>(`/api/v1/access/logs${qs}`),
     refetchInterval: 30000,
     retry: false,
   });
