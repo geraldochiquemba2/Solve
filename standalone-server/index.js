@@ -92,7 +92,7 @@ app.get("/healthz", (_req, res) => {
 // ─── Diagnostic: list all tables ────────────────────────────────────────────
 app.get("/api/v1/db-acessos", async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM acessos LIMIT 30');
+    const r = await pool.query('SELECT a.*, c.nome as cliente_nome FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente ORDER BY a.id_acesso DESC LIMIT 50');
     res.json({ total: r.rows.length, columns: r.fields.map(f => f.name), data: r.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
