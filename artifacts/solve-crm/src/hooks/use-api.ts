@@ -419,11 +419,39 @@ export interface CustomerData {
 }
 
 export function useListCustomersManual() {
-  return useQuery({
+  const apiQuery = useQuery({
     queryKey: ['customers-manual'],
     queryFn: () => apiGet<{ data: CustomerData[]; total: number }>('/api/v1/customers'),
-    refetchInterval: 30000,
+    retry: false,
   });
+  const accessQuery = useQuery({
+    queryKey: ['customers-access'],
+    queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string }>; total: number }>('/api/v1/access/clients'),
+    retry: false,
+  });
+  return useMemo(() => {
+    const apiCustomers = apiQuery.data?.data ?? [];
+    const accessCustomers = (accessQuery.data?.data ?? []).map((c: any) => ({
+      id: String(c.id_cliente),
+      code: String(c.id_cliente),
+      name: c.nome ?? '',
+      email: '',
+      phone: '',
+      company: '',
+      nif: null,
+      state: 'activo',
+      planName: null,
+      subscriptionEnd: null,
+      createdAt: '',
+      updatedAt: '',
+      ovgId: null,
+      cademiId: null,
+      leadId: null,
+    }));
+    const seen = new Set(apiCustomers.map((c: CustomerData) => c.id));
+    const merged = [...apiCustomers, ...accessCustomers.filter((c: CustomerData) => !seen.has(c.id))];
+    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading };
+  }, [apiQuery.data, accessQuery.data, apiQuery.isLoading, accessQuery.isLoading]);
 }
 
 export function useImportCustomerDates() {
