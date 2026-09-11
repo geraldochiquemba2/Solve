@@ -53,6 +53,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 const SALT_ROUNDS = 10;
 
+// Cademi (plataforma de cursos) — configurar no Render: CADEMI_API_URL + CADEMI_API_KEY
+const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
+const CADEMI_API_KEY = process.env.CADEMI_API_KEY || "";
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   let token;
@@ -159,6 +163,8 @@ pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
 )`).catch(() => {});
 // Add entry_date column if missing (migration)
 pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).catch(() => {});
+// Add cademi_id column if missing (Cademi ↔ CRM link)
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`).catch(() => {});
 
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
@@ -910,6 +916,126 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
     res.json({ data: [], total: 0 });
+  }
+});
+
+// ─── Cademi (plataforma de cursos) ───────────────────────────────────────────
+// Docs: https://ajuda.cademi.com.br/configuracoes/api
+// Auth: header Authorization: <api-key> | Limite: 2 req/seg
+
+let _cademiLastCall = 0;
+async function cademiFetch(path, options = {}) {
+  if (!CADEMI_API_KEY) {
+    return { success: false, error: "Cademi não configurado (CADEMI_API_KEY em falta)" };
+  }
+  // Throttle: máx 2 req/seg
+  const wait = 550 - (Date.now() - _cademiLastCall);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _cademiLastCall = Date.now();
+  try {
+    const resp = await fetch(`${CADEMI_API_URL}${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${CADEMI_API_KEY}`, ...(options.headers || {}) },
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.success === false) {
+      return { success: false, error: data.msg || `HTTP ${resp.status}` };
+    }
+    return data;
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+app.get("/api/v1/cademi/health", requireAuth, async (req, res) => {
+  const r = await cademiFetch("/produto");
+  if (r.success) {
+    res.json({ connected: true, message: "Conexão Cademi operacional", products: r.data?.produto?.length ?? 0 });
+  } else {
+    res.json({ connected: false, message: r.error || "Erro ao conectar Cademi" });
+  }
+});
+
+app.get("/api/v1/cademi/products", requireAuth, async (req, res) => {
+  const r = await cademiFetch("/produto");
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.produto || [], total: (r.data?.produto || []).length });
+});
+
+app.get("/api/v1/cademi/users", requireAuth, async (req, res) => {
+  // Primeira página (150 por página); ?all=1 segue o cursor até ao fim
+  const all = req.query.all === "1";
+  let users = [];
+  let next = "/usuario?usuario_email_id_doc=";
+  do {
+    const r = await cademiFetch(next.startsWith("http") ? next.replace(CADEMI_API_URL, "") : next);
+    if (!r.success) return res.status(502).json({ error: r.error });
+    users = users.concat(r.data?.usuario || []);
+    next = r.data?.paginator?.next_page_url || null;
+  } while (all && next);
+  res.json({ data: users, total: users.length });
+});
+
+app.get("/api/v1/cademi/users/:id", requireAuth, async (req, res) => {
+  const r = await cademiFetch(`/usuario/${encodeURIComponent(req.params.id)}`);
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.usuario || null });
+});
+
+app.get("/api/v1/cademi/users/:id/access", requireAuth, async (req, res) => {
+  const r = await cademiFetch(`/usuario/acesso/${encodeURIComponent(req.params.id)}`);
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data || null });
+});
+
+app.get("/api/v1/cademi/users/:id/progress/:productId", requireAuth, async (req, res) => {
+  const r = await cademiFetch(`/usuario/progresso_por_produto/${encodeURIComponent(req.params.id)}/${encodeURIComponent(req.params.productId)}`);
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.progresso || null });
+});
+
+app.get("/api/v1/cademi/tags", requireAuth, async (req, res) => {
+  const r = await cademiFetch("/tag");
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.itens || [], total: (r.data?.itens || []).length });
+});
+
+// Sync: grava cademi_id nos customers por email
+app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
+  const r = await cademiFetch("/usuario?usuario_email_id_doc=");
+  if (!r.success) return res.status(502).json({ error: r.error });
+  const users = r.data?.usuario || [];
+  let matched = 0;
+  for (const u of users) {
+    if (!u.email) continue;
+    try {
+      const upd = await pool.query(
+        "UPDATE customers SET cademi_id = $1 WHERE LOWER(email) = LOWER($2)",
+        [String(u.id), u.email]
+      );
+      if (upd.rowCount > 0) matched++;
+    } catch {}
+  }
+  res.json({ ok: true, cademiUsers: users.length, matched });
+});
+
+// Webhook recetor (configurar URL no painel Cademi: /api/v1/webhooks/cademi)
+app.post("/api/v1/webhooks/cademi", async (req, res) => {
+  try {
+    const { event_type, event } = req.body || {};
+    console.log(`[CADEMI WEBHOOK] ${event_type}`, event?.usuario?.email || "");
+    // Liga aluno ao cliente por email quando houver evento de usuário
+    const email = event?.usuario?.email;
+    const cademiId = event?.usuario?.id;
+    if (email && cademiId) {
+      await pool.query(
+        "UPDATE customers SET cademi_id = $1 WHERE LOWER(email) = LOWER($2)",
+        [String(cademiId), email]
+      ).catch(() => {});
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
