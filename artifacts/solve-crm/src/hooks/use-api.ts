@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, useEffect } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 const ACCESS_API = import.meta.env.VITE_ACCESS_API_URL || 'https://solve-sqoh.onrender.com';
 const ACCESS_API_KEY = import.meta.env.VITE_ACCESS_API_KEY || 'solve-crm-api-key-2024';
 

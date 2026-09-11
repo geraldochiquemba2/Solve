@@ -9,6 +9,7 @@ COPY artifacts/solve-crm/ ./artifacts/solve-crm/
 COPY lib/api-client-react/ ./lib/api-client-react/
 ENV PORT=5173
 ENV BASE_PATH=/
+ENV VITE_API_URL=
 RUN pnpm --filter @workspace/solve-crm run build
 
 FROM node:20
