@@ -55,6 +55,23 @@ app.get("/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// ─── Diagnostic: list all tables ────────────────────────────────────────────
+app.get("/api/v1/db-tables", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
+    );
+    const tables = [];
+    for (const row of r.rows) {
+      const count = await pool.query(`SELECT count(*) as c FROM "${row.table_name}"`);
+      tables.push({ name: row.table_name, rows: parseInt(count.rows[0].c) });
+    }
+    res.json({ tables });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Sync: PC da catraca envia acessos ──────────────────────────────────────
 
 // Create sync_log table on startup
