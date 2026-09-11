@@ -76,8 +76,11 @@ pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
   status TEXT,
   club TEXT,
   last_entry TEXT,
+  entry_date TEXT,
   synced_at TIMESTAMPTZ DEFAULT NOW()
 )`).catch(() => {});
+// Add entry_date column if missing (migration)
+pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).catch(() => {});
 
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
@@ -121,16 +124,17 @@ app.post("/api/v1/access/ovg-sync", async (req, res) => {
     for (const m of members) {
       try {
         await pool.query(
-          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
            ON CONFLICT (customer_number) DO UPDATE SET
              name = EXCLUDED.name, sex = EXCLUDED.sex, nif = EXCLUDED.nif,
              mobile_number = EXCLUDED.mobile_number, email = EXCLUDED.email,
              status = EXCLUDED.status, club = EXCLUDED.club, last_entry = EXCLUDED.last_entry,
+             entry_date = EXCLUDED.entry_date,
              synced_at = NOW()`,
           [String(m.customer_number), m.name || null, m.sex || null, m.nif || null,
            m.mobile_number || null, m.email || null, m.status || null,
-           m.club || null, m.last_entry || null]
+           m.club || null, m.last_entry || null, m.entry_date || null]
         );
         upserted++;
       } catch (e) { console.error("ovg upsert error:", e.message); }
@@ -348,10 +352,11 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
         o.mobile_number as ovg_phone,
         o.nif as ovg_nif,
         o.status as ovg_status,
-        o.last_entry as ovg_last_entry
+        o.last_entry as ovg_last_entry,
+        o.entry_date as ovg_entry_date
        FROM solve_access_logs a
        LEFT JOIN ovg_members o ON o.customer_number = CAST(a.customer_id AS TEXT)
-       GROUP BY a.customer_id, a.customer_name, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry
+       GROUP BY a.customer_id, a.customer_name, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
        ORDER BY a.customer_name ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });

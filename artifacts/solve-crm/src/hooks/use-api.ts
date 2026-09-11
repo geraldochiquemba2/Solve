@@ -416,7 +416,7 @@ export interface CustomerData {
   company: string | null; nif: string | null; state: string; planName: string | null;
   subscriptionEnd: string | null; createdAt: string; updatedAt: string;
   ovgId: string | null; cademiId: string | null; leadId: string | null;
-  gender?: string;
+  gender?: string; entryDate?: string | null;
 }
 
 export function useListCustomersManual() {
@@ -427,7 +427,7 @@ export function useListCustomersManual() {
   });
   const accessQuery = useQuery({
     queryKey: ['customers-access'],
-    queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string; ultimo_acesso: string; total_acessos: number; acessos_autorizados: number; acessos_negados: number; ovg_sex: string; ovg_email: string; ovg_phone: string; ovg_nif: string; ovg_status: string; ovg_last_entry: string }>; total: number }>('/api/v1/access/clients'),
+    queryFn: () => accessGet<{ data: Array<{ id_cliente: number; nome: string; ultimo_acesso: string; total_acessos: number; acessos_autorizados: number; acessos_negados: number; ovg_sex: string; ovg_email: string; ovg_phone: string; ovg_nif: string; ovg_status: string; ovg_last_entry: string; ovg_entry_date: string }>; total: number }>('/api/v1/access/clients'),
     refetchInterval: 30000,
     retry: false,
   });
@@ -450,6 +450,7 @@ export function useListCustomersManual() {
       cademiId: null,
       leadId: null,
       gender: c.ovg_sex || '',
+      entryDate: c.ovg_entry_date || null,
       _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
     }));
     const seen = new Set(apiCustomers.map((c: CustomerData) => c.id));

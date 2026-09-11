@@ -46,7 +46,7 @@ import type { Lead as ApiLead, Plan as ApiPlan, Payment as ApiPayment, Integrati
 const queryClient = new QueryClient();
 
 type Lead = { id: string; name: string; company: string; source: string; status: string; owner: string; value: number; last: string; email: string };
-type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
+type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; entryDate?: string | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
 
 function mapApiLead(l: ApiLead): Lead {
   return {
@@ -81,7 +81,9 @@ function mapApiCustomer(c: any): Customer {
   const isAccessClient = !!c._accessStats;
   const joinedRaw: string | null = c.joinedAt ?? c.subscriptionEnd ?? c.createdAt ?? null;
   let joined = '';
-  if (isAccessClient && c._accessStats?.ultimoAcesso) {
+  if (isAccessClient && c.entryDate) {
+    joined = formatDate(c.entryDate);
+  } else if (isAccessClient && c._accessStats?.ultimoAcesso) {
     joined = relativeDate(c._accessStats.ultimoAcesso);
   } else if (c.joinedAt) {
     joined = relativeDate(c.joinedAt);
@@ -103,6 +105,7 @@ function mapApiCustomer(c: any): Customer {
     email: c.email ?? '',
     phone: c.phone ?? '',
     gender: c.gender === 'M' ? 'Masculino' : c.gender === 'F' ? 'Feminino' : c.gender ?? '',
+    entryDate: c.entryDate ?? null,
     _accessStats: c._accessStats ?? null,
   };
 }
