@@ -913,6 +913,56 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/v1/plans", requireAuth, async (req, res) => {
+  try {
+    const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
+    if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
+    const result = await pool.query(
+      `INSERT INTO plans (name, description, price, periodicity, duration, active, ovg_plan_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [name, description || null, price || 0, periodicity || 'mensal', duration || null, active !== false, ovg_plan_id || null]
+    );
+    res.status(201).json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/v1/plans/:id", requireAuth, async (req, res) => {
+  try {
+    const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
+    const fields = [];
+    const params = [];
+    if (name !== undefined) { fields.push("name = $" + (params.length + 1)); params.push(name); }
+    if (description !== undefined) { fields.push("description = $" + (params.length + 1)); params.push(description); }
+    if (price !== undefined) { fields.push("price = $" + (params.length + 1)); params.push(price); }
+    if (periodicity !== undefined) { fields.push("periodicity = $" + (params.length + 1)); params.push(periodicity); }
+    if (duration !== undefined) { fields.push("duration = $" + (params.length + 1)); params.push(duration); }
+    if (active !== undefined) { fields.push("active = $" + (params.length + 1)); params.push(active); }
+    if (ovg_plan_id !== undefined) { fields.push("ovg_plan_id = $" + (params.length + 1)); params.push(ovg_plan_id); }
+    if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar" });
+    fields.push("updated_at = NOW()");
+    params.push(req.params.id);
+    const result = await pool.query(
+      `UPDATE plans SET ${fields.join(", ")} WHERE id = $${params.length} RETURNING *`, params
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "Plano não encontrado" });
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/plans/:id", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM plans WHERE id = $1 RETURNING id", [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Plano não encontrado" });
+    res.json({ ok: true, id: req.params.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Subscriptions ─────────────────────────────────────────────────────────
 
 app.get("/api/v1/subscriptions", requireAuth, async (req, res) => {

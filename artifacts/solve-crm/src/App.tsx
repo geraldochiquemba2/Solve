@@ -32,7 +32,6 @@ import {
   useListLeads,
   useGetDashboardStats,
   useGetDashboardCharts,
-  useListPlans,
   useListPayments,
   useListIntegrations,
   useListUsers,
@@ -282,14 +281,101 @@ function CustomerDetail({ customers }: { customers: Customer[] }) {
 function MiniList({ items }: { items: string[] }) { return <div style={{ display: 'grid', gap: '.65rem' }}>{items.map((x, i) => <div key={x} style={{ display: 'flex', alignItems: 'center', gap: '.55rem', fontSize: '.72rem', color: i === 0 ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? 'hsl(var(--chart-2))' : 'hsl(var(--border))' }} />{x}</div>)}</div>; }
 
 function PlansPage() {
-  const { data } = useListPlans();
-  const apiPlans = data?.data ?? [];
-  const [plans, setPlans] = useState(() =>
-    apiPlans.length > 0
-      ? apiPlans.map(p => ({ name: p.name ?? '', price: p.price ? money(p.price) : 'Gratuito', clients: (p as any).clientCount ?? 0, state: p.active ?? true, desc: p.description ?? 'Plano disponível' }))
-      : []
-  );
-  return <><PageHeader eyebrow="Receita · Catálogo" title="Planos" subtitle="Catálogo comercial e estado das subscrições." action={<button className="btn-primary"><Plus size={14} /> Novo plano</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.8rem' }}>{plans.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Nenhum plano configurado</div>}{plans.map((p, i) => <div className="card" key={p.name} style={{ padding: '1.1rem', borderTop: i === 0 ? '3px solid hsl(var(--accent))' : undefined }}><div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}><div><div className="eyebrow">{i === 0 ? 'Mais subscrito' : `Plano 0${i + 1}`}</div><h2 style={{ fontSize: '1.05rem', marginTop: '.35rem' }}>{p.name}</h2></div><Status tone={p.state ? 'good' : 'warn'}>{p.state ? 'Activo' : 'Inactivo'}</Status></div><p className="section-note" style={{ minHeight: 33 }}>{p.desc}</p><div className="mono" style={{ fontSize: '1.2rem', margin: '1rem 0' }}>{p.price}<span style={{ fontFamily: 'var(--app-font-sans)', color: 'hsl(var(--muted-foreground))', fontSize: '.67rem' }}> / mês</span></div><div className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .6)', padding: '.6rem', display: 'flex', justifyContent: 'space-between', fontSize: '.72rem' }}><span>Subscrições</span><strong>{p.clients}</strong></div></div>)}</div></>;
+  const apiKey = 'solve-crm-api-key-2024';
+  const apiBase = import.meta.env.VITE_API_URL || '';
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', description: '', price: '', periodicity: 'mensal', active: true });
+
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/v1/plans`, {
+        headers: { 'X-API-Key': apiKey },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPlans(json.data || []);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchPlans(); }, []);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: '', description: '', price: '', periodicity: 'mensal', active: true });
+    setShowModal(true);
+  };
+
+  const openEdit = (p: any) => {
+    setEditing(p);
+    setForm({ name: p.name || '', description: p.description || '', price: String(p.price ?? ''), periodicity: p.periodicity || 'mensal', active: p.active !== false });
+    setShowModal(true);
+  };
+
+  const save = async () => {
+    if (!form.name.trim()) { alert('Nome é obrigatório'); return; }
+    const body = {
+      name: form.name.trim(),
+      description: form.description || null,
+      price: parseFloat(form.price) || 0,
+      periodicity: form.periodicity,
+      active: form.active,
+    };
+    try {
+      const url = editing ? `${apiBase}/api/v1/plans/${editing.id}` : `${apiBase}/api/v1/plans`;
+      const res = await fetch(url, {
+        method: editing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setShowModal(false);
+        fetchPlans();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Erro: ' + (err.error || res.statusText));
+      }
+    } catch (e: any) { alert('Erro: ' + e.message); }
+  };
+
+  const del = async (p: any) => {
+    if (!confirm(`Apagar plano "${p.name}"?`)) return;
+    try {
+      const res = await fetch(`${apiBase}/api/v1/plans/${p.id}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': apiKey },
+      });
+      if (res.ok) fetchPlans();
+      else alert('Erro ao apagar');
+    } catch (e: any) { alert('Erro: ' + e.message); }
+  };
+
+  return <><PageHeader eyebrow="Receita · Catálogo" title="Planos" subtitle="Catálogo comercial e estado das subscrições." action={<button className="btn-primary" onClick={openNew}><Plus size={14} /> Novo plano</button>} />
+  {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar...</div> :
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.8rem' }}>{plans.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Nenhum plano configurado</div>}{plans.map((p, i) => <div className="card" key={p.id} style={{ padding: '1.1rem', borderTop: i === 0 ? '3px solid hsl(var(--accent))' : undefined }}><div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}><div><div className="eyebrow">{i === 0 ? 'Mais subscrito' : `Plano 0${i + 1}`}</div><h2 style={{ fontSize: '1.05rem', marginTop: '.35rem' }}>{p.name}</h2></div><Status tone={p.active ? 'good' : 'warn'}>{p.active ? 'Activo' : 'Inactivo'}</Status></div><p className="section-note" style={{ minHeight: 33 }}>{p.description || 'Plano disponível'}</p><div className="mono" style={{ fontSize: '1.2rem', margin: '1rem 0' }}>{p.price ? money(p.price) : 'Gratuito'}<span style={{ fontFamily: 'var(--app-font-sans)', color: 'hsl(var(--muted-foreground))', fontSize: '.67rem' }}> / {p.periodicity || 'mês'}</span></div><div style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => openEdit(p)} style={{ flex: 1 }}>Editar</button><button className="btn-secondary" onClick={() => del(p)} style={{ color: 'hsl(0 70% 50%)' }}><Trash2 size={14} /></button></div></div>)}</div>}
+  {showModal && <div className="modal-overlay" onClick={() => setShowModal(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+    <h3 style={{ marginBottom: '1rem' }}>{editing ? 'Editar plano' : 'Novo plano'}</h3>
+    <label className="label">Nome *</label>
+    <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: SamoraFit Mensal" />
+    <label className="label" style={{ marginTop: '.6rem' }}>Descrição</label>
+    <textarea className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição do plano" rows={2} />
+    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+      <div style={{ flex: 1 }}><label className="label">Preço (Kz)</label>
+      <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
+      <div style={{ flex: 1 }}><label className="label">Periodicidade</label>
+      <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
+    </div>
+    <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginTop: '.8rem', fontSize: '.8rem' }}><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> Plano activo</label>
+    <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
+      <button className="btn-secondary" onClick={() => setShowModal(false)} style={{ flex: 1 }}>Cancelar</button>
+      <button className="btn-primary" onClick={save} style={{ flex: 1 }}><Check size={14} /> Guardar</button>
+    </div>
+  </div></div>}
+  </>;
 }
 
 function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () => void }) {
@@ -358,13 +444,13 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
 function PaymentsPage() {
   const [paymentsData, setPaymentsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const apiKey = 'solve-crm-api-key-2024';
   
   const fetchPayments = async () => {
     try {
-      const token = localStorage.getItem('token');
       const apiBase = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${apiBase}/api/v1/payments`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'X-API-Key': apiKey },
         credentials: 'include',
       });
       if (res.ok) {
