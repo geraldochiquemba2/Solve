@@ -175,8 +175,9 @@ async function ovgLogin() {
   console.log("OVG login status:", resp.status, "body:", body.substring(0, 200));
   if (!resp.ok) throw new Error(`OVG login failed: ${resp.status} ${body}`);
   const data = JSON.parse(body);
+  console.log("OVG login keys:", Object.keys(data));
   const token = data.token || data.Token || data.access_token;
-  if (!token) throw new Error("OVG: no token in response");
+  if (!token) throw new Error(`OVG: no token in response. Keys: ${Object.keys(data).join(',')} Body: ${body.substring(0, 300)}`);
   return token;
 }
 
