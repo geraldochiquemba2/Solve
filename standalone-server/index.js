@@ -545,9 +545,9 @@ app.post("/api/edge/evento", async (req, res) => {
 
     await pool.query(
       `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'autorizado', NULL)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (remote_id) DO NOTHING`,
-      [remoteId, parseInt(pin) || 0, `Cliente ${pin}`, now.toISOString().split('T')[0], now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0'), accessType]
+      [remoteId, parseInt(pin) || 0, `Cliente ${pin}`, now.toISOString().split('T')[0], now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0'), accessType, 'autorizado', null]
     );
 
     console.log(`[EDGE] ${accessType} pin=${pin}`);
