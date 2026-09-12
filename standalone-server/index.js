@@ -1208,10 +1208,10 @@ app.get("/api/v1/audit-logs", requireAuth, async (req, res) => {
   try {
     const events = [];
     try {
-      const r = await pool.query("SELECT id, synced_at, records_synced, source FROM sync_log ORDER BY id DESC LIMIT 50");
+      const r = await pool.query("SELECT DISTINCT ON (source) id, synced_at, records_synced, source FROM sync_log ORDER BY source, id DESC");
       r.rows.forEach(s => events.push({
         id: `sync-${s.id}`, actor: "Sistema",
-        action: `Sincronização ${s.source || ''}: ${s.records_synced ?? 0} registos`,
+        action: `Última sincronização ${s.source || ''}: ${s.records_synced ?? 0} registos`,
         entity: s.source || 'sync', entityId: null, createdAt: s.synced_at,
       }));
     } catch {}
