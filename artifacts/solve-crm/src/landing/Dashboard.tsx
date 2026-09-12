@@ -91,7 +91,7 @@ export default function Dashboard() {
               onClick={() => {
                 const newTheme = isDark ? 'light' : 'dark'
                 document.documentElement.classList.toggle('dark', newTheme === 'dark')
-                localStorage.setItem('theme', newTheme)
+                localStorage.setItem('bs-theme', newTheme)
                 window.location.reload()
               }}
               className="flex items-center justify-center w-10 h-10 rounded-[7px] transition-colors border"
@@ -297,7 +297,11 @@ export default function Dashboard() {
                                   <span>Adquirido em</span>
                                   <span>{new Date(o.createdAt).toLocaleDateString('pt-PT')}</span>
                                 </div>
-                                <button className="w-full py-3 rounded-[7px] font-bold text-sm bg-black dark:bg-white text-white dark:text-black flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+                                <button onClick={() => {
+                                  const p = programs.find((pp: any) => pp.id === o.programId);
+                                  if (p?.platform === 'cademi') window.open('https://brunosamora.cademi.com.br', '_blank');
+                                  else setActiveTab('programs');
+                                }} className="w-full py-3 rounded-[7px] font-bold text-sm bg-black dark:bg-white text-white dark:text-black flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
                                   Aceder ao Conteúdo <ArrowUpRight size={16} />
                                 </button>
                               </div>
@@ -479,8 +483,11 @@ function MarketingCarousel({ isDark, accentColor, cardBg, borderColor }: { isDar
 
 // ─── MODERN ORDER ROW ───────────────────────────────────────────────────
 function ModernOrderRow({ order, textPrimary, textMuted, statusColor, isDark }: any) {
+  const [open, setOpen] = useState(false);
+  const details = [['ID', order.id], ['Email', order.userEmail], ['Telefone', order.phone], ['NIF', order.nif], ['Morada', order.address], ['Atualizado', order.updatedAt ? new Date(order.updatedAt).toLocaleDateString('pt-PT') : null]].filter(([, v]) => v);
   return (
-    <div className="px-5 py-4 flex items-center gap-4 rounded-[7px] transition-colors hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer">
+    <div>
+    <div onClick={() => setOpen(!open)} className="px-5 py-4 flex items-center gap-4 rounded-[7px] transition-colors hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer">
       <div className="w-12 h-12 rounded-[7px] flex items-center justify-center shrink-0 border" style={{ backgroundColor: isDark ? '#1a1a1a' : '#f4f4f5', borderColor: isDark ? '#333' : '#e5e5e5' }}>
         <ShoppingBag size={20} style={{ color: textPrimary }} />
       </div>
@@ -501,6 +508,14 @@ function ModernOrderRow({ order, textPrimary, textMuted, statusColor, isDark }: 
           </span>
         </div>
       </div>
+    </div>
+    {open && (
+      <div className="mx-2 mb-2 px-5 py-3 rounded-[7px] grid grid-cols-2 gap-x-4 gap-y-1.5" style={{ backgroundColor: isDark ? '#141414' : '#f4f4f5' }}>
+        {details.map(([l, v]) => (
+          <div key={l as string} className="text-[11px]"><span className="font-bold uppercase tracking-wider" style={{ color: textMuted }}>{l as string}: </span><span style={{ color: textPrimary }}>{v as string}</span></div>
+        ))}
+      </div>
+    )}
     </div>
   )
 }

@@ -16,11 +16,12 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-export default function ContactForm() {
+export default function ContactForm({ initialMessage }: { initialMessage?: string }) {
   const [submitted, setSubmitted] = useState(false)
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
+    defaultValues: { mensagem: initialMessage || '' },
   })
 
   const onSubmit = async (data: FormData) => {

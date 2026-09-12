@@ -145,7 +145,7 @@ export default function Agenda() {
                     <button
                       className="btn btn-primary gap-2 whitespace-nowrap"
                       id={`agenda-reservar-${event.id}`}
-                      onClick={() => window.dispatchEvent(new Event('openFormModal'))}
+                      onClick={() => window.dispatchEvent(new CustomEvent('openFormModal', { detail: { message: `Reserva de lugar: ${event.title} (${event.date.day}/${event.date.month}/${event.date.year})` } }))}
                     >
                       Reservar Lugar
                       <ArrowRight size={16} />

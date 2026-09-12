@@ -20,6 +20,7 @@ function LandingInner({ children }: { children: ReactNode }) {
   const { isDark } = useTheme()
   const [location] = useLocation()
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalContext, setModalContext] = useState('')
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false)
   const [isTermsOpen, setIsTermsOpen] = useState(false)
   const [isCookiesOpen, setIsCookiesOpen] = useState(false)
@@ -27,7 +28,10 @@ function LandingInner({ children }: { children: ReactNode }) {
   const isBackoffice = location.startsWith('/admin')
 
   useEffect(() => {
-    const handleOpenModal = () => setIsModalOpen(true)
+    const handleOpenModal = (e: Event) => {
+      setModalContext((e as CustomEvent).detail?.message || '');
+      setIsModalOpen(true);
+    }
     const handleOpenPrivacy = () => setIsPrivacyOpen(true)
     const handleOpenTerms = () => setIsTermsOpen(true)
     const handleOpenCookies = () => setIsCookiesOpen(true)
@@ -58,7 +62,7 @@ function LandingInner({ children }: { children: ReactNode }) {
     >
       <ScrollToTop />
       {!isBackoffice && <CookieBanner />}
-      {!isBackoffice && <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
+      {!isBackoffice && <FormModal isOpen={isModalOpen} context={modalContext} onClose={() => setIsModalOpen(false)} />}
       {!isBackoffice && (
         <>
           <LegalModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} title="Política de Privacidade">

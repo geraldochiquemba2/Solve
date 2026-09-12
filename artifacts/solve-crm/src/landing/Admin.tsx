@@ -69,7 +69,7 @@ export default function Admin() {
               onClick={() => {
                 const newTheme = isDark ? 'light' : 'dark'
                 document.documentElement.classList.toggle('dark', newTheme === 'dark')
-                localStorage.setItem('theme', newTheme)
+                localStorage.setItem('bs-theme', newTheme)
                 window.location.reload()
               }}
               className="flex items-center justify-center w-10 h-10 rounded-[7px] transition-colors border"
@@ -384,10 +384,11 @@ function ProgramsManager({ cardBg, textPrimary, textMuted, borderColor, isDark, 
   const [form, setForm] = useState(empty)
 
   const openNew = () => { setForm(empty); setEditing(null); setShowForm(true) }
-  const openEdit = (p: Program) => { setForm({ name: p.name, category: p.category, shortDesc: p.shortDesc, longDesc: p.longDesc, image: p.image, duration: p.duration, level: p.level, status: p.status, tags: p.tags, mode: p.mode || 'online', platform: p.platform || 'cademi' }); setEditing(p); setShowForm(true) }
+  const openEdit = (p: Program) => { setForm({ name: p.name, category: p.category, shortDesc: p.shortDesc, longDesc: p.longDesc, image: p.image, duration: p.duration, level: p.level, status: p.status, tags: (Array.isArray(p.tags) ? p.tags.join(', ') : (p.tags as any)), mode: p.mode || 'online', platform: p.platform || 'cademi' }); setEditing(p); setShowForm(true) }
 
   const handleSave = () => {
-    if (editing) { updateProgram(editing.id, form) } else { addProgram(form) }
+    const clean = { ...form, tags: Array.isArray((form as any).tags) ? (form as any).tags : String((form as any).tags || '').split(',').map((s: string) => s.trim()).filter(Boolean) };
+    if (editing) { updateProgram(editing.id, clean) } else { addProgram(clean) }
     setShowForm(false)
   }
 
@@ -720,7 +721,7 @@ function OrdersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, ac
         <h2 className="font-heading font-bold text-2xl" style={{ color: textPrimary }}>Faturação & CRM</h2>
         <div className="flex items-center gap-4">
           <div className="flex gap-2 bg-black/5 dark:bg-white/5 p-1 rounded-[7px]">
-            {['Todos', 'Pendente', 'Confirmado', 'Cancelado'].map(s => (
+            {['Todos', 'Pendente', 'Confirmado', 'Cancelado', 'Entregue', 'Contacto'].map(s => (
               <button key={s} onClick={() => setFilter(s)} className="px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-[7px] transition-all"
                 style={{ backgroundColor: filter === s ? textPrimary : 'transparent', color: filter === s ? cardBg : textMuted }}>
                 {s}

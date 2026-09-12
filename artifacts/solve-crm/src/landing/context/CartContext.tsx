@@ -85,10 +85,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCart(prev => prev.map(item => {
       if (item.product.id === productId && item.selectedSize === size && item.selectedColor === color) {
         const newQ = item.quantity + delta
-        return newQ > 0 ? { ...item, quantity: newQ } : item
+        return newQ > 0 ? { ...item, quantity: newQ } : null
       }
       return item
-    }))
+    }).filter(Boolean) as typeof prev)
   }
 
   const removeFromCart = (productId: string, size?: string, color?: string) => {

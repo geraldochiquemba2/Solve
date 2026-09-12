@@ -1536,7 +1536,7 @@ app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
     if (req.body.email !== undefined) { fields.push("email = $" + (params.length + 1)); params.push(req.body.email); }
     if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email)" });
     params.push(req.params.id);
-    const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE id_cliente = $${params.length} RETURNING id_cliente, nome, telefone, email`, params);
+    const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE (id_cliente::text = $${params.length} OR numero_cartao = $${params.length}) RETURNING id_cliente, nome, telefone, email`, params);
     if (r.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
     res.json({ data: r.rows[0] });
   } catch (err) {

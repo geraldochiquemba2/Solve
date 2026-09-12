@@ -6,9 +6,10 @@ import ContactForm from './ContactForm'
 interface FormModalProps {
   isOpen: boolean
   onClose: () => void
+  context?: string
 }
 
-export default function FormModal({ isOpen, onClose }: FormModalProps) {
+export default function FormModal({ isOpen, onClose, context }: FormModalProps) {
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -57,7 +58,7 @@ export default function FormModal({ isOpen, onClose }: FormModalProps) {
                 <X size={20} />
               </button>
 
-              <ContactForm />
+              <ContactForm key={context || 'default'} initialMessage={context} />
             </motion.div>
           </div>
         </>
