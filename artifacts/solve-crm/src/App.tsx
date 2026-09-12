@@ -737,6 +737,7 @@ function SettingsPage() {
   const [timezone, setTimezone] = useState(settings.timezone || 'Africa/Luanda (WAT)');
   const [alerts, setAlerts] = useState(settings.alerts ?? true);
   const [compact, setCompact] = useState(settings.compact ?? false);
+  const [confirmCritical, setConfirmCritical] = useState(settings.confirmCritical ?? true);
   const [saved, setSaved] = useState(false);
   const handleSave = () => {
     updateMut.mutate({ orgName, orgEmail, timezone, alerts, compact, confirmCritical }, { onSuccess: () => setSaved(true) });
