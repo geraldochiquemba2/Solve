@@ -221,6 +221,19 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   const blockedCount = customers.filter(c => c.state === 'Bloqueado').length;
   const deniedToday = (access as any)?.accesses?.deniedToday ?? 0;
   const onlineNow = (access as any)?.clients?.online ?? 0;
+  const todayCount = (access as any)?.accesses?.today ?? 0;
+  const authorizedToday = (access as any)?.accesses?.authorizedToday ?? 0;
+  const [copiedReport, setCopiedReport] = useState(false);
+  const reportLines = [
+    `Acessos hoje: ${todayCount} (${authorizedToday} autorizados, ${deniedToday} negados)`,
+    `No ginásio agora: ${onlineNow}`,
+    `Clientes activos: ${overview?.activeCustomers ?? 0} de ${overview?.totalCustomers ?? 0}`,
+    `Receita 30 dias: ${overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'}`,
+    `Cobranças pendentes: ${overview?.pendingPayments ?? 0}`,
+    `Aulas esgotadas: ${exhaustedLessons} · Bloqueados: ${blockedCount}`,
+  ];
+  const reportText = `RELATÓRIO SOLVE — ${today}\n` + reportLines.map(l => `• ${l}`).join('\n');
+  const copyReport = () => { navigator.clipboard?.writeText(reportText); setCopiedReport(true); setTimeout(() => setCopiedReport(false), 2000); };
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQ, setCmdQ] = useState('');
   const [chartRange, setChartRange] = useState<'mes' | 'tudo'>('mes');
@@ -235,6 +248,9 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
     { label: 'Auditoria', href: '/admin/auditoria' }, { label: 'Definições', href: '/admin/definicoes' },
   ].filter(c => c.label.toLowerCase().includes(cmdQ.toLowerCase()));
   return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="A operação está estável. Eis o que merece a sua atenção." action={<button className="btn-primary" data-testid="button-dashboard-action" onClick={() => { setCmdQ(''); setCmdOpen(true); }}><Command size={14} /> Abrir comando <span className="mono" style={{ fontSize: '.65rem', opacity: .65 }}>⌘ K</span></button>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita recorrente" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="últimos 30 dias" onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="Cobranças pendentes" value={overview?.pendingPayments ? (overview.pendingPayments + ' transações') : '0 transações'} note={pendingNote} negative onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /><Metric label="Clientes activos" value={overview?.activeCustomers?.toString() ?? '0'} note={activeNote} onClick={() => setLocation('/admin/clientes')} /></div><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Aulas esgotadas" value={exhaustedLessons.toString()} note="saldo 0 (renovar)" negative={exhaustedLessons > 0} onClick={() => setLocation('/admin/clientes?filtro=Esgotadas')} /><Metric label="Bloqueados" value={blockedCount.toString()} note="contas bloqueadas" negative={blockedCount > 0} onClick={() => setLocation('/admin/clientes?filtro=Bloqueado')} /><Metric label="Negados hoje" value={deniedToday.toString()} note="na catraca" negative={deniedToday > 0} onClick={() => setLocation('/admin/acesso-fisico?resultado=negado&data=hoje')} /><Metric label="No ginásio" value={onlineNow.toString()} note="agora" onClick={() => setLocation('/admin/acesso-fisico')} /></div>
+  <Section title="Relatório do dia" note="Bloco de notas da operação" action={<button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado!' : 'Copiar'}</button>}>
+    <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
+  </Section>
   {cmdOpen && <div className="modal-backdrop" onClick={() => setCmdOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <input className="input" autoFocus placeholder="Ir para..." value={cmdQ} onChange={e => setCmdQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && commands.length > 0) { setCmdOpen(false); setLocation(commands[0].href); } }} style={{ width: '100%' }} />
     <div style={{ display: 'grid', gap: '.25rem', marginTop: '.7rem', maxHeight: 300, overflowY: 'auto' }}>
