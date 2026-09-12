@@ -69,8 +69,11 @@ async function getSetting(key) {
   return _settingsCache.map[key];
 }
 async function cfg(key, envVal = "") {
+  // Prioridade: env do servidor (Render) > tabela settings (fallback local/UI)
+  const e = (envVal ?? "").toString().trim();
+  if (e) return e;
   const v = await getSetting(key);
-  return (v ?? envVal ?? "").toString().trim();
+  return (v ?? "").toString().trim();
 }
 
 // REGRA CRM (isMember): funcionário = nome único (sem espaço) OU >3 entradas
