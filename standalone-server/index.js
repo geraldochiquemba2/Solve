@@ -1039,6 +1039,123 @@ app.post("/api/v1/webhooks/cademi", async (req, res) => {
   }
 });
 
+// ─── Dashboard (dados reais do Neon) ────────────────────────────────────────
+
+// Cache do estado Cademi (a API tem limite de 2 req/seg)
+let _cademiCache = { at: 0, data: null };
+async function getCademiStatus() {
+  if (Date.now() - _cademiCache.at < 60000 && _cademiCache.data) return _cademiCache.data;
+  const r = await cademiFetch("/produto");
+  _cademiCache = {
+    at: Date.now(),
+    data: r.success
+      ? { connected: true, products: r.data?.produto?.length ?? 0 }
+      : { connected: false, error: r.error || "Não configurado" },
+  };
+  return _cademiCache.data;
+}
+
+async function qNum(sql, params = [], fallback = 0) {
+  try {
+    const r = await pool.query(sql, params);
+    return parseFloat(r.rows[0]?.cnt ?? r.rows[0]?.total ?? fallback);
+  } catch { return fallback; }
+}
+
+async function getIntegrationsLive() {
+  const [ovgCount, ovgSync, payCount, paySync, leadCount, cademi] = await Promise.all([
+    qNum("SELECT COUNT(*) as cnt FROM ovg_members"),
+    (async () => { try { const r = await pool.query("SELECT MAX(synced_at) as m FROM ovg_members"); return r.rows[0]?.m || null; } catch { return null; } })(),
+    qNum("SELECT COUNT(*) as cnt FROM payments"),
+    (async () => { try { const r = await pool.query("SELECT MAX(created_at) as m FROM payments"); return r.rows[0]?.m || null; } catch { return null; } })(),
+    qNum("SELECT COUNT(*) as cnt FROM leads"),
+    getCademiStatus(),
+  ]);
+  const now = new Date().toISOString();
+  return [
+    { id: "ovg", name: "OVG", status: ovgCount > 0 ? "operacional" : "atencao", lastSyncAt: ovgSync, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "pay4all", name: "Pay4All", status: payCount > 0 ? "operacional" : "atencao", lastSyncAt: paySync, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "cademi", name: "Cademi", status: !CADEMI_API_KEY ? "inativo" : (cademi.connected ? "operacional" : "atencao"), lastSyncAt: cademi.connected ? now : null, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "whatsapp", name: "WhatsApp", status: "inativo", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "website", name: "Website", status: leadCount > 0 ? "operacional" : "atencao", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
+  ];
+}
+
+app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
+  try {
+    const [totalCustomers, activeCustomers, totalLeads, revenue30d, pendingPayments, latePayments, integrations] = await Promise.all([
+      qNum("SELECT COUNT(*) as cnt FROM clientes"),
+      qNum("SELECT COUNT(*) as cnt FROM clientes WHERE LOWER(status) = 'ativo'"),
+      qNum("SELECT COUNT(*) as cnt FROM leads"),
+      qNum("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '30 days'"),
+      qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'pendente'"),
+      qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'em_atraso'"),
+      getIntegrationsLive(),
+    ]);
+    let leadsByStatus = [];
+    try {
+      const r = await pool.query("SELECT status, COUNT(*) as count FROM leads GROUP BY status");
+      leadsByStatus = r.rows;
+    } catch {}
+    res.json({
+      data: {
+        overview: { totalCustomers, activeCustomers, totalLeads, revenueLast30Days: revenue30d, pendingPayments, latePayments },
+        leadsByStatus,
+        integrations: integrations.map(i => ({ name: i.name, status: i.status, lastSyncAt: i.lastSyncAt })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/dashboard/charts", requireAuth, async (req, res) => {
+  try {
+    let revenueByMonth = [];
+    try {
+      const r = await pool.query(
+        `SELECT to_char(date_trunc('week', created_at), 'DD/MM') as month, COALESCE(SUM(amount),0) as value
+         FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '56 days'
+         GROUP BY 1 ORDER BY MIN(created_at)`
+      );
+      revenueByMonth = r.rows.map(x => ({ month: x.month, value: parseFloat(x.value) }));
+    } catch {}
+    let leadsBySource = [];
+    try {
+      const r = await pool.query("SELECT source, COUNT(*) as count FROM leads GROUP BY source");
+      leadsBySource = r.rows;
+    } catch {}
+    let paymentMethods = [];
+    try {
+      const r = await pool.query("SELECT method, COUNT(*) as count FROM payments GROUP BY method");
+      paymentMethods = r.rows;
+    } catch {}
+    const [confirmed, total] = await Promise.all([
+      qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'confirmado'"),
+      qNum("SELECT COUNT(*) as cnt FROM payments"),
+    ]);
+    res.json({
+      data: {
+        revenueByMonth,
+        leadsBySource,
+        conversionRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
+        paymentMethods,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/integrations", requireAuth, async (req, res) => {
+  try {
+    const list = await getIntegrationsLive();
+    res.json({ data: list, total: list.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/v1/plans", requireAuth, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
