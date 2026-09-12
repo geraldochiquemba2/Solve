@@ -415,17 +415,35 @@ app.get("/api/v1/access/sync-status", async (req, res) => {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
+// Quem está dentro AGORA: última movimentação de hoje é entrada
+// (não usa a flag online, que dessincroniza quando passam sem picar)
+async function countInsideNow() {
+  try {
+    const r = await pool.query(
+      `SELECT COUNT(*) as cnt FROM (
+         SELECT DISTINCT ON (a.cliente_id) a.cliente_id, a.tipo_acesso
+         FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente
+         WHERE a.data_acesso::date = CURRENT_DATE
+           AND ${isMember("c")} AND ${notDeleted("c")}
+         ORDER BY a.cliente_id, a.id_acesso DESC
+       ) t WHERE t.tipo_acesso = 'entrada'`
+    );
+    return parseInt(r.rows[0].cnt);
+  } catch { return 0; }
+}
+
 app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
   try {
     const M = isMember("c");
     const ND = notDeleted("c");
-    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND}`);
-    const todayResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE`);
-    const authorizedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) = 'autorizado'`);
-    const deniedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) != 'autorizado'`);
-    const uniqueClients = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND}`);
-    const clientsToday = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE`);
-    const onlineNow = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")} AND ${notDeleted("clientes")}`);
+    const E = "a.tipo_acesso = 'entrada'";
+    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E}`);
+    const todayResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE`);
+    const authorizedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) = 'autorizado'`);
+    const deniedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) != 'autorizado'`);
+    const uniqueClients = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E}`);
+    const insideNow = await countInsideNow();
+    const onlineNow = insideNow;
     const recentAccesses = await pool.query(
       `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text, a.hora_acesso,
               a.tipo_acesso, a.resultado, a.motivo
@@ -436,7 +454,7 @@ app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
 
     res.json({
       data: {
-        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: parseInt(clientsToday.rows[0].cnt), online: parseInt(onlineNow.rows[0].cnt), blocked: 0 },
+        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: insideNow, online: onlineNow, blocked: 0 },
         accesses: {
           today: parseInt(todayResult.rows[0].cnt),
           month: parseInt(totalResult.rows[0].cnt),
@@ -526,7 +544,7 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
     const lastSync = recentResult.rows[0]?.last_sync;
     const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 30 * 60 * 1000;
 
-    const onlineClients = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")} AND ${notDeleted("clientes")}`);
+    const onlineClients = await countInsideNow();
 
     res.json({
       data: {
@@ -537,7 +555,7 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
         modelo: "ZKTeco",
         tipo: "Entrada",
         lastSync: lastSync,
-        onlineClients: parseInt(onlineClients.rows[0].cnt),
+        onlineClients: onlineClients,
       },
     });
   } catch (err) {
