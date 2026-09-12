@@ -1202,6 +1202,44 @@ app.get("/api/v1/integrations", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Audit log (feed de actividade real) ────────────────────────────────────
+
+app.get("/api/v1/audit-logs", requireAuth, async (req, res) => {
+  try {
+    const events = [];
+    try {
+      const r = await pool.query("SELECT id, synced_at, records_synced, source FROM sync_log ORDER BY id DESC LIMIT 50");
+      r.rows.forEach(s => events.push({
+        id: `sync-${s.id}`, actor: "Sistema",
+        action: `Sincronização ${s.source || ''}: ${s.records_synced ?? 0} registos`,
+        entity: s.source || 'sync', entityId: null, createdAt: s.synced_at,
+      }));
+    } catch {}
+    try {
+      const r = await pool.query("SELECT id, code, amount, status, created_at FROM payments ORDER BY created_at DESC LIMIT 50");
+      r.rows.forEach(p => events.push({
+        id: `pay-${p.id}`, actor: "Pay4All",
+        action: `Pagamento ${p.status}: ${p.amount} Kz`,
+        entity: "payment", entityId: p.code, createdAt: p.created_at,
+      }));
+    } catch {}
+    try {
+      const r = await pool.query("SELECT id_cliente, nome, data_atualizacao FROM clientes WHERE bloqueado = true ORDER BY data_atualizacao DESC LIMIT 20");
+      r.rows.forEach(c => events.push({
+        id: `blk-${c.id_cliente}`, actor: "Sistema",
+        action: `Conta bloqueada: ${c.nome}`,
+        entity: "customer", entityId: String(c.id_cliente), createdAt: c.data_atualizacao,
+      }));
+    } catch {}
+    events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const entity = req.query.entity;
+    const filtered = entity ? events.filter(e => e.entity === entity) : events;
+    res.json({ data: filtered.slice(0, 100), total: filtered.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/v1/plans", requireAuth, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
