@@ -928,10 +928,18 @@ app.post("/webhooks/ekwanza", async (req, res) => {
     const mappedStatus = statusMap[operationStatus] || "pendente";
 
     if (merchantTransactionId && mappedStatus !== "pendente") {
-      const upd = await pool.query(
-        `UPDATE payments SET status = $1, ekwanza_operation_code = $2, paid_at = ${mappedStatus === "confirmado" ? "NOW()" : "paid_at"}, reconciled_at = ${mappedStatus === "confirmado" ? "NOW()" : "reconciled_at"}, updated_at = NOW() WHERE code = $3`,
-        [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
-      );
+      let upd;
+      if (mappedStatus === "confirmado") {
+        upd = await pool.query(
+          `UPDATE payments SET status = 'confirmado', ekwanza_operation_code = $1, paid_at = NOW(), reconciled_at = NOW(), updated_at = NOW() WHERE code = $2`,
+          [ekwanzaTransactionId || null, merchantTransactionId]
+        );
+      } else {
+        upd = await pool.query(
+          `UPDATE payments SET status = $1, ekwanza_operation_code = $2, updated_at = NOW() WHERE code = $3`,
+          [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
+        );
+      }
       if (upd.rowCount === 0) {
         const amount = Number(operationData?.amount ?? body.amount ?? 0) || 0;
         await pool.query(
