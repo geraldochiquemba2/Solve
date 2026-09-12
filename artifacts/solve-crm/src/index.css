@@ -547,6 +547,7 @@ button, a, input, select { transition: background-color .18s ease, border-color 
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .status-live { color:hsl(155 41% 35%); background:hsl(155 41% 43% / .12); }
 .status-live::before { animation: livePulse 1.5s ease-in-out infinite; }
+.status-pending { color:hsl(38 85% 38%); background:hsl(42 95% 50% / .16); }
 .metric { padding:1rem; min-height:112px; position:relative; overflow:hidden; }
 .metric::after { content:''; position:absolute; width:72px; height:72px; border-radius:50%; right:-24px; bottom:-34px; border:1px solid hsl(var(--accent) / .45); }
 .metric-value { font-family:'Space Grotesk', sans-serif; font-size:1.45rem; font-weight:600; letter-spacing:-.05em; margin-top:.35rem; }
