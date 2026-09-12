@@ -667,6 +667,13 @@ function PaymentsPage() {
 
   useEffect(() => { fetchPayments(); }, []);
 
+  // Realtime: SSE push + polling de segurança a cada 20s
+  usePaymentStream(() => { fetchPayments(); });
+  useEffect(() => {
+    const t = setInterval(() => { fetchPayments(); }, 20000);
+    return () => clearInterval(t);
+  }, []);
+
   const [syncing, setSyncing] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
   const [cAmount, setCAmount] = useState('');

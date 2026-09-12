@@ -346,7 +346,7 @@ export function usePaymentStream(onUpdate: (data: { code: string; status: string
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const apiBase = import.meta.env.VITE_API_URL || '';
     const es = new EventSource(`${apiBase}/api/v1/payments/stream`);
 
     es.onopen = () => setConnected(true);

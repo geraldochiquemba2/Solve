@@ -1925,6 +1925,16 @@ app.get("/api/edge/sincronizar", async (req, res) => {
 const sseClients = new Set();
 let lastSyncedId = 0;
 
+// Posiciona no MAX atual para não despejar histórico no arranque
+pool.query("SELECT COALESCE(MAX(id_acesso), 0) as m FROM acessos")
+  .then(r => { lastSyncedId = parseInt(r.rows[0].m); })
+  .catch(() => {});
+
+const ACCESS_SELECT = `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome,
+  a.data_acesso::text as data_acesso, a.hora_acesso,
+  a.tipo_acesso, a.resultado, a.motivo
+  FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente`;
+
 app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -1935,10 +1945,7 @@ app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
-              access_date as data_acesso, access_time as hora_acesso,
-              access_type as tipo_acesso, result as resultado, reason as motivo
-       FROM solve_access_logs ORDER BY remote_id DESC LIMIT 20`
+      `${ACCESS_SELECT} WHERE ${isMember("c")} AND ${notDeleted("c")} ORDER BY a.id_acesso DESC LIMIT 20`
     );
     res.write(`data: ${JSON.stringify({ type: "connected", history: result.rows })}\n\n`);
   } catch {}
@@ -1948,12 +1955,10 @@ app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
 });
 
 setInterval(async () => {
+  if (sseClients.size === 0) return;
   try {
     const result = await pool.query(
-      `SELECT remote_id as id_acesso, customer_id as cliente_id, customer_name as cliente_nome,
-              access_date as data_acesso, access_time as hora_acesso,
-              access_type as tipo_acesso, result as resultado, reason as motivo
-       FROM solve_access_logs WHERE remote_id > $1 ORDER BY remote_id DESC`,
+      `${ACCESS_SELECT} WHERE a.id_acesso > $1 AND ${isMember("c")} AND ${notDeleted("c")} ORDER BY a.id_acesso DESC LIMIT 50`,
       [lastSyncedId]
     );
     if (result.rows.length > 0) {
@@ -1964,7 +1969,7 @@ setInterval(async () => {
       }
     }
   } catch {}
-}, 3000);
+}, 5000);
 
 // ─── Serve frontend (built files) ─────────────────────────────────────────
 import { existsSync } from "fs";
