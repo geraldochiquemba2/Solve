@@ -30,7 +30,7 @@ export default function Hero() {
             loop
             playsInline
             disablePictureInPicture
-            className="w-full h-full object-cover opacity-40"
+            className="w-full h-full object-cover opacity-60 md:opacity-40"
             poster="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=2000&auto=format&fit=crop"
           >
             <source src="https://assets.mixkit.co/videos/preview/mixkit-athlete-doing-bench-press-at-the-gym-4051-large.mp4" type="video/mp4" />
@@ -42,8 +42,8 @@ export default function Hero() {
             />
           </video>
           {/* Cinematic overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/50 to-zinc-950/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/70 via-transparent to-zinc-950/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 via-zinc-950/30 to-zinc-950/10 md:from-zinc-950 md:via-zinc-950/50 md:to-zinc-950/20" />
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/40 via-transparent to-zinc-950/20 md:from-zinc-950/70 md:to-zinc-950/30" />
         </div>
 
         {/* ── MAIN CONTENT ── */}
