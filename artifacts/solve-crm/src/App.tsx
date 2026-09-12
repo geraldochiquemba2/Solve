@@ -631,6 +631,20 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   </Modal>;
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = { mcx_express: 'M. Express', referencia: 'Referência', kwik: 'KWiK', multicaixa: 'Multicaixa' };
+
+function fmtPaymentDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  try {
+    const dt = new Date(d);
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const hours = String(dt.getHours()).padStart(2, '0');
+    const mins = String(dt.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${dt.getFullYear()} ${hours}:${mins}`;
+  } catch { return d; }
+}
+
 function PaymentsPage() {
   const [paymentsData, setPaymentsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -674,13 +688,21 @@ function PaymentsPage() {
   };
 
   const payments = useMemo(() =>
-    paymentsData.map((p: any) => ({
+    paymentsData.map((p: any) => {
+      const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+      const phone = p.customer_phone || meta.phone || '';
+      const name = p.customer_name || '';
+      const shortRef = p.customer_id ? `#${String(p.customer_id).slice(0, 8)}` : '';
+      return {
       id: p.code ?? p.id ?? '',
-      customer: p.customer_name ?? 'Cliente',
+      customer: name || phone || shortRef || '—',
+      customerPhone: phone && phone !== name ? phone : '',
       amount: p.amount ?? 0,
       method: p.method ?? '',
+      methodLabel: PAYMENT_METHOD_LABELS[p.method] || p.method || '—',
       state: p.status === 'confirmado' ? 'Confirmado' : p.status === 'pendente' ? 'Pendente' : p.status === 'em_atraso' ? 'Em atraso' : p.status === 'rejeitado' ? 'Cancelado' : p.status === 'reembolsado' ? 'Reembolsado' : p.status === 'expirado' ? 'Expirado' : p.status ?? '',
       date: p.paid_at ?? p.created_at ?? '',
+      dateFmt: fmtPaymentDate(p.paid_at ?? p.created_at),
       referenceCode: p.reference_code ?? '',
       entity: p.entity ?? '',
       ekwanzaCode: p.ekwanza_code ?? '',
@@ -690,7 +712,8 @@ function PaymentsPage() {
       paidAt: p.paid_at ?? '',
       expiresAt: p.expires_at ?? '',
       raw: p,
-    }))
+      };
+    })
   , [paymentsData]);
   const [filter, setFilter] = useState(() => {
     const f = new URLSearchParams(window.location.search).get('filtro');
@@ -702,7 +725,7 @@ function PaymentsPage() {
   const [selected, setSelected] = useState<any>(null);
   const visible = payments.filter(p => {
     if (filter !== 'Todas' && p.state !== filter) return false;
-    if (search && !p.customer.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !p.customer.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase()) && !(p.customerPhone || '').includes(search)) return false;
     if (dateFrom && p.date && p.date < dateFrom) return false;
     if (dateTo && p.date && p.date > dateTo + 'T23:59:59') return false;
     return true;
@@ -714,7 +737,7 @@ function PaymentsPage() {
     <input className="input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '140px' }} />
     {(search || dateFrom || dateTo) && <button className="btn-secondary" onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}><RefreshCw size={12} /> Limpar</button>}
   </div>
-  <Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option><option>Reembolsado</option></select>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }}>{p.id}</td><td style={{ fontWeight: 700 }}>{p.customer}</td><td>{p.method}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))' }}>{p.date}</td><td>{p.state === 'Confirmado' && <span style={{ color: 'hsl(155 41% 35%)', fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)}><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}</>;
+  <Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option><option>Reembolsado</option></select>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }} title={p.id}>{p.id.length > 14 ? p.id.slice(0, 14) + '…' : p.id}</td><td><div style={{ fontWeight: 700 }}>{p.customer}</div>{p.customerPhone && <div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{p.customerPhone}</div>}</td><td>{p.methodLabel}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>{p.dateFmt}</td><td>{p.state === 'Confirmado' && <span style={{ color: 'hsl(155 41% 35%)', fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)}><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}</>;
 }
 
 const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof BriefcaseBusiness }[] = [
