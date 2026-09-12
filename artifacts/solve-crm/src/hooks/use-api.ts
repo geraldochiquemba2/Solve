@@ -494,6 +494,8 @@ export function useListCustomersManual() {
       leadId: null,
       gender: c.ovg_sex || '',
       entryDate: c.ovg_entry_date || null,
+      numero_entradas: c.numero_entradas ?? null,
+      limite_entradas: c.limite_entradas ?? null,
       _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
     }));
     const seen = new Set(apiCustomers.map((c: CustomerData) => String(c.id)));

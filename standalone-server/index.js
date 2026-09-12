@@ -523,6 +523,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
         c.online,
         c.bloqueado,
         c.numero_entradas,
+        c.limite_entradas,
         c.status as cliente_status,
         o.sex as ovg_sex,
         o.email as ovg_email,
@@ -534,7 +535,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
        FROM acessos a
        LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
        LEFT JOIN ovg_members o ON o.customer_number = CAST(c.numero_cartao AS TEXT)
-       GROUP BY a.cliente_id, c.nome, c.online, c.bloqueado, c.numero_entradas, c.status, c.numero_cartao, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
+       GROUP BY a.cliente_id, c.nome, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, c.status, c.numero_cartao, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
        ORDER BY c.nome ASC`
     );
     // Filtra funcionários (regra: nome único OU >3 entradas no mesmo dia)
@@ -577,6 +578,7 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
         c.online,
         c.bloqueado,
         c.numero_entradas,
+        c.limite_entradas,
         '' as company,
         null as "planName",
         null as "subscriptionEnd",
@@ -587,7 +589,7 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
        WHERE EXISTS (SELECT 1 FROM acessos a2 WHERE a2.cliente_id = c.id_cliente)
          AND (TRIM(c.nome) LIKE '% %')
          AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
-       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
+       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
        ORDER BY c.nome ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
@@ -613,6 +615,7 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
         c.online,
         c.bloqueado,
         c.numero_entradas,
+        c.limite_entradas,
         '' as company
        FROM clientes c
        LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
@@ -620,7 +623,7 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
        WHERE c.id_cliente = $1
          AND (TRIM(c.nome) LIKE '% %')
          AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
-       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number`,
+       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number`,
       [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
