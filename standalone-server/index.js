@@ -1408,6 +1408,142 @@ app.patch("/api/v1/automations/:id/toggle", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Users (adaptive: works with whatever columns exist) ────────────────────
+
+async function usersColumns() {
+  try {
+    const r = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
+    return new Set(r.rows.map(x => x.column_name));
+  } catch { return new Set(["id", "name", "email"]); }
+}
+
+app.get("/api/v1/users", requireAuth, async (req, res) => {
+  try {
+    const cols = await usersColumns();
+    const sel = ["id", "name", "email", "role", "active", "created_at"].filter(c => cols.has(c));
+    const r = await pool.query(`SELECT ${sel.join(", ")} FROM users ORDER BY created_at DESC`);
+    const data = r.rows.map(u => ({
+      id: u.id, name: u.name, email: u.email,
+      role: u.role || 'Operacional', active: u.active !== false,
+      createdAt: u.created_at || null,
+    }));
+    res.json({ data, total: data.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+app.post("/api/v1/users/invite", requireAuth, async (req, res) => {
+  try {
+    const { name, email, role } = req.body;
+    if (!name || !email) return res.status(400).json({ error: "Nome e email são obrigatórios" });
+    const cols = await usersColumns();
+    const tempPass = crypto.randomBytes(6).toString('hex');
+    const hash = await bcrypt.hash(tempPass, SALT_ROUNDS);
+    const hasRole = cols.has("role"), hasPass = cols.has("password") || cols.has("password_hash");
+    const passCol = cols.has("password") ? "password" : "password_hash";
+    const extra = hasRole ? ", role" : "";
+    const extraVal = hasRole ? ", $4" : "";
+    const params = [name, email, hash];
+    if (hasRole) params.push(role || 'Operacional');
+    let row;
+    if (hasPass) {
+      const r = await pool.query(
+        `INSERT INTO users (name, email, ${passCol}${extra}) VALUES ($1, $2, $3${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}`,
+        params
+      );
+      row = r.rows[0];
+    } else {
+      const r = await pool.query(
+        `INSERT INTO users (name, email${extra}) VALUES ($1, $2${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}`,
+        hasRole ? [name, email, role || 'Operacional'] : [name, email]
+      );
+      row = r.rows[0];
+    }
+    res.status(201).json({ data: { ...row, tempPassword: tempPass } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/users/:id/toggle", requireAuth, async (req, res) => {
+  try {
+    const cols = await usersColumns();
+    if (!cols.has("active")) return res.status(400).json({ error: "Tabela users sem coluna active" });
+    const r = await pool.query("UPDATE users SET active = NOT active WHERE id = $1 RETURNING id, name, email", [req.params.id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: "Utilizador não encontrado" });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── OVG sync (usa credenciais das settings) ────────────────────────────────
+
+app.get("/api/v1/ovg/sync/status", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT MAX(synced_at) as last, COUNT(*) as cnt FROM ovg_members");
+    res.json({ data: { isSyncing: false, lastSync: r.rows[0]?.last ? { timestamp: r.rows[0].last, created: 0, updated: parseInt(r.rows[0].cnt) } : null, nextSyncIn: 0 } });
+  } catch (err) {
+    res.json({ data: { isSyncing: false, lastSync: null, nextSyncIn: 0 } });
+  }
+});
+
+app.post("/api/v1/ovg/sync/now", requireAuth, async (req, res) => {
+  try {
+    const user = await cfg("ovg_username", OVG_USERNAME);
+    const pass = await cfg("ovg_password", OVG_PASSWORD);
+    if (!user || !pass) return res.status(400).json({ error: "Credenciais OVG em falta (Integrações > Configurar)" });
+    const token = await ovgLogin();
+    const members = await ovgGetMembers(token);
+    let upserted = 0;
+    for (const m of members) {
+      try {
+        await pool.query(
+          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+           ON CONFLICT (customer_number) DO UPDATE SET name=EXCLUDED.name, sex=EXCLUDED.sex, nif=EXCLUDED.nif, mobile_number=EXCLUDED.mobile_number, email=EXCLUDED.email, status=EXCLUDED.status, club=EXCLUDED.club, last_entry=EXCLUDED.last_entry, entry_date=EXCLUDED.entry_date, synced_at=NOW()`,
+          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null, m.mobile_number || null, m.email || null, m.status || null, m.club_cod || m.club || null, m.last_entry || null, m.entry_date || null]
+        );
+        upserted++;
+      } catch {}
+    }
+    res.json({ data: { synced: upserted, total: members.length }, message: `${upserted} sócios sincronizados` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/ovg/members", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT * FROM ovg_members ORDER BY name ASC LIMIT 500");
+    res.json({ data: r.rows, total: r.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+// ─── Customers PATCH (só campos de contacto; catraca mantém o resto) ─────────
+
+app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
+  try {
+    const fields = [];
+    const params = [];
+    // NOTA: pg_sync.py reenvia online/bloqueado/numero_entradas a cada 10s —
+    // por isso só nome/telefone/email são editáveis aqui (enviados uma vez).
+    if (req.body.nome !== undefined) { fields.push("nome = $" + (params.length + 1)); params.push(req.body.nome); }
+    if (req.body.telefone !== undefined) { fields.push("telefone = $" + (params.length + 1)); params.push(req.body.telefone); }
+    if (req.body.email !== undefined) { fields.push("email = $" + (params.length + 1)); params.push(req.body.email); }
+    if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email)" });
+    params.push(req.params.id);
+    const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE id_cliente = $${params.length} RETURNING id_cliente, nome, telefone, email`, params);
+    if (r.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/v1/plans", requireAuth, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
