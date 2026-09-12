@@ -172,6 +172,42 @@ pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
 pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).catch(() => {});
 // Add cademi_id column if missing (Cademi ↔ CRM link)
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`).catch(() => {});
+// Settings table (definições do workspace)
+pool.query(`CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+)`).catch(() => {});
+
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+app.get("/api/v1/settings", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT key, value FROM settings WHERE key NOT LIKE 'password\\_reset\\_%' ESCAPE '\\'");
+    const data = {};
+    r.rows.forEach(row => { data[row.key] = row.value; });
+    res.json({ data });
+  } catch (err) {
+    res.json({ data: {} });
+  }
+});
+
+app.put("/api/v1/settings", requireAuth, async (req, res) => {
+  try {
+    const settings = req.body?.settings || req.body || {};
+    for (const [key, value] of Object.entries(settings)) {
+      if (key.startsWith("password_reset_")) continue;
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [key, String(value)]
+      );
+    }
+    res.json({ message: "Definições guardadas" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post("/api/v1/access/sync", async (req, res) => {
   try {
