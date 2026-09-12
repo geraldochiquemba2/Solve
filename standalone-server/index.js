@@ -1014,7 +1014,7 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
       `SELECT p.* FROM payments p
-       ${whereClause} ORDER BY p.id DESC LIMIT 200`, params
+       ${whereClause} ORDER BY p.created_at DESC, p.id DESC LIMIT 200`, params
     );
     
     const total = await pool.query("SELECT COUNT(*) as cnt FROM payments p " + whereClause, params);
