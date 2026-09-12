@@ -219,6 +219,7 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
         [key, String(value)]
       );
     }
+    _settingsCache = { at: 0, map: {} };
     res.json({ message: "Definições guardadas" });
   } catch (err) {
     res.status(500).json({ error: err.message });

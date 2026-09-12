@@ -453,6 +453,25 @@ export function useCademiSync() {
   });
 }
 
+export function usePay4AllHealth() {
+  return useQuery({
+    queryKey: ['pay4all-health'],
+    queryFn: () => apiGet<{ data: { connected: boolean; message: string } }>('/api/v1/pay4all/health'),
+    retry: false,
+  });
+}
+
+export function useSaveSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: Record<string, string>) =>
+      apiMutate<{ message: string }>('/api/v1/settings', 'PUT', { settings }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+}
+
 // ─── Customers (manual fallback) ────────────────────────────────────────────
 export interface CustomerData {
   id: string; code: string; name: string; email: string; phone: string;

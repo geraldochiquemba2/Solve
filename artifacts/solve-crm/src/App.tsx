@@ -27,7 +27,7 @@ import Store from '@/landing/Store';
 import ProductDetail from '@/landing/ProductDetail';
 import FitWorkout from '@/landing/FitWorkout';
 import FitStudio from '@/landing/FitStudio';
-import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
+import { useListAutomations, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, useSaveSettings, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -557,6 +557,7 @@ function IntegrationsPage() {
   const ovgSyncData = ovgSync.data?.data;
   const ovgHealthData = ovgHealth.data?.data;
   const cademiHealthData = cademiHealth.data;
+  const [configName, setConfigName] = useState<string | null>(null);
   
   const items = useMemo(() => {
     const applyCademi = (list: any[]) => list.map(item => {
@@ -601,7 +602,7 @@ function IntegrationsPage() {
     })));
   }, [apiIntegrations, ovgSyncData, ovgHealthData, cademiHealthData]);
   
-  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `Cademi OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : isCademi ? cademiSyncMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : isCademi ? (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet">Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div><Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
+  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '.8rem' }}>{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `Cademi OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}><button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : isCademi ? cademiSyncMut.mutate() : undefined} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : isCademi ? (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar') : 'Sincronizar'}</button><button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
 function AcademiaPage() {
@@ -699,6 +700,88 @@ function AcademiaPage() {
     <div style={{ display: 'flex', marginTop: '.5rem' }}><button className="btn-secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>Fechar</button></div>
   </div></div>}
   </>;
+}
+
+const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string }>> = {
+  OVG: [
+    { key: 'ovg_api_url', label: 'URL da API', placeholder: 'https://...' },
+    { key: 'ovg_username', label: 'Utilizador' },
+    { key: 'ovg_password', label: 'Password', type: 'password' },
+    { key: 'ovg_club_code', label: 'Código do clube', placeholder: 'LUA' },
+  ],
+  Cademi: [
+    { key: 'cademi_api_url', label: 'URL da API', placeholder: 'https://...' },
+    { key: 'cademi_api_key', label: 'Chave de API', type: 'password' },
+  ],
+  Pay4All: [
+    { key: 'ekwanza_client_id', label: 'Client ID' },
+    { key: 'ekwanza_client_secret', label: 'Client Secret', type: 'password' },
+    { key: 'ekwanza_resource', label: 'Resource' },
+  ],
+};
+
+const INTEGRATION_HEALTH_URL: Record<string, string> = {
+  OVG: '/api/v1/ovg/health',
+  Cademi: '/api/v1/cademi/health',
+  Pay4All: '/api/v1/pay4all/health',
+};
+
+function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () => void }) {
+  const { data: settingsData } = useGetSettings();
+  const saveMut = useSaveSettings();
+  const fields = INTEGRATION_CONFIG_FIELDS[name] || [];
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    if (!loaded && settingsData?.data) {
+      const init: Record<string, string> = {};
+      fields.forEach(f => { init[f.key] = (settingsData.data as any)[f.key] || ''; });
+      setForm(init);
+      setLoaded(true);
+    }
+  }, [settingsData, loaded, name]);
+
+  const test = async () => {
+    const url = INTEGRATION_HEALTH_URL[name];
+    if (!url) return;
+    setTesting(true);
+    setTestMsg('');
+    try {
+      const token = localStorage.getItem('token');
+      const base = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${base}${url}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const json = await res.json();
+      const d = json.data || json;
+      setTestMsg((d.connected ? 'OK · ' : 'FALHA · ') + (d.message || ''));
+    } catch (e: any) { setTestMsg('Erro: ' + e.message); }
+    setTesting(false);
+  };
+
+  const save = () => {
+    setSaveMsg('');
+    saveMut.mutate(form, {
+      onSuccess: () => setSaveMsg('Configuração guardada'),
+      onError: (e: any) => setSaveMsg('Erro: ' + (e.message || 'desconhecido')),
+    });
+  };
+
+  return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '1.2rem' }}>
+    <h3 style={{ marginBottom: '.2rem' }}>Configurar {name}</h3>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>{fields.length > 0 ? 'Credenciais guardadas no servidor (têm prioridade sobre o Render).' : 'Sem opções configuráveis de momento.'}</div>
+    {fields.map(f => <div key={f.key} style={{ marginBottom: '.6rem' }}><label className="label">{f.label}</label>
+      <input className="input" type={f.type || 'text'} placeholder={f.placeholder || ''} value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ width: '100%' }} /></div>)}
+    {testMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem', color: testMsg.startsWith('OK') ? 'hsl(155 41% 35%)' : 'hsl(0 70% 50%)' }}>{testMsg}</div>}
+    {saveMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem' }}>{saveMsg}</div>}
+    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.4rem' }}>
+      <button className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>Fechar</button>
+      {INTEGRATION_HEALTH_URL[name] && <button className="btn-secondary" onClick={test} disabled={testing} style={{ flex: 1 }}>{testing ? 'A testar...' : 'Testar ligação'}</button>}
+      {fields.length > 0 && <button className="btn-primary" onClick={save} disabled={saveMut.isPending} style={{ flex: 1 }}><Check size={14} /> Guardar</button>}
+    </div>
+  </div></div>;
 }
 
 function AutomationsPage() {
