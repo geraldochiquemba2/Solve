@@ -1034,6 +1034,66 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
   }
 });
 
+// Criar pagamento: regista SEMPRE como pendente primeiro; se for Express
+// com telefone, dispara a cobrança Ekwanza em seguida (sem bloquear).
+app.post("/api/v1/payments", requireAuth, async (req, res) => {
+  try {
+    const { amount, method, customer_id, customer_phone, description, reference_code } = req.body || {};
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
+    const m = method || "mcx_express";
+    const code = "SC" + Date.now().toString(36).toUpperCase();
+    const r = await pool.query(
+      `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata)
+       VALUES ($1, $2, $3, $4, 'pendente', $5, $6) RETURNING *`,
+      [code, customer_id || null, amt, m, reference_code || code,
+       JSON.stringify({ phone: customer_phone || null, description: description || null })]
+    );
+    const payment = r.rows[0];
+    if (m === "mcx_express" && customer_phone) {
+      try {
+        const token = await getEkwanzaToken();
+        const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 45000);
+        let charge;
+        try {
+          const cResp = await fetch(`${gpoUrl}/charges`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json", Accept: "application/json",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              amount: amt, currency: "AOA", description: description || `Pagamento ${code}`,
+              merchantTransactionId: code,
+              paymentMethod: `GPO_${await cfg("ekwanza_gpo_payment_method", process.env.EKWANZA_GPO_PAYMENT_METHOD || "")}`,
+              options: {
+                MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
+                ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
+              },
+              paymentInfo: { phoneNumber: customer_phone },
+            }),
+            signal: ctrl.signal,
+          });
+          charge = await cResp.json();
+          if (cResp.ok && charge.id) {
+            await pool.query("UPDATE payments SET ekwanza_code = $1 WHERE id = $2", [charge.id, payment.id]);
+            payment.ekwanza_code = charge.id;
+          }
+        } finally { clearTimeout(timer); }
+      } catch (e) {
+        console.error("[PAYMENTS] Falha ao disparar cobrança, mantém pendente:", e.message);
+      }
+    }
+    broadcastPaymentUpdate({ type: "payment_created", code, status: "pendente" });
+    res.status(201).json({ data: payment });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Plans ─────────────────────────────────────────────────────────────────
 
 app.get("/api/v1/plans", requireAuth, async (req, res) => {
