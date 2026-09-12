@@ -292,7 +292,14 @@ function CustomerDetail({ customers }: { customers: Customer[] }) {
         <span style={{ color: 'hsl(var(--muted-foreground))' }}>Género:</span>{' '}
         <span style={{ fontWeight: 600 }}>{customer.gender}</span>
       </div>
-    )}</Section><Section title="Saúde da conta" note="Indicadores de retenção"><div style={{ display: 'grid', gap: '.9rem' }}>{customer.state === 'Activo' ? [['Estado da conta', 'Activo', 100], ['Plano activo', customer.plan || 'Sem plano', 50], ['Desde a entrada', customer.joined, 100]] : [['Estado da conta', customer.state, customer.state === 'Inactivo' ? 0 : 50], ['Plano', customer.plan || 'Sem plano', 0], ['Desde a entrada', customer.joined, 100]].map(([l, v, p]) => <div key={l as string}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.73rem', marginBottom: '.35rem' }}><span>{l as string}</span><strong>{v as string}</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${p as number}%`, background: (p as number) === 100 ? 'hsl(155 41% 43%)' : undefined }} /></div></div>)}</div></Section></div></>;
+    )}</Section><Section title="Saúde da conta" note="Indicadores de retenção"><div style={{ display: 'grid', gap: '.9rem' }}>{(() => {
+        const unlimited = customer.lessonsLimit === -1;
+        const lessonsLabel = unlimited ? 'Ilimitado' : (customer.lessonsLeft !== null && customer.lessonsLeft !== undefined && customer.lessonsLimit ? `${customer.lessonsLeft} de ${customer.lessonsLimit}` : '—');
+        const lessonsPct = unlimited ? 100 : (customer.lessonsLimit ? Math.max(0, Math.min(100, Math.round(((customer.lessonsLeft ?? 0) / customer.lessonsLimit) * 100))) : 0);
+        const rows = customer.state === 'Activo'
+          ? [['Estado da conta', 'Activo', 100], ['Aulas restantes', lessonsLabel, lessonsPct], ['Último acesso', customer.joined || '—', 100]]
+          : [['Estado da conta', customer.state, customer.state === 'Inactivo' ? 0 : 50], ['Aulas restantes', lessonsLabel, lessonsPct], ['Último acesso', customer.joined || '—', 100]];
+        return rows.map(([l, v, p]) => <div key={l as string}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.73rem', marginBottom: '.35rem' }}><span>{l as string}</span><strong>{v as string}</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${p as number}%`, background: (p as number) === 100 ? 'hsl(155 41% 43%)' : undefined }} /></div></div>)})()}</div></Section></div></>;
 }
 function MiniList({ items }: { items: string[] }) { return <div style={{ display: 'grid', gap: '.65rem' }}>{items.map((x, i) => <div key={x} style={{ display: 'flex', alignItems: 'center', gap: '.55rem', fontSize: '.72rem', color: i === 0 ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? 'hsl(var(--chart-2))' : 'hsl(var(--border))' }} />{x}</div>)}</div>; }
 
