@@ -213,14 +213,15 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
     const settings = req.body?.settings || req.body || {};
     for (const [key, value] of Object.entries(settings)) {
       if (key.startsWith("password_reset_")) continue;
+      const jv = JSON.stringify(value ?? null);
       const upd = await pool.query(
-        "UPDATE settings SET value = $2, updated_at = NOW() WHERE key = $1",
-        [key, String(value)]
+        "UPDATE settings SET value = $2::jsonb, updated_at = NOW() WHERE key = $1",
+        [key, jv]
       );
       if (upd.rowCount === 0) {
         await pool.query(
-          "INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())",
-          [key, String(value)]
+          "INSERT INTO settings (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())",
+          [key, jv]
         );
       }
     }
