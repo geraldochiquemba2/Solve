@@ -114,6 +114,7 @@ export function useAuth() {
       });
     } catch {}
     localStorage.removeItem('token');
+    localStorage.removeItem('samora_user');
     setToken(null);
     setUser(null);
   }, []);

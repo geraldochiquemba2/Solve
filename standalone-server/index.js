@@ -53,9 +53,25 @@ const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 const SALT_ROUNDS = 10;
 
-// Cademi (plataforma de cursos) — configurar no Render: CADEMI_API_URL + CADEMI_API_KEY
+// Cademi (plataforma de cursos) — defaults; editável em Integrações > Configurar
 const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
 const CADEMI_API_KEY = process.env.CADEMI_API_KEY || "";
+
+// Config dinâmica: tabela settings tem prioridade sobre env (editável no CRM).
+let _settingsCache = { at: 0, map: {} };
+async function getSetting(key) {
+  if (Date.now() - _settingsCache.at > 60000) {
+    try {
+      const r = await pool.query("SELECT key, value FROM settings");
+      _settingsCache = { at: Date.now(), map: Object.fromEntries(r.rows.map(x => [x.key, x.value])) };
+    } catch {}
+  }
+  return _settingsCache.map[key];
+}
+async function cfg(key, envVal = "") {
+  const v = await getSetting(key);
+  return (v ?? envVal ?? "").toString().trim();
+}
 
 // REGRA CRM (isMember): funcionário = nome único (sem espaço) OU >3 entradas
 // no mesmo dia → oculto das contagens e listas em todo o CRM. Sócios têm
@@ -291,12 +307,16 @@ const OVG_PASSWORD = (process.env.OVG_PASSWORD || "").trim();
 const OVG_CLUB_CODE = (process.env.OVG_CLUB_CODE || "LUA").trim();
 
 async function ovgLogin() {
-  const url = `${OVG_API_URL}/APIControlAccess`;
+  const base = await cfg("ovg_api_url", OVG_API_URL);
+  const user = await cfg("ovg_username", OVG_USERNAME);
+  const pass = await cfg("ovg_password", OVG_PASSWORD);
+  if (!user || !pass) throw new Error("OVG credentials not configured (Integrações > Configurar)");
+  const url = `${base}/APIControlAccess`;
   console.log("OVG login:", url);
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: OVG_USERNAME, password: OVG_PASSWORD }),
+    body: JSON.stringify({ username: user, password: pass }),
   });
   const body = await resp.text();
   console.log("OVG login status:", resp.status, "body:", body.substring(0, 200));
@@ -309,7 +329,9 @@ async function ovgLogin() {
 }
 
 async function ovgGetMembers(token) {
-  const url = `${OVG_API_URL}/ListOfCustomersDataDetailed/${OVG_CLUB_CODE}`;
+  const base = await cfg("ovg_api_url", OVG_API_URL);
+  const club = await cfg("ovg_club_code", OVG_CLUB_CODE);
+  const url = `${base}/ListOfCustomersDataDetailed/${club}`;
   console.log("OVG members:", url);
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -322,8 +344,10 @@ async function ovgGetMembers(token) {
 }
 
 app.post("/api/v1/access/ovg-reseed", async (req, res) => {
-  if (!OVG_USERNAME || !OVG_PASSWORD) {
-    return res.status(400).json({ error: "OVG credentials not configured" });
+  const user = await cfg("ovg_username", OVG_USERNAME);
+  const pass = await cfg("ovg_password", OVG_PASSWORD);
+  if (!user || !pass) {
+    return res.status(400).json({ error: "OVG credentials not configured (Integrações > Configurar)" });
   }
   try {
     const token = await ovgLogin();
@@ -915,9 +939,9 @@ app.post("/webhooks/ekwanza", async (req, res) => {
 async function getEkwanzaToken() {
   const params = new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: process.env.EKWANZA_CLIENT_ID,
-    client_secret: process.env.EKWANZA_CLIENT_SECRET,
-    resource: process.env.EKWANZA_RESOURCE,
+    client_id: await cfg("ekwanza_client_id", process.env.EKWANZA_CLIENT_ID || ""),
+    client_secret: await cfg("ekwanza_client_secret", process.env.EKWANZA_CLIENT_SECRET || ""),
+    resource: await cfg("ekwanza_resource", process.env.EKWANZA_RESOURCE || ""),
   });
   const resp = await fetch("https://login.microsoftonline.com/auth.appypay.co.ao/oauth2/token", {
     method: "POST",
@@ -1000,17 +1024,19 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
 
 let _cademiLastCall = 0;
 async function cademiFetch(path, options = {}) {
-  if (!CADEMI_API_KEY) {
-    return { success: false, error: "Cademi não configurado (CADEMI_API_KEY em falta)" };
+  const base = (await cfg("cademi_api_url", CADEMI_API_URL)).replace(/\/$/, "");
+  const key = await cfg("cademi_api_key", CADEMI_API_KEY);
+  if (!key) {
+    return { success: false, error: "Cademi não configurado (Integrações > Configurar)" };
   }
   // Throttle: máx 2 req/seg
   const wait = 550 - (Date.now() - _cademiLastCall);
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
   _cademiLastCall = Date.now();
   try {
-    const resp = await fetch(`${CADEMI_API_URL}${path}`, {
+    const resp = await fetch(`${base}${path}`, {
       ...options,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${CADEMI_API_KEY}`, ...(options.headers || {}) },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(options.headers || {}) },
     });
     const data = await resp.json();
     if (!resp.ok || data.success === false) {
@@ -1028,6 +1054,35 @@ app.get("/api/v1/cademi/health", requireAuth, async (req, res) => {
     res.json({ connected: true, message: "Conexão Cademi operacional", products: r.data?.produto?.length ?? 0 });
   } else {
     res.json({ connected: false, message: r.error || "Erro ao conectar Cademi" });
+  }
+});
+
+app.get("/api/v1/ovg/health", requireAuth, async (req, res) => {
+  try {
+    const user = await cfg("ovg_username", OVG_USERNAME);
+    const pass = await cfg("ovg_password", OVG_PASSWORD);
+    if (!user || !pass) {
+      return res.json({ data: { connected: false, message: "Credenciais OVG em falta (Integrações > Configurar)" } });
+    }
+    const count = await qNum("SELECT COUNT(*) as cnt FROM ovg_members");
+    let lastSync = null;
+    try {
+      const r = await pool.query("SELECT MAX(synced_at) as m FROM ovg_members");
+      lastSync = r.rows[0]?.m || null;
+    } catch {}
+    res.json({ data: { connected: count > 0, message: count > 0 ? `${count} sócios sincronizados` : "Sem sócios sincronizados", details: lastSync } });
+  } catch (err) {
+    res.json({ data: { connected: false, message: err.message } });
+  }
+});
+
+app.get("/api/v1/pay4all/health", requireAuth, async (req, res) => {
+  try {
+    const token = await getEkwanzaToken();
+    const count = await qNum("SELECT COUNT(*) as cnt FROM payments");
+    res.json({ data: { connected: !!token, message: token ? `Ekwanza OK · ${count} transações` : "Falha de autenticação Ekwanza" } });
+  } catch (err) {
+    res.json({ data: { connected: false, message: err.message } });
   }
 });
 
@@ -1144,19 +1199,20 @@ async function qNum(sql, params = [], fallback = 0) {
 }
 
 async function getIntegrationsLive() {
-  const [ovgCount, ovgSync, payCount, paySync, leadCount, cademi] = await Promise.all([
+  const [ovgCount, ovgSync, payCount, paySync, leadCount, cademi, cademiKey] = await Promise.all([
     qNum("SELECT COUNT(*) as cnt FROM ovg_members"),
     (async () => { try { const r = await pool.query("SELECT MAX(synced_at) as m FROM ovg_members"); return r.rows[0]?.m || null; } catch { return null; } })(),
     qNum("SELECT COUNT(*) as cnt FROM payments"),
     (async () => { try { const r = await pool.query("SELECT MAX(created_at) as m FROM payments"); return r.rows[0]?.m || null; } catch { return null; } })(),
     qNum("SELECT COUNT(*) as cnt FROM leads"),
     getCademiStatus(),
+    cfg("cademi_api_key", CADEMI_API_KEY),
   ]);
   const now = new Date().toISOString();
   return [
     { id: "ovg", name: "OVG", status: ovgCount > 0 ? "operacional" : "atencao", lastSyncAt: ovgSync, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "pay4all", name: "Pay4All", status: payCount > 0 ? "operacional" : "atencao", lastSyncAt: paySync, errorCount: 0, createdAt: now, updatedAt: now },
-    { id: "cademi", name: "Cademi", status: !CADEMI_API_KEY ? "inativo" : (cademi.connected ? "operacional" : "atencao"), lastSyncAt: cademi.connected ? now : null, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "cademi", name: "Cademi", status: !cademiKey ? "inativo" : (cademi.connected ? "operacional" : "atencao"), lastSyncAt: cademi.connected ? now : null, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "whatsapp", name: "WhatsApp", status: "inativo", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "website", name: "Website", status: leadCount > 0 ? "operacional" : "atencao", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
   ];
@@ -1271,6 +1327,75 @@ app.get("/api/v1/audit-logs", requireAuth, async (req, res) => {
     const entity = req.query.entity;
     const filtered = entity ? events.filter(e => e.entity === entity) : events;
     res.json({ data: filtered.slice(0, 100), total: filtered.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Automations ────────────────────────────────────────────────────────────
+
+const mapAutomation = (r) => ({
+  id: r.id, name: r.name, trigger: r.trigger, action: r.action, active: r.active,
+  runCount: r.run_count ?? 0, lastRunAt: r.last_run_at || null,
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+app.get("/api/v1/automations", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT * FROM automations ORDER BY created_at DESC");
+    res.json({ data: r.rows.map(mapAutomation), total: r.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+app.post("/api/v1/automations", requireAuth, async (req, res) => {
+  try {
+    const { name, trigger, action } = req.body;
+    if (!name || !trigger || !action) return res.status(400).json({ error: "name, trigger e action são obrigatórios" });
+    const r = await pool.query(
+      "INSERT INTO automations (name, trigger, action) VALUES ($1, $2, $3) RETURNING *",
+      [name, trigger, action]
+    );
+    res.status(201).json({ data: mapAutomation(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/automations/:id", requireAuth, async (req, res) => {
+  try {
+    const fields = [];
+    const params = [];
+    for (const k of ["name", "trigger", "action", "active"]) {
+      if (req.body[k] !== undefined) { fields.push(`${k} = $${params.length + 1}`); params.push(req.body[k]); }
+    }
+    if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar" });
+    fields.push("updated_at = NOW()");
+    params.push(req.params.id);
+    const r = await pool.query(`UPDATE automations SET ${fields.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+    if (r.rows.length === 0) return res.status(404).json({ error: "Automação não encontrada" });
+    res.json({ data: mapAutomation(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/automations/:id", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("DELETE FROM automations WHERE id = $1", [req.params.id]);
+    if (r.rowCount === 0) return res.status(404).json({ error: "Automação não encontrada" });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/automations/:id/toggle", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("UPDATE automations SET active = NOT active, updated_at = NOW() WHERE id = $1 RETURNING *", [req.params.id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: "Automação não encontrada" });
+    res.json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
