@@ -93,12 +93,16 @@ function mapApiCustomer(c: any): Customer {
   } else if (c.createdAt) {
     joined = relativeDate(c.createdAt);
   }
+  const rawState = (c.state ?? '').toString().toLowerCase();
+  const fallbackState = (c.client_status ?? '').toString().toLowerCase();
+  const normState = rawState || fallbackState;
+  const isBlocked = c.bloqueado === true;
   return {
     id: c.code ?? c.id ?? '',
     name: c.name ?? '',
     company: c.company ?? '',
     plan: isAccessClient ? 'Solve Access' : (c.planName ?? ''),
-    state: c.state === 'activo' ? 'Activo' : c.state === 'inactivo' ? 'Inactivo' : c.state === 'em_atraso' ? 'Em atraso' : c.state === 'suspenso' ? 'Suspenso' : c.state ?? '',
+    state: isBlocked ? 'Bloqueado' : normState === 'activo' ? 'Activo' : normState === 'inactivo' ? 'Inactivo' : normState === 'em_atraso' ? 'Em atraso' : normState === 'suspenso' ? 'Suspenso' : (c.state || c.client_status || 'Activo'),
     joined,
     expires: isAccessClient ? '' : formatDate(c.subscriptionEnd ?? null),
     email: c.email ?? '',
