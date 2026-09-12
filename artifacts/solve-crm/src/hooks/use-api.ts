@@ -519,7 +519,7 @@ export function useListCustomersManual() {
     }));
     const seen = new Set(apiCustomers.map((c: CustomerData) => String(c.id)));
     const merged = [...apiCustomers, ...accessCustomers.filter((c: any) => !seen.has(String(c.id)))];
-    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading };
+    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading, refetch: () => { apiQuery.refetch(); accessQuery.refetch(); } };
   }, [apiQuery.data, accessQuery.data, apiQuery.isLoading, accessQuery.isLoading]);
 }
 

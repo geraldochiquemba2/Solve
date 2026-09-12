@@ -223,6 +223,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   const onlineNow = (access as any)?.clients?.online ?? 0;
   const todayCount = (access as any)?.accesses?.today ?? 0;
   const authorizedToday = (access as any)?.accesses?.authorizedToday ?? 0;
+  const todayStr = new Date().toLocaleDateString('pt-AO', { day: 'numeric', month: 'short', year: 'numeric' });
   const [copiedReport, setCopiedReport] = useState(false);
   const reportLines = [
     `Acessos hoje: ${todayCount} (${authorizedToday} autorizados, ${deniedToday} negados)`,
@@ -232,7 +233,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
     `Cobranças pendentes: ${overview?.pendingPayments ?? 0}`,
     `Aulas esgotadas: ${exhaustedLessons} · Bloqueados: ${blockedCount}`,
   ];
-  const reportText = `RELATÓRIO SOLVE — ${today}\n` + reportLines.map(l => `• ${l}`).join('\n');
+  const reportText = `RELATÓRIO SOLVE — ${todayStr}\n` + reportLines.map(l => `• ${l}`).join('\n');
   const copyReport = () => { navigator.clipboard?.writeText(reportText); setCopiedReport(true); setTimeout(() => setCopiedReport(false), 2000); };
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQ, setCmdQ] = useState('');
@@ -294,7 +295,7 @@ function LeadsPage({ leads, userName, onChanged }: { leads: Lead[]; userName?: s
   const owners = useMemo(() => Array.from(new Set(leads.map(l => l.owner).filter(Boolean))), [leads]);
   const filtered = leads.filter(l => (l.name + l.company + l.email).toLowerCase().includes(q.toLowerCase()) && (status === 'Todos' || l.status === status) && (source === 'Todas' || l.source === source) && (owner === 'Todos' || l.owner === owner));
   const saveView = () => { try { localStorage.setItem('leads-view', JSON.stringify({ q, status, source })); setViewMsg('Vista guardada'); setTimeout(() => setViewMsg(''), 2000); } catch {} };
-  const toApi = (x: Lead) => ({ name: x.name, email: x.email || undefined, company: x.company || undefined, source: x.source || undefined, status: LEAD_PT_TO_API[x.status] || 'novo_lead', ownerId: x.owner || undefined, estimatedValue: x.value || 0 });
+  const toApi = (x: Lead) => ({ name: x.name, email: x.email || undefined, company: x.company || undefined, source: x.source || undefined, status: (LEAD_PT_TO_API[x.status] || 'novo_lead') as any, ownerId: x.owner || undefined, estimatedValue: x.value || 0 });
   const handleSave = (x: Lead) => {
     if (editing) updateMut.mutate({ id: editing.id, data: toApi(x) }, { onSuccess: () => { setOpen(false); setEditing(null); onChanged?.(); } });
     else createMut.mutate({ data: toApi(x) }, { onSuccess: () => { setOpen(false); onChanged?.(); } });
@@ -311,10 +312,10 @@ function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?
   const [isNew, setIsNew] = useState(false);
   const [sort, setSort] = useState('Recentes');
   const updateMut = useUpdateLead(); const createMut = useCreateLead();
-  const move = (lead: Lead, stage: string) => updateMut.mutate({ id: lead.id, data: { status: LEAD_PT_TO_API[stage] || 'novo_lead' } }, { onSuccess: () => onChanged?.() });
+  const move = (lead: Lead, stage: string) => updateMut.mutate({ id: lead.id, data: { status: (LEAD_PT_TO_API[stage] || 'novo_lead') as any } }, { onSuccess: () => onChanged?.() });
   const sorted = (cards: Lead[]) => sort === 'Maior valor' ? [...cards].sort((a, b) => b.value - a.value) : sort === 'Nome A-Z' ? [...cards].sort((a, b) => a.name.localeCompare(b.name)) : cards;
   const handleSave = (x: Lead) => {
-    const data = { name: x.name, email: x.email || undefined, company: x.company || undefined, source: x.source || undefined, status: LEAD_PT_TO_API[x.status] || 'novo_lead', ownerId: x.owner || undefined, estimatedValue: x.value || 0 };
+    const data = { name: x.name, email: x.email || undefined, company: x.company || undefined, source: x.source || undefined, status: (LEAD_PT_TO_API[x.status] || 'novo_lead') as any, ownerId: x.owner || undefined, estimatedValue: x.value || 0 };
     if (!isNew && selected) updateMut.mutate({ id: selected.id, data }, { onSuccess: () => { setSelected(null); onChanged?.(); } });
     else createMut.mutate({ data }, { onSuccess: () => { setIsNew(false); onChanged?.(); } });
   };
@@ -339,7 +340,7 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
   const [newMsg, setNewMsg] = useState('');
   const saveNewClient = () => {
     if (!newName.trim()) { setNewMsg('Nome é obrigatório'); return; }
-    createLeadMut.mutate({ data: { name: newName.trim(), phone: newPhone || undefined, email: newEmail || undefined, company: 'Particular', source: 'Balcão', status: 'novo_lead' } }, {
+    createLeadMut.mutate({ data: { name: newName.trim(), phone: newPhone || undefined, email: newEmail || undefined, company: 'Particular', source: 'Balcão', status: 'novo_lead' as any } }, {
       onSuccess: () => { setNewOpen(false); setNewName(''); setNewPhone(''); setNewEmail(''); setNewMsg(''); onChanged?.(); },
       onError: (e: any) => setNewMsg('Erro: ' + (e.message || 'desconhecido')),
     });
