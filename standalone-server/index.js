@@ -1544,6 +1544,109 @@ app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Leads ──────────────────────────────────────────────────────────────────
+
+const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"];
+
+const mapLead = (r) => ({
+  id: r.id, code: r.code, name: r.name, email: r.email, phone: r.phone,
+  company: r.company, source: r.source, status: r.status, ownerId: r.owner_id,
+  estimatedValue: r.estimated_value ?? 0, notes: r.notes,
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+app.get("/api/v1/leads", requireAuth, async (req, res) => {
+  try {
+    const where = [];
+    const params = [];
+    if (req.query.status) { where.push("status = $" + (params.length + 1)); params.push(req.query.status); }
+    if (req.query.search) {
+      where.push("(LOWER(name) LIKE $" + (params.length + 1) + " OR LOWER(company) LIKE $" + (params.length + 2) + " OR LOWER(email) LIKE $" + (params.length + 3) + ")");
+      const q = "%" + req.query.search.toLowerCase() + "%";
+      params.push(q, q, q);
+    }
+    const wc = where.length ? "WHERE " + where.join(" AND ") : "";
+    const r = await pool.query(`SELECT * FROM leads ${wc} ORDER BY updated_at DESC LIMIT 500`, params);
+    res.json({ data: r.rows.map(mapLead), total: r.rows.length });
+  } catch (err) {
+    res.json({ data: [], total: 0 });
+  }
+});
+
+app.post("/api/v1/leads", requireAuth, async (req, res) => {
+  try {
+    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes } = req.body;
+    if (!name || name.trim().length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
+    const st = LEAD_STATUS.includes(status) ? status : "novo_lead";
+    const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
+    const r = await pool.query(
+      `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null]
+    );
+    res.status(201).json({ data: mapLead(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    res.json({ data: mapLead(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
+  try {
+    const fields = [];
+    const params = [];
+    for (const k of ["name", "email", "phone", "company", "source", "notes"]) {
+      if (req.body[k] !== undefined) { fields.push(`${k} = $${params.length + 1}`); params.push(req.body[k]); }
+    }
+    if (req.body.status !== undefined) {
+      if (!LEAD_STATUS.includes(req.body.status)) return res.status(400).json({ error: "Status inválido" });
+      fields.push(`status = $${params.length + 1}`); params.push(req.body.status);
+    }
+    if (req.body.estimatedValue !== undefined) { fields.push(`estimated_value = $${params.length + 1}`); params.push(req.body.estimatedValue); }
+    if (req.body.ownerId !== undefined) { fields.push(`owner_id = $${params.length + 1}`); params.push(req.body.ownerId); }
+    if (!fields.length) return res.status(400).json({ error: "Nada para atualizar" });
+    fields.push("updated_at = NOW()");
+    params.push(req.params.id);
+    const r = await pool.query(`UPDATE leads SET ${fields.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+    if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    res.json({ data: mapLead(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/leads/:id", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("DELETE FROM leads WHERE id = $1", [req.params.id]);
+    if (r.rowCount === 0) return res.status(404).json({ error: "Lead não encontrada" });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/leads/:id/convert", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      "UPDATE leads SET status = 'convertido', converted_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *",
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    res.json({ data: mapLead(r.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/v1/plans", requireAuth, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
