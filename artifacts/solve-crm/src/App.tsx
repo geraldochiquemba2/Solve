@@ -940,7 +940,10 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
   useEffect(() => {
     if (!loaded && settingsData?.data) {
       const init: Record<string, string> = {};
-      fields.forEach(f => { init[f.key] = (settingsData.data as any)[f.key] || ''; });
+      fields.forEach(f => {
+        const v = (settingsData.data as any)[f.key];
+        init[f.key] = typeof v === 'boolean' ? '' : (v || '');
+      });
       setForm(init);
       setLoaded(true);
     }
@@ -974,7 +977,7 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
     <h3 style={{ marginBottom: '.2rem' }}>Configurar {name}</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>{fields.length > 0 ? 'Credenciais guardadas no servidor (têm prioridade sobre o Render).' : 'Sem opções configuráveis de momento.'}</div>
     {fields.map(f => <div key={f.key} style={{ marginBottom: '.6rem' }}><label className="label">{f.label}</label>
-      <input className="input" type={f.type || 'text'} placeholder={f.placeholder || ''} value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ width: '100%' }} /></div>)}
+      <input className="input" type={f.type || 'text'} placeholder={f.type === 'password' ? '•••••• (guardada — vazio mantém)' : (f.placeholder || '')} value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ width: '100%' }} /></div>)}
     {testMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem', color: testMsg.startsWith('OK') ? 'hsl(155 41% 35%)' : 'hsl(0 70% 50%)' }}>{testMsg}</div>}
     {saveMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem' }}>{saveMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '.4rem' }}>

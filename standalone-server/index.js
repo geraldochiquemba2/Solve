@@ -199,11 +199,16 @@ pool.query(`CREATE TABLE IF NOT EXISTS settings (
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
+// Chaves que nunca saem em claro pela API (devolve true/false = existe ou não)
+const SECRET_RE = /secret|password|token|api[_-]?key/i;
+
 app.get("/api/v1/settings", requireAuth, async (req, res) => {
   try {
     const r = await pool.query("SELECT key, value FROM settings WHERE key NOT LIKE 'password\\_reset\\_%' ESCAPE '\\'");
     const data = {};
-    r.rows.forEach(row => { data[row.key] = row.value; });
+    r.rows.forEach(row => {
+      data[row.key] = SECRET_RE.test(row.key) ? !!row.value : row.value;
+    });
     res.json({ data });
   } catch (err) {
     res.json({ data: {} });
@@ -215,6 +220,8 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
     const settings = req.body?.settings || req.body || {};
     for (const [key, value] of Object.entries(settings)) {
       if (key.startsWith("password_reset_")) continue;
+      // Segredo vazio = manter o guardado (nunca apagar por omissão)
+      if (SECRET_RE.test(key) && (value === "" || value === null || value === undefined)) continue;
       const jv = JSON.stringify(value ?? null);
       const upd = await pool.query(
         "UPDATE settings SET value = $2::jsonb, updated_at = NOW() WHERE key = $1",
