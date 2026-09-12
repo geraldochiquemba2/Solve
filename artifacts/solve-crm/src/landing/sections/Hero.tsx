@@ -19,7 +19,7 @@ export default function Hero() {
     <>
       <section
         id="hero"
-        className="relative w-full h-[90vh] min-h-[680px] flex items-center justify-center overflow-hidden bg-zinc-950"
+        className="relative w-full min-h-[100svh] md:h-[90vh] md:min-h-[680px] flex flex-col items-center justify-center overflow-hidden bg-zinc-950"
         aria-label="Hero — Bruno Samora"
       >
         {/* ── VIDEO BACKGROUND ── */}
@@ -134,7 +134,7 @@ export default function Hero() {
 
         {/* ── BOTTOM STATS BAR ── */}
         <motion.div
-          className="absolute bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-white/5 backdrop-blur-xl"
+          className="relative z-20 w-full mt-8 md:mt-0 md:absolute md:bottom-0 md:left-0 md:right-0 border-t border-white/10 bg-white/5 backdrop-blur-xl"
           initial={{ opacity: 0, y: 60 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1, duration: 0.8, ease: 'easeOut' }}
