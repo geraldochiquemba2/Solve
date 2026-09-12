@@ -188,6 +188,8 @@ pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
 pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).catch(() => {});
 // Add cademi_id column if missing (Cademi ↔ CRM link)
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`).catch(() => {});
+// Webhook-created payments may arrive without a known customer
+pool.query(`ALTER TABLE payments ALTER COLUMN customer_id DROP NOT NULL`).catch(() => {});
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -926,11 +928,21 @@ app.post("/webhooks/ekwanza", async (req, res) => {
     const mappedStatus = statusMap[operationStatus] || "pendente";
 
     if (merchantTransactionId && mappedStatus !== "pendente") {
-      await pool.query(
+      const upd = await pool.query(
         `UPDATE payments SET status = $1, ekwanza_operation_code = $2, paid_at = ${mappedStatus === "confirmado" ? "NOW()" : "paid_at"}, reconciled_at = ${mappedStatus === "confirmado" ? "NOW()" : "reconciled_at"}, updated_at = NOW() WHERE code = $3`,
         [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
       );
-      console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
+      if (upd.rowCount === 0) {
+        const amount = Number(operationData?.amount ?? body.amount ?? 0) || 0;
+        await pool.query(
+          `INSERT INTO payments (code, amount, method, status, reference_code, ekwanza_operation_code, metadata)
+           VALUES ($1, $2, 'mcx_express', $3, $1, $4, $5)`,
+          [merchantTransactionId, amount, mappedStatus, ekwanzaTransactionId || null, JSON.stringify(body).slice(0, 2000)]
+        );
+        console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} criado como ${mappedStatus}`);
+      } else {
+        console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
+      }
       broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
     }
 
