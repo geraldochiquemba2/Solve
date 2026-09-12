@@ -213,11 +213,16 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
     const settings = req.body?.settings || req.body || {};
     for (const [key, value] of Object.entries(settings)) {
       if (key.startsWith("password_reset_")) continue;
-      await pool.query(
-        `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      const upd = await pool.query(
+        "UPDATE settings SET value = $2, updated_at = NOW() WHERE key = $1",
         [key, String(value)]
       );
+      if (upd.rowCount === 0) {
+        await pool.query(
+          "INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())",
+          [key, String(value)]
+        );
+      }
     }
     _settingsCache = { at: 0, map: {} };
     res.json({ message: "Definições guardadas" });
