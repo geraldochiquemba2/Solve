@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, Play, X, TrendingUp, Users, Award, Clock } from 'lucide-react'
+import { ArrowRight, Play, X, TrendingUp, Users, Award, Clock, User } from 'lucide-react'
+import { Link } from 'wouter'
+import { useAuth } from '../context/AuthContext'
 
 const stats = [
   { icon: TrendingUp, value: '+120', label: 'Empresas' },
@@ -11,6 +13,7 @@ const stats = [
 
 export default function Hero() {
   const [videoOpen, setVideoOpen] = useState(false)
+  const { isAuthenticated } = useAuth()
 
   return (
     <>
@@ -102,6 +105,31 @@ export default function Hero() {
               Ver o Manifesto
             </button>
           </motion.div>
+
+          {/* Auth — Entrar / Criar conta */}
+          {!isAuthenticated && (
+            <motion.div
+              className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-3"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.85, duration: 0.8 }}
+            >
+              <Link
+                to="/login"
+                className="w-full sm:w-auto px-7 py-3 bg-transparent hover:bg-white/10 border border-white/40 text-white font-body font-semibold tracking-wide text-sm transition-all duration-300 flex items-center justify-center gap-3"
+              >
+                <User size={14} />
+                Entrar
+              </Link>
+              <Link
+                to="/login?tab=register"
+                className="w-full sm:w-auto px-7 py-3 bg-white hover:bg-zinc-200 text-zinc-950 font-body font-semibold tracking-wide text-sm transition-all duration-300 flex items-center justify-center gap-3"
+              >
+                Criar conta
+                <ArrowRight size={14} />
+              </Link>
+            </motion.div>
+          )}
         </div>
 
         {/* ── BOTTOM STATS BAR ── */}
