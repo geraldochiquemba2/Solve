@@ -561,6 +561,7 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
        FROM clientes c
        LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
        LEFT JOIN ovg_members o ON o.customer_number = c.numero_cartao
+       WHERE EXISTS (SELECT 1 FROM acessos a2 WHERE a2.cliente_id = c.id_cliente)
        GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
        ORDER BY c.nome ASC`
     );
@@ -1085,7 +1086,8 @@ app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
   try {
     const [totalCustomers, activeCustomers, totalLeads, revenue30d, pendingPayments, latePayments, integrations] = await Promise.all([
       qNum("SELECT COUNT(*) as cnt FROM clientes"),
-      qNum("SELECT COUNT(*) as cnt FROM clientes WHERE LOWER(status) = 'ativo'"),
+      // Activo = status ativo E com pelo menos 1 acesso na catraca
+      qNum("SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)"),
       qNum("SELECT COUNT(*) as cnt FROM leads"),
       qNum("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '30 days'"),
       qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'pendente'"),
