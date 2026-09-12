@@ -221,7 +221,6 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   const blockedCount = customers.filter(c => c.state === 'Bloqueado').length;
   const deniedToday = (access as any)?.accesses?.deniedToday ?? 0;
   const onlineNow = (access as any)?.clients?.online ?? 0;
-  const [, setLocation] = useLocation();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQ, setCmdQ] = useState('');
   const [chartRange, setChartRange] = useState<'mes' | 'tudo'>('mes');
