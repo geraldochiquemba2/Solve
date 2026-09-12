@@ -770,9 +770,8 @@ function AccessPage() {
   };
 
   return <><PageHeader eyebrow="Controlo de Acesso · Solve Access" title="Acesso Físico" subtitle={`Solve Access: ${isConnected ? 'Conectado' : 'Desconectado'} · ${solveHealth.data?.source ?? '—'}`} action={<div style={{ display: 'flex', gap: '.45rem' }}><Status tone={connected ? 'live' : 'danger'}>{connected ? '● Live' : '○ Offline'}</Status><button className="btn-secondary"><RefreshCw size={14} /> Sincronizar</button></div>} />
-  <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}>
+  <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}>
     <Metric label="Clientes activos" value={access?.clients.active?.toString() ?? '—'} note={`${access?.clients.total ?? 0} total`} />
-    <Metric label="Pessoas hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} entradas`} />
     <Metric label="Terminais online" value={terminals?.online ? '1' : '0'} note={terminals?.online ? (terminals.nome_terminal || 'Terminal') : 'Nenhum online'} />
     <Metric label="Acessos hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} autorizados`} />
   </div>
