@@ -367,7 +367,7 @@ function PlansPage() {
       <div style={{ flex: 1 }}><label className="label">Preço (Kz)</label>
       <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
       <div style={{ flex: 1 }}><label className="label">Periodicidade</label>
-      <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
+      <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="avulso">Avulso</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="3_semanas">3 semanas</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
     </div>
     <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginTop: '.8rem', fontSize: '.8rem' }}><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> Plano activo</label>
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
