@@ -13,7 +13,7 @@ export default function Login() {
   const { login, register } = useAuth()
   const { isDark } = useTheme()
   const [, navigate] = useLocation()
-  const [tab, setTab] = useState<Tab>('login')
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') === 'register' ? 'register' : 'login'))
   const [showPass, setShowPass] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)

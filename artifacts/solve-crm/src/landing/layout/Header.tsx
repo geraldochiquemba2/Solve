@@ -275,6 +275,31 @@ export default function Header() {
                   <span className="font-body text-xs uppercase tracking-wider" style={{ color: textMuted }}>Tema</span>
                   <ThemeToggle />
                 </div>
+                {isAuthenticated ? (
+                  <>
+                    <Link to={isAdmin ? '/admin' : '/dashboard'} onClick={() => setMobileOpen(false)}
+                      className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase text-white bg-[#D71920] py-3 hover:bg-[#FF3038] transition-colors rounded-sm">
+                      <User size={16} /> {user?.name?.split(' ')[0] || 'Minha conta'}
+                    </Link>
+                    <button onClick={() => { logout(); setMobileOpen(false); navigate('/') }}
+                      className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase py-3 transition-colors rounded-sm"
+                      style={{ color: textMuted, border: `1px solid ${dividerColor}` }}>
+                      <LogOut size={16} /> Sair
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" onClick={() => setMobileOpen(false)}
+                      className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase text-white bg-[#D71920] py-3 hover:bg-[#FF3038] transition-colors rounded-sm">
+                      <User size={16} /> Entrar
+                    </Link>
+                    <Link to="/login?tab=register" onClick={() => setMobileOpen(false)}
+                      className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase py-3 transition-colors rounded-sm"
+                      style={{ color: textPrimary, border: `1px solid ${dividerColor}` }}>
+                      Criar conta
+                    </Link>
+                  </>
+                )}
                 <button
                   onClick={() => { setMobileOpen(false); setCartOpen(true) }}
                   className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase text-white bg-[#D71920] py-3 hover:bg-[#FF3038] transition-colors rounded-sm"
