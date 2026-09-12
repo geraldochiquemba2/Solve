@@ -61,6 +61,8 @@ const CADEMI_API_KEY = process.env.CADEMI_API_KEY || "";
 // no mesmo dia → oculto das contagens e listas em todo o CRM. Sócios têm
 // nome completo e ≤3 entradas/dia. Alias da tabela clientes como argumento.
 const isMember = (alias) => `(TRIM(${alias}.nome) LIKE '% %' AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = ${alias}.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3))`;
+// Registos apagados têm numero_cartao com sufixo _del → ocultar também.
+const notDeleted = (alias) => `(COALESCE(POSITION('_del' IN ${alias}.numero_cartao), 0) = 0)`;
 
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -337,18 +339,19 @@ app.get("/api/v1/access/sync-status", async (req, res) => {
 app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
   try {
     const M = isMember("c");
-    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M}`);
-    const todayResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND a.data_acesso::date = CURRENT_DATE`);
-    const authorizedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) = 'autorizado'`);
-    const deniedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) != 'autorizado'`);
-    const uniqueClients = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M}`);
-    const clientsToday = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND a.data_acesso::date = CURRENT_DATE`);
-    const onlineNow = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")}`);
+    const ND = notDeleted("c");
+    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND}`);
+    const todayResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE`);
+    const authorizedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) = 'autorizado'`);
+    const deniedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) != 'autorizado'`);
+    const uniqueClients = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND}`);
+    const clientsToday = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND a.data_acesso::date = CURRENT_DATE`);
+    const onlineNow = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")} AND ${notDeleted("clientes")}`);
     const recentAccesses = await pool.query(
       `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text, a.hora_acesso,
               a.tipo_acesso, a.resultado, a.motivo
        FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente
-       WHERE ${M}
+       WHERE ${M} AND ${ND}
        ORDER BY a.id_acesso DESC LIMIT 10`
     );
 
@@ -382,8 +385,9 @@ app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
     const where = [];
     const params = [];
 
-    // Ocultar funcionários em todas as listagens
+    // Ocultar funcionários e registos apagados em todas as listagens
     where.push(isMember("c"));
+    where.push(notDeleted("c"));
 
     if (req.query.client_id) {
       where.push("a.cliente_id = $" + (params.length + 1));
@@ -443,7 +447,7 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
     const lastSync = recentResult.rows[0]?.last_sync;
     const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 30 * 60 * 1000;
 
-    const onlineClients = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")}`);
+    const onlineClients = await pool.query(`SELECT COUNT(*) as cnt FROM clientes WHERE online = true AND ${isMember("clientes")} AND ${notDeleted("clientes")}`);
 
     res.json({
       data: {
@@ -515,6 +519,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
       `SELECT DISTINCT
         a.cliente_id as id_cliente,
         c.nome as nome,
+        c.numero_cartao as numero_cartao,
         MAX(a.data_acesso::text) as ultimo_acesso,
         MAX(a.hora_acesso) as ultimo_hora,
         COUNT(*) as total_acessos,
@@ -538,7 +543,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
        GROUP BY a.cliente_id, c.nome, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, c.status, c.numero_cartao, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
        ORDER BY c.nome ASC`
     );
-    // Filtra funcionários (regra: nome único OU >3 entradas no mesmo dia)
+    // Filtra funcionários (nome único OU >3 entradas/dia) e registos apagados (_del)
     let staffIds = new Set();
     try {
       const s = await pool.query(
@@ -548,6 +553,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
     } catch {}
     const filtered = result.rows.filter(r => {
       if (!(r.nome || '').trim().includes(' ')) return false;
+      if ((r.numero_cartao || '').includes('_del')) return false;
       if (staffIds.has(String(r.id_cliente))) return false;
       return true;
     });
@@ -589,6 +595,7 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
        WHERE EXISTS (SELECT 1 FROM acessos a2 WHERE a2.cliente_id = c.id_cliente)
          AND (TRIM(c.nome) LIKE '% %')
          AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
+         AND (COALESCE(POSITION('_del' IN c.numero_cartao), 0) = 0)
        GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
        ORDER BY c.nome ASC`
     );
@@ -623,6 +630,7 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
        WHERE c.id_cliente = $1
          AND (TRIM(c.nome) LIKE '% %')
          AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
+         AND (COALESCE(POSITION('_del' IN c.numero_cartao), 0) = 0)
        GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number`,
       [req.params.id]
     );
@@ -1121,9 +1129,9 @@ async function getIntegrationsLive() {
 app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
   try {
     const [totalCustomers, activeCustomers, totalLeads, revenue30d, pendingPayments, latePayments, integrations] = await Promise.all([
-      qNum(`SELECT COUNT(*) as cnt FROM clientes WHERE ${isMember("clientes")}`),
+      qNum(`SELECT COUNT(*) as cnt FROM clientes WHERE ${isMember("clientes")} AND ${notDeleted("clientes")}`),
       // Activo = status ativo E sócio (não funcionário) E com pelo menos 1 acesso na catraca
-      qNum(`SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND ${isMember("c")} AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)`),
+      qNum(`SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND ${isMember("c")} AND ${notDeleted("c")} AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)`),
       qNum("SELECT COUNT(*) as cnt FROM leads"),
       qNum("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '30 days'"),
       qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'pendente'"),
