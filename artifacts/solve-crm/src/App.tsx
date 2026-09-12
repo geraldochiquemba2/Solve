@@ -97,12 +97,15 @@ function mapApiCustomer(c: any): Customer {
   const fallbackState = (c.client_status ?? '').toString().toLowerCase();
   const normState = rawState || fallbackState;
   const isBlocked = c.bloqueado === true;
+  // OVG usa ortografia brasileira (ativo/inativo, sem C); acesso local usa europeia (activo)
+  const isActive = normState === 'activo' || normState === 'ativo';
+  const isInactive = normState === 'inactivo' || normState === 'inativo';
   return {
     id: c.code ?? c.id ?? '',
     name: c.name ?? '',
     company: c.company ?? '',
     plan: isAccessClient ? 'Solve Access' : (c.planName ?? ''),
-    state: isBlocked ? 'Bloqueado' : normState === 'activo' ? 'Activo' : normState === 'inactivo' ? 'Inactivo' : normState === 'em_atraso' ? 'Em atraso' : normState === 'suspenso' ? 'Suspenso' : (c.state || c.client_status || 'Activo'),
+    state: isBlocked ? 'Bloqueado' : isActive ? 'Activo' : isInactive ? 'Inactivo' : normState === 'em_atraso' ? 'Em atraso' : normState === 'suspenso' ? 'Suspenso' : (c.state || c.client_status || 'Activo'),
     joined,
     expires: isAccessClient ? '' : formatDate(c.subscriptionEnd ?? null),
     email: c.email ?? '',
