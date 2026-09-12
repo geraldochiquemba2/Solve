@@ -1028,6 +1028,12 @@ app.get("/api/v1/cademi/tags", requireAuth, async (req, res) => {
   res.json({ data: r.data?.itens || [], total: (r.data?.itens || []).length });
 });
 
+app.get("/api/v1/cademi/products/:id/lessons", requireAuth, async (req, res) => {
+  const r = await cademiFetch(`/item/lista_por_produto/${encodeURIComponent(req.params.id)}`);
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.itens || [], total: (r.data?.itens || []).length });
+});
+
 // Sync: grava cademi_id nos customers por email
 app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
   const r = await cademiFetch("/usuario?usuario_email_id_doc=");
