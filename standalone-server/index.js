@@ -415,6 +415,19 @@ app.get("/api/v1/access/sync-status", async (req, res) => {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
+// Quem ficou "preso" (online=true sem movimento hoje, ex. após a meia-noite)
+// é marcado como fora. Só toca em quem NÃO tem movimentos hoje — seguro
+// para correr em qualquer leitura.
+async function midnightReset() {
+  try {
+    await pool.query(
+      `UPDATE clientes SET online = false WHERE online = true AND id_cliente NOT IN (
+         SELECT DISTINCT cliente_id FROM acessos WHERE data_acesso::date = CURRENT_DATE
+       )`
+    );
+  } catch {}
+}
+
 // Quem está dentro AGORA: última movimentação de hoje é entrada
 // (não usa a flag online, que dessincroniza quando passam sem picar)
 async function countInsideNow() {
@@ -432,8 +445,22 @@ async function countInsideNow() {
   } catch { return 0; }
 }
 
+app.post("/api/v1/access/midnight-reset", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE clientes SET online = false WHERE online = true AND id_cliente NOT IN (
+         SELECT DISTINCT cliente_id FROM acessos WHERE data_acesso::date = CURRENT_DATE
+       )`
+    );
+    res.json({ ok: true, checkedOut: r.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
   try {
+    await midnightReset();
     const M = isMember("c");
     const ND = notDeleted("c");
     const E = "a.tipo_acesso = 'entrada'";
@@ -538,6 +565,7 @@ app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
 
 app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
   try {
+    await midnightReset();
     const recentResult = await pool.query(
       "SELECT MAX(data_acesso || ' ' || hora_acesso) as last_sync FROM acessos"
     );
@@ -612,6 +640,7 @@ app.post("/api/v1/terminal/unlock", async (req, res) => {
 
 app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
   try {
+    await midnightReset();
     const result = await pool.query(
       `SELECT DISTINCT
         a.cliente_id as id_cliente,
@@ -664,6 +693,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
 
 app.get("/api/v1/customers", requireAuth, async (req, res) => {
   try {
+    await midnightReset();
     const result = await pool.query(
       `SELECT DISTINCT
         c.id_cliente as id,
