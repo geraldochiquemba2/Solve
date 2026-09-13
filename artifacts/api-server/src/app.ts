@@ -81,6 +81,7 @@ app.get("/healthz", (_req, res) => {
 
 // Auth rate limiting
 app.use("/api/v1/auth", authRateLimit);
+app.use("/api/v1/portal", authRateLimit);
 
 // Webhook rate limiting
 app.use("/api/v1/webhooks", webhookRateLimit);

@@ -11,6 +11,7 @@ vi.mock("@workspace/db", () => {
     paymentsTable: { findFirst: createMock(), findMany: createMock() },
     subscriptionsTable: { findFirst: createMock(), findMany: createMock() },
     settingsTable: { findFirst: createMock(), findMany: createMock() },
+    portalOtpsTable: { findFirst: createMock(), findMany: createMock() },
   };
 
   const chainable = () => {
@@ -35,6 +36,7 @@ vi.mock("@workspace/db", () => {
       update: vi.fn(() => chainable()),
       delete: vi.fn(() => chainable()),
       $count: vi.fn().mockResolvedValue(0),
+      execute: vi.fn().mockResolvedValue({ rows: [{ cnt: 0 }] }),
     },
   };
 });

@@ -87,3 +87,10 @@ export const webhookRateLimit = rateLimit({
   message: "Demasiados webhooks.",
   keyFn: (req) => `webhook:${req.ip}:${req.path}`,
 });
+
+// Só para testes (vitest): limpa os contadores em memória entre casos.
+// Não altera comportamento em produção.
+export function __clearRateLimits() {
+  store.clear();
+  lastCleanup = Date.now();
+}

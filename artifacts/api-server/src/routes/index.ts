@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
+import portalAuthRouter from "./portal-auth";
 import leadsRouter from "./leads";
 import customersRouter from "./customers";
 import plansRouter from "./plans";
@@ -20,6 +21,7 @@ import apiKeysRouter from "./api-keys";
 import accessRouter from "./access";
 import checkinsRouter from "./checkins";
 import solveAccessRouter from "./solve-access";
+import portalRouter from "./portal";
 import { errorHandler, notFoundHandler } from "../middlewares/error";
 
 const router: IRouter = Router();
@@ -29,6 +31,7 @@ router.use(healthRouter);
 
 // Auth (public)
 router.use(authRouter);
+router.use(portalAuthRouter);
 
 // Protected routes
 router.use(leadsRouter);
@@ -50,6 +53,7 @@ router.use(apiKeysRouter);
 router.use(accessRouter);
 router.use(checkinsRouter);
 router.use('/solve-access', solveAccessRouter);
+router.use(portalRouter);
 
 // Error handling
 router.use(notFoundHandler);

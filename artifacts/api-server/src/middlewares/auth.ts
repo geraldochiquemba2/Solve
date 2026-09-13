@@ -36,6 +36,13 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    // Isolamento portal-cliente: tokens com role=cliente só valem nas rotas
+    // /portal/* (authenticatePortal). Todas as rotas staff usam este
+    // middleware — sem isto um token portal lia GETs staff sem authorize.
+    if ((decoded as unknown as Record<string, unknown>).role === "cliente") {
+      res.status(403).json({ error: "Sem permissão para esta acção" });
+      return;
+    }
     req.user = decoded;
     next();
   } catch {

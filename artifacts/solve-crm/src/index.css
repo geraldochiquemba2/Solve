@@ -565,13 +565,14 @@ button, a, input, select { transition: background-color .18s ease, border-color 
 .progress-track { height:5px; background:hsl(var(--muted)); border-radius:99px; overflow:hidden; }
 .progress-fill { height:100%; border-radius:inherit; background:hsl(var(--chart-2)); }
 .mobile-only { display:none; }
+.mobile-overlay { display:none; }
 @media (max-width: 900px) { .sidebar { width:210px !important; } .content-grid { grid-template-columns:1fr !important; } }
 @media (max-width: 700px) {
   .mobile-only { display:flex; }
   .desktop-only { display:none !important; }
   .sidebar { position:fixed; inset:0 auto 0 0; z-index:40; width:255px !important; transform:translateX(-102%); transition:transform .2s ease; box-shadow:var(--shadow-lg); }
   .sidebar.open { transform:translateX(0); }
-  .mobile-overlay { display:block !important; position:fixed; inset:0; z-index:35; background:hsl(222 46% 14% / .4); }
+  .mobile-overlay { display:block; position:fixed; inset:0; z-index:35; background:hsl(222 46% 14% / .4); }
   .main-area { margin-left:0 !important; flex:1; }
   .topbar { padding:.8rem 1rem !important; }
   .page-content { padding:1rem !important; }

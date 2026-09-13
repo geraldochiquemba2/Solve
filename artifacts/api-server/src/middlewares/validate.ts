@@ -14,7 +14,18 @@ export function validate(schema: ZodSchema, source: "body" | "query" | "params" 
       return;
     }
 
-    req[source] = result.data;
+    // Express 5: req.query (e req.params) é getter-only — reatribuição direta
+    // lança TypeError. Para query/params faz merge in-place; body continua a
+    // ser substituído pelos dados validados.
+    if (source === "query" || source === "params") {
+      const target = (req as unknown as Record<string, unknown>)[source] as Record<string, unknown>;
+      if (target && typeof target === "object") {
+        for (const k of Object.keys(target)) delete target[k];
+        Object.assign(target, result.data as Record<string, unknown>);
+      }
+    } else {
+      req[source] = result.data;
+    }
     next();
   };
 }

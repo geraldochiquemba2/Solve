@@ -234,6 +234,17 @@ export const solveAccessLogsTable = pgTable("solve_access_logs", {
   syncedAt: timestamp("synced_at").notNull().defaultNow(),
 });
 
+// ─── Portal do Cliente: OTPs de login via WhatsApp ──────────────────────────
+export const portalOtpsTable = pgTable("portal_otps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  consumed: boolean("consumed").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 export const paymentsRelations = relations(paymentsTable, ({ one }) => ({
   customer: one(customersTable, {
