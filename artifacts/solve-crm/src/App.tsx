@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -27,6 +27,12 @@ import Store from '@/landing/Store';
 import ProductDetail from '@/landing/ProductDetail';
 import FitWorkout from '@/landing/FitWorkout';
 import FitStudio from '@/landing/FitStudio';
+// Portal do Cliente (/conta/*) — sessão separada (portal_token), OTP via WhatsApp
+import ContaLogin from '@/portal/ContaLogin';
+import MinhaConta from '@/portal/MinhaConta';
+import PortalPagamentos from '@/portal/Pagamentos';
+import PortalRecibo from '@/portal/Recibo';
+import PortalShell from '@/portal/PortalShell';
 import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, useSaveSettings, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
 import {
   useListLeads,
@@ -164,7 +170,7 @@ function Sidebar({ open, onClose, auditCount }: { open: boolean; onClose: () => 
     <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><div style={{ width: 31, height: 31, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'hsl(var(--sidebar-primary))', color: 'hsl(var(--sidebar-primary-foreground))', fontWeight: 800, letterSpacing: '-.08em' }}>SC</div><div><div style={{ fontWeight: 700, color: 'white', fontSize: '.86rem' }}>Solve Corporate</div><div style={{ fontSize: '.6rem', color: 'hsl(var(--sidebar-foreground))', letterSpacing: '.08em', textTransform: 'uppercase' }}>Command center</div></div></div>
     <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{navGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
     <button onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }} className="sidebar-link" style={{ marginTop: 'auto', padding: '.55rem .7rem', borderRadius: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.75rem', color: 'hsl(3 67% 55%)', cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left' }}><LogOut size={15} /><span>Sair da sessão</span></button>
-  </aside><div className="mobile-overlay" style={{ display: 'none' }} onClick={onClose} /></>;
+  </aside>{open && <div className="mobile-overlay" onClick={onClose} />}</>;
 }
 function Topbar({ onMenu, userName }: { onMenu: () => void; userName?: string }) {
   const today = new Date().toLocaleDateString('pt-AO', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
@@ -676,18 +682,54 @@ function PaymentsPage() {
       });
       if (res.ok) {
         const json = await res.json();
-        setPaymentsData(json.data || []);
+        const rows = json.data || [];
+        setPaymentsData(rows);
+        return rows;
       }
     } catch (e) { console.error(e); }
     setLoading(false);
+    return null;
   };
 
-  useEffect(() => { fetchPayments(); }, []);
+  useEffect(() => { fetchPayments().finally(() => setLoading(false)); }, []);
 
   // Realtime: SSE push + polling de segurança a cada 20s
   usePaymentStream(() => { fetchPayments(); });
   useEffect(() => {
     const t = setInterval(() => { fetchPayments(); }, 20000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Auto-sync: pergunta à É-kwanza o estado dos pendentes a cada 30s.
+  // Sem isto o estado fica preso em "pendente" até alguém clicar Sincronizar.
+  const syncingRef = useRef(false);
+  const syncPendentes = async (rows?: any[]) => {
+    if (syncingRef.current) return 0;
+    const list = rows ?? paymentsDataRef.current;
+    const pend = list.filter((p: any) => p.status === 'pendente').slice(0, 10);
+    if (pend.length === 0) return 0;
+    syncingRef.current = true;
+    let changed = 0;
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      for (const p of pend) {
+        try {
+          const r = await fetch(`${apiBase}/api/v1/payments/ekwanza/check-status/${p.code || p.id}`, {
+            headers: { 'X-API-Key': apiKey },
+          });
+          const j = await r.json().catch(() => null);
+          if (j?.changed) changed++;
+          await new Promise(r2 => setTimeout(r2, 300));
+        } catch {}
+      }
+    } finally { syncingRef.current = false; }
+    if (changed > 0) await fetchPayments();
+    return changed;
+  };
+  const paymentsDataRef = useRef<any[]>([]);
+  paymentsDataRef.current = paymentsData;
+  useEffect(() => {
+    const t = setInterval(() => { syncPendentes(); }, 30000);
     return () => clearInterval(t);
   }, []);
 
@@ -706,34 +748,40 @@ function PaymentsPage() {
     setCharging(true); setCMsg('');
     try {
       const apiBase3 = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${apiBase3}/api/v1/payments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({ amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, description: cDesc.trim() || undefined }),
-      });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      let res: Response;
+      try {
+        res = await fetch(`${apiBase3}/api/v1/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+          body: JSON.stringify({ amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, description: cDesc.trim() || undefined }),
+          signal: ctrl.signal,
+        });
+      } finally { clearTimeout(timer); }
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.statusText);
-      setCMsg(`Criado ${json.data?.code || ''} como pendente${json.data?.ekwanza_code ? ' · cobrança enviada' : ''}`);
-      setCAmount(''); setCPhone(''); setCDesc('');
-      await fetchPayments();
-    } catch (e: any) { setCMsg('Erro: ' + e.message); }
-    setCharging(false);
+      // Fecha o modal DE IMEDIATO — o backend já respondeu (<300ms).
+      // A cobrança É-kwanza corre em background no servidor.
+      setChargeOpen(false);
+      setCAmount(''); setCPhone(''); setCDesc(''); setCMsg('');
+      setCharging(false);
+      const rows = await fetchPayments(); // refresh em background, sem bloquear o fecho
+      // Re-verifica o estado na É-kwanza aos 15s/45s/90s (o cliente aprova no telefone).
+      [15000, 45000, 90000].forEach(dt => setTimeout(() => { syncPendentes(rows || undefined); }, dt));
+    } catch (e: any) {
+      if (e?.name === 'AbortError') setCMsg('Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.');
+      else setCMsg('Erro: ' + e.message);
+      setCharging(false);
+    }
   };
   const syncNow = async () => {
     setSyncing(true);
     try {
+      const rows = await fetchPayments();
+      const changed = await syncPendentes(rows || undefined);
       await fetchPayments();
-      const pend = paymentsData.filter((p: any) => p.status === 'pendente').slice(0, 20);
-      const apiBase2 = import.meta.env.VITE_API_URL || '';
-      for (const p of pend) {
-        try {
-          await fetch(`${apiBase2}/api/v1/payments/ekwanza/check-status/${p.code || p.id}`, {
-            headers: { 'X-API-Key': apiKey },
-          });
-          await new Promise(r => setTimeout(r, 400));
-        } catch {}
-      }
-      await fetchPayments();
+      if (changed > 0) console.log(`[SYNC] ${changed} pagamento(s) actualizado(s)`);
     } catch {}
     setSyncing(false);
   };
@@ -1226,6 +1274,23 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function ProtectedPortal({ children }: { children: ReactNode }) {
+  const [, setLocation] = useLocation();
+  const [ok, setOk] = useState<boolean | null>(null);
+  useEffect(() => {
+    const t = localStorage.getItem('portal_token');
+    if (!t) {
+      setOk(false);
+      setLocation('/conta/login');
+    } else {
+      setOk(true);
+    }
+  }, [setLocation]);
+  if (ok === null) return <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', color: 'hsl(var(--muted-foreground))', fontSize: '.8rem' }}>A verificar sessão…</div>;
+  if (!ok) return null;
+  return <>{children}</>;
+}
+
 function AccessPage() {
   const [filter, setFilter] = useState(() => {
     const f = new URLSearchParams(window.location.search).get('resultado');
@@ -1408,6 +1473,11 @@ function App() {
               <Route path="/store/:id" component={() => <LandingSubPage><ProductDetail /></LandingSubPage>} />
               <Route path="/fit-workout" component={() => <LandingSubPage><FitWorkout /></LandingSubPage>} />
               <Route path="/fit-studio" component={() => <LandingSubPage><FitStudio /></LandingSubPage>} />
+              {/* Portal do Cliente (OTP, sessão portal_token) */}
+              <Route path="/conta/login" component={ContaLogin} />
+              <Route path="/conta/pagamentos" component={() => <ProtectedPortal><PortalShell><PortalPagamentos /></PortalShell></ProtectedPortal>} />
+              <Route path="/conta/recibos/:id" component={() => <ProtectedPortal><PortalShell><PortalRecibo /></PortalShell></ProtectedPortal>} />
+              <Route path="/conta" component={() => <ProtectedPortal><PortalShell><MinhaConta /></PortalShell></ProtectedPortal>} />
               {/* CRM (protected) */}
               <Route component={() => <ProtectedRoute><CRM /></ProtectedRoute>} />
             </Switch>

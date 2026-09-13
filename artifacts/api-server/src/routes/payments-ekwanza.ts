@@ -267,9 +267,11 @@ router.get(
   authenticate,
   async (req, res, next) => {
     try {
-      const { id } = req.params;
+      const rawId = req.params.id;
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      const { or } = await import("drizzle-orm");
       const payment = await db.query.paymentsTable.findFirst({
-        where: eq(paymentsTable.id, id),
+        where: or(eq(paymentsTable.id, id), eq(paymentsTable.code, id)),
       });
 
       if (!payment) throw new AppError(404, "Pagamento não encontrado");

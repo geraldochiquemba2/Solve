@@ -977,13 +977,27 @@ function broadcastPaymentUpdate(data) {
 
 app.post("/webhooks/ekwanza", async (req, res) => {
   try {
-    const body = req.body;
+    const body = req.body || {};
     console.log("[EKWANZA-WEBHOOK] Callback recebido:", JSON.stringify(body).slice(0, 500));
 
-    const { merchantTransactionId, ekwanzaTransactionId, operationStatus, operationData } = body;
+    // Aceita variações de nomes/casing que a É-kwanza possa enviar.
+    const merchantTransactionId =
+      body.merchantTransactionId ?? body.merchant_transaction_id ?? body.merchanttransactionid ??
+      body.code ?? body.reference ?? body.merchantReference ?? null;
+    const ekwanzaTransactionId =
+      body.ekwanzaTransactionId ?? body.ekwanza_transaction_id ?? body.providerTransactionId ??
+      body.transactionId ?? body.id ?? null;
+    const operationStatus = body.operationStatus ?? body.operation_status ?? body.operationStatusCode ?? body.statusCode;
+    const rawStatus = body.status ?? body.paymentStatus ?? body.chargeStatus ?? null;
+    const operationData = body.operationData ?? body.data ?? null;
 
     const statusMap = { 1: "confirmado", 3: "rejeitado", 4: "rejeitado", 5: "rejeitado" };
-    const mappedStatus = statusMap[operationStatus] || "pendente";
+    let mappedStatus = statusMap[Number(operationStatus)] || "pendente";
+    if (mappedStatus === "pendente" && rawStatus != null) {
+      const s = String(rawStatus).toLowerCase();
+      if (["success", "successful", "paid", "confirmado", "completed", "1"].includes(s)) mappedStatus = "confirmado";
+      else if (["failed", "fail", "cancelled", "canceled", "expired", "rejected", "rejeitado", "error", "3", "4", "5"].includes(s)) mappedStatus = "rejeitado";
+    }
 
     if (merchantTransactionId && mappedStatus !== "pendente") {
       let upd;
@@ -1092,8 +1106,9 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
   }
 });
 
-// Criar pagamento: regista SEMPRE como pendente primeiro; se for Express
-// com telefone, dispara a cobrança Ekwanza em seguida (sem bloquear).
+// Criar pagamento: regista como pendente e responde DE IMEDIATO (<300ms).
+// A cobrança Ekwanza corre em background (fire-and-forget) para o modal
+// fechar sem esperar pelo OAuth + POST GPO (10-45s).
 app.post("/api/v1/payments", requireAuth, async (req, res) => {
   try {
     const { amount, method, customer_id, customer_phone, description, reference_code } = req.body || {};
@@ -1102,73 +1117,110 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
     const m = method || "mcx_express";
     const code = "SC" + Date.now().toString(36).toUpperCase();
     const r = await pool.query(
-      `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata)
-       VALUES ($1, $2, $3, $4, 'pendente', $5, $6) RETURNING *`,
+      `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
+       VALUES ($1, $2, $3, $4, 'pendente', $5, $6, NOW() + INTERVAL '24 hours') RETURNING *`,
       [code, customer_id || null, amt, m, reference_code || code,
        JSON.stringify({ phone: customer_phone || null, description: description || null })]
     );
     const payment = r.rows[0];
-    const linkCharge = async (chargeId) => {
-      if (!chargeId) return;
-      await pool.query("UPDATE payments SET ekwanza_code = $1 WHERE id = $2", [chargeId, payment.id]);
-      payment.ekwanza_code = chargeId;
-    };
-    const recoverCharge = async (token) => {
-      // O POST pode processar no servidor mesmo sem resposta: recuperar pelo TXID
-      try {
-        const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
-        const chk = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(code)}`, {
-          headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0", Authorization: `Bearer ${token}` },
-        });
-        const chkJson = await chk.json();
-        const found = (chkJson.payments || [])[0];
-        if (found?.id) await linkCharge(found.id);
-        return found || null;
-      } catch { return null; }
-    };
-    if (m === "mcx_express" && customer_phone) {
-      try {
-        const token = await getEkwanzaToken();
-        const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 45000);
-        let charge = null;
-        try {
-          const cResp = await fetch(`${gpoUrl}/charges`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json", Accept: "application/json",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              amount: amt, currency: "AOA", description: description || `Pagamento ${code}`,
-              merchantTransactionId: code,
-              paymentMethod: `GPO_${await cfg("ekwanza_gpo_payment_method", process.env.EKWANZA_GPO_PAYMENT_METHOD || "")}`,
-              options: {
-                MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
-                ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
-              },
-              paymentInfo: { phoneNumber: customer_phone },
-            }),
-            signal: ctrl.signal,
-          });
-          charge = await cResp.json();
-          if (cResp.ok && charge.id) await linkCharge(charge.id);
-          else await recoverCharge(token);
-        } finally { clearTimeout(timer); }
-      } catch (e) {
-        console.error("[PAYMENTS] Falha ao disparar cobrança, mantém pendente:", e.message);
-        try {
-          const token = await getEkwanzaToken().catch(() => null);
-          if (token) await recoverCharge(token);
-        } catch {}
-      }
-    }
+    // Resposta imediata — o frontend fecha o modal aqui.
     broadcastPaymentUpdate({ type: "payment_created", code, status: "pendente" });
     res.status(201).json({ data: payment });
+
+    // Background: dispara cobrança Ekwanza sem bloquear a resposta.
+    if (m === "mcx_express" && customer_phone) {
+      setImmediate(async () => {
+        const applyStatus = async (rawStatus, providerTxId) => {
+          // Mapeia resposta síncrona GPO (case-insensitive) para estado interno.
+          const s = String(rawStatus || "").toLowerCase();
+          let mapped = null;
+          if (["success", "successful", "paid", "confirmado", "completed"].includes(s)) mapped = "confirmado";
+          else if (["failed", "fail", "cancelled", "canceled", "expired", "rejected", "error"].includes(s)) mapped = "rejeitado";
+          if (!mapped) return;
+          try {
+            if (mapped === "confirmado") {
+              await pool.query(
+                "UPDATE payments SET status='confirmado', paid_at=NOW(), reconciled_at=NOW(), updated_at=NOW() WHERE code=$1 AND status='pendente'",
+                [code]
+              );
+            } else {
+              await pool.query(
+                "UPDATE payments SET status='rejeitado', updated_at=NOW() WHERE code=$1 AND status='pendente'",
+                [code]
+              );
+            }
+            broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
+            console.log(`[PAYMENTS] ${code}: pendente -> ${mapped} (resposta GPO: ${rawStatus})`);
+          } catch {}
+        };
+        const linkCharge = async (chargeId) => {
+          if (!chargeId) return;
+          try {
+            await pool.query("UPDATE payments SET ekwanza_code = $1 WHERE id = $2", [chargeId, payment.id]);
+            payment.ekwanza_code = chargeId;
+          } catch {}
+        };
+        const recoverCharge = async (token) => {
+          // O POST pode processar no servidor mesmo sem resposta: recuperar pelo TXID
+          try {
+            const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
+            const chk = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(code)}`, {
+              headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0", Authorization: `Bearer ${token}` },
+            });
+            const chkJson = await chk.json();
+            const found = (chkJson.payments || [])[0];
+            if (found?.id) await linkCharge(found.id);
+            return found || null;
+          } catch { return null; }
+        };
+        try {
+          const token = await getEkwanzaToken();
+          const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 45000);
+          try {
+            const cResp = await fetch(`${gpoUrl}/charges`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json", Accept: "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                amount: amt, currency: "AOA", description: description || `Pagamento ${code}`,
+                merchantTransactionId: code,
+                paymentMethod: `GPO_${await cfg("ekwanza_gpo_payment_method", process.env.EKWANZA_GPO_PAYMENT_METHOD || "")}`,
+                options: {
+                  MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
+                  ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
+                },
+                paymentInfo: { phoneNumber: customer_phone },
+              }),
+              signal: ctrl.signal,
+            });
+            const charge = await cResp.json().catch(() => null);
+            if (charge?.id) await linkCharge(charge.id);
+            // A resposta síncrona já pode trazer o estado final — aplica-o.
+            const syncStatus =
+              charge?.status ||
+              charge?.responseStatus?.status ||
+              (charge?.responseStatus?.successful === true ? "Success" : null) ||
+              (charge?.responseStatus?.success === true ? "Success" : null);
+            if (syncStatus) await applyStatus(syncStatus, charge?.id);
+            if (!cResp.ok || !charge?.id) await recoverCharge(token);
+            broadcastPaymentUpdate({ type: "payment_updated", code, status: "pendente", ekwanza_sent: true });
+          } finally { clearTimeout(timer); }
+        } catch (e) {
+          console.error("[PAYMENTS] Falha ao disparar cobrança em background, mantém pendente:", e.message);
+          try {
+            const token = await getEkwanzaToken().catch(() => null);
+            if (token) await recoverCharge(token);
+          } catch {}
+        }
+      });
+    }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -1869,7 +1921,8 @@ app.get("/api/v1/subscriptions", requireAuth, async (req, res) => {
 app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const paymentResult = await pool.query("SELECT * FROM payments WHERE code = $1", [id]);
+    // Aceita code (SC...) ou id (uuid) — o frontend envia code.
+    const paymentResult = await pool.query("SELECT * FROM payments WHERE code = $1 OR CAST(id AS TEXT) = $1", [id]);
     if (paymentResult.rows.length === 0) {
       return res.status(404).json({ error: "Pagamento não encontrado" });
     }
@@ -1882,12 +1935,13 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
       return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "QUERY_FAILED", currentStatus: payment.status });
     }
     const chargeData = await chargeResp.json();
-    const charge = chargeData.payments?.[0];
+    const charge = chargeData.payments?.[0] || chargeData.payment || chargeData.data || null;
     if (!charge) {
       return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "NOT_FOUND", currentStatus: payment.status });
     }
-    const statusMap = { Success: "confirmado", Pending: "pendente", Failed: "rejeitado", Cancelled: "rejeitado", Expired: "rejeitado" };
-    const newStatus = statusMap[charge.status] || payment.status;
+    const rawChargeStatus = String(charge.status ?? charge.paymentStatus ?? charge.state ?? "").toLowerCase();
+    const statusMap = { success: "confirmado", successful: "confirmado", paid: "confirmado", confirmado: "confirmado", completed: "confirmado", pending: "pendente", pendente: "pendente", failed: "rejeitado", fail: "rejeitado", cancelled: "rejeitado", canceled: "rejeitado", expired: "rejeitado", rejected: "rejeitado", error: "rejeitado" };
+    const newStatus = statusMap[rawChargeStatus] || payment.status;
     const changed = newStatus !== payment.status;
     if (changed) {
       const paidAt = charge.status === "Success" ? "NOW()" : "paid_at";
@@ -2049,3 +2103,49 @@ setInterval(async () => {
     console.error("[EXPIRY] Error:", err.message);
   }
 }, 5 * 60 * 1000);
+
+// Auto-sync: consulta a É-kwanza a cada 60s para pagamentos pendentes
+// (o webhook nem sempre dispara; sem isto o estado fica preso em "pendente").
+let _autoSyncRunning = false;
+setInterval(async () => {
+  if (_autoSyncRunning) return;
+  _autoSyncRunning = true;
+  try {
+    const pend = await pool.query(
+      "SELECT code FROM payments WHERE status = 'pendente' AND created_at > NOW() - INTERVAL '48 hours' ORDER BY created_at DESC LIMIT 15"
+    );
+    if (pend.rows.length === 0) return;
+    let token = null;
+    try { token = await getEkwanzaToken(); } catch (e) { console.error("[AUTO-SYNC] token falhou:", e.message); return; }
+    if (!token) return;
+    const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
+    for (const { code } of pend.rows) {
+      try {
+        const cr = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(code)}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+        });
+        if (!cr.ok) continue;
+        const cj = await cr.json().catch(() => null);
+        const ch = cj?.payments?.[0];
+        if (!ch?.status) continue;
+        const s = String(ch.status).toLowerCase();
+        let mapped = null;
+        if (["success", "successful", "paid", "completed"].includes(s)) mapped = "confirmado";
+        else if (["failed", "fail", "cancelled", "canceled", "expired", "rejected", "error"].includes(s)) mapped = "rejeitado";
+        if (!mapped) continue;
+        if (mapped === "confirmado") {
+          await pool.query("UPDATE payments SET status='confirmado', paid_at=NOW(), reconciled_at=NOW(), updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+        } else {
+          await pool.query("UPDATE payments SET status='rejeitado', updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+        }
+        console.log(`[AUTO-SYNC] ${code}: pendente -> ${mapped} (GPO: ${ch.status})`);
+        broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
+        await new Promise(r => setTimeout(r, 300));
+      } catch (e) { console.error(`[AUTO-SYNC] ${code}:`, e.message); }
+    }
+  } catch (err) {
+    console.error("[AUTO-SYNC] Error:", err.message);
+  } finally {
+    _autoSyncRunning = false;
+  }
+}, 60 * 1000);
