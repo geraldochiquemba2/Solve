@@ -865,7 +865,7 @@ const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof Briefcase
   { name: 'OVG', desc: 'Virtual Gym · Sócios e acessos', icon: BriefcaseBusiness },
   { name: 'Pay4All', desc: 'Pagamentos e reconciliação', icon: CreditCard },
   { name: 'Cademi', desc: 'Acessos e área de membros', icon: KeyRound },
-  { name: 'WhatsApp', desc: 'Conversas comerciais', icon: LifeBuoy },
+  { name: 'WhatsApp', desc: 'SamoraFit · Conversas comerciais', icon: LifeBuoy },
   { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2 },
 ];
 function IntegrationsPage() {

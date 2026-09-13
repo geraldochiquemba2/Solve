@@ -12,6 +12,9 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || "";
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
 const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY || ""; // Para BSPs/tailwind
 
+// Nome comercial apresentado nas mensagens e na UI (display name registado na Meta: SAMORAFIT)
+export const WHATSAPP_DISPLAY_NAME = process.env.WHATSAPP_DISPLAY_NAME || "SAMORAFIT";
+
 class WhatsAppClient {
   private baseUrl: string;
   private token: string;
