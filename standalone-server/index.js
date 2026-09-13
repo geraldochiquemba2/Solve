@@ -2090,6 +2090,28 @@ if (existsSync(staticDir)) {
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => console.log(`Server listening on port ${port}`));
 
+// ─── Keep-alive anti-hibernação (Render free) ─────────────────────────────
+// O Render adormece o serviço após 15 min sem tráfego de ENTRADA.
+// Este self-ping à URL pública conta como tráfego e mantém acordado.
+// Ativo quando SELF_PING_URL ou RENDER_EXTERNAL_URL existir (produção).
+const SELF_PING_URL = (process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, "");
+if (SELF_PING_URL) {
+  const SELF_PING_INTERVAL = Number(process.env.SELF_PING_INTERVAL_MS || 10 * 60 * 1000);
+  setInterval(async () => {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const r = await fetch(`${SELF_PING_URL}/healthz`, { signal: ctrl.signal });
+        console.log(`[KEEP-ALIVE] self-ping ${r.status}`);
+      } finally { clearTimeout(timer); }
+    } catch (e) {
+      console.error("[KEEP-ALIVE] falhou:", e.message);
+    }
+  }, SELF_PING_INTERVAL);
+  console.log(`[KEEP-ALIVE] ativo: ${SELF_PING_URL} a cada ${SELF_PING_INTERVAL / 60000} min`);
+}
+
 // Periodic expiration check for payments (every 5 minutes)
 setInterval(async () => {
   try {
