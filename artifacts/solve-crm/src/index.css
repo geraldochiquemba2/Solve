@@ -531,7 +531,7 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .btn-secondary:hover { background:hsl(var(--secondary)); border-color:hsl(220 20% 77%); }
 .btn-quiet { display:inline-flex; align-items:center; justify-content:center; gap:.35rem; border-radius:.45rem; padding:.42rem .55rem; color:hsl(var(--muted-foreground)); font-size:.74rem; font-weight:600; }
 .btn-quiet:hover { background:hsl(var(--secondary)); color:hsl(var(--foreground)); }
-.table-wrap { overflow:auto; }
+.table-wrap { overflow:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
 .data-table { width:100%; border-collapse:collapse; font-size:.79rem; }
 .data-table th { padding:.7rem .85rem; color:hsl(var(--muted-foreground)); font-size:.64rem; letter-spacing:.08em; text-align:left; text-transform:uppercase; font-weight:700; white-space:nowrap; border-bottom:1px solid hsl(var(--border)); }
 .data-table td { padding:.78rem .85rem; border-bottom:1px solid hsl(var(--border)); vertical-align:middle; }
@@ -568,6 +568,10 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .progress-fill { height:100%; border-radius:inherit; background:hsl(var(--chart-2)); }
 .mobile-only { display:none; }
 .mobile-overlay { display:none; }
+/* Grids responsivas do admin */
+.grid-2 { display:grid; gap:.8rem; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.grid-3 { display:grid; gap:.6rem; grid-template-columns:repeat(3, minmax(0, 1fr)); }
+.page-actions { display:flex; gap:.45rem; flex-wrap:wrap; }
 @media (max-width: 900px) { .sidebar { width:210px !important; } .content-grid { grid-template-columns:1fr !important; } }
 @media (max-width: 700px) {
   .mobile-only { display:flex; }
@@ -580,6 +584,18 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
   .page-content { padding:1rem !important; }
   .metric-grid { grid-template-columns:1fr 1fr !important; }
   .toolbar { flex-direction:column; align-items:stretch !important; }
+  /* Admin em telemóvel: grids colapsam, cabeçalhos quebram linha */
+  .grid-2 { grid-template-columns:1fr !important; }
+  .grid-3 { grid-template-columns:repeat(2, minmax(0, 1fr)) !important; }
+  .section-header { flex-wrap:wrap; }
+  .page-title { font-size:1.25rem; }
+  .page-actions { width:100%; }
+  .page-actions > * { flex:1 1 auto; }
+  .data-table { font-size:.72rem; }
+  .data-table th, .data-table td { padding:.55rem .6rem; }
+  .metric-value { font-size:1.2rem; }
+  .metric { min-height:0; }
+  .modal { max-width:100%; }
 }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 

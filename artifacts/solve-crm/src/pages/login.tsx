@@ -40,7 +40,7 @@ export function LoginPage() {
 
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'hsl(var(--background))' }}>
-      <div className="card" style={{ width: 400, padding: '2rem' }}>
+      <div className="card" style={{ width: 'min(400px, calc(100vw - 2rem))', padding: '2rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'hsl(var(--primary))', color: 'white', fontWeight: 800, fontSize: '1.1rem', margin: '0 auto .75rem', letterSpacing: '-.08em' }}>SC</div>
           <h1 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Solve Corporate</h1>
