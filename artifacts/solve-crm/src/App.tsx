@@ -745,7 +745,14 @@ function PaymentsPage() {
     const amt = parseFloat(cAmount);
     if (!amt || amt <= 0) { setCMsg('Indica um montante válido'); return; }
     if (cMethod === 'mcx_express' && !cPhone.trim()) { setCMsg('Express precisa do número de telefone'); return; }
-    setCharging(true); setCMsg('');
+    // Snapshot dos campos + FECHO IMEDIATO (optimista).
+    // O POST corre em background: o modal fecha sempre, mesmo que o
+    // servidor demore (É-kwanza) ou esteja na versão antiga.
+    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, description: cDesc.trim() || undefined };
+    const snap = { amount: cAmount, method: cMethod, phone: cPhone, desc: cDesc };
+    setChargeOpen(false);
+    setCAmount(''); setCPhone(''); setCDesc(''); setCMsg('');
+    setCharging(false);
     try {
       const apiBase3 = import.meta.env.VITE_API_URL || '';
       const ctrl = new AbortController();
@@ -755,24 +762,20 @@ function PaymentsPage() {
         res = await fetch(`${apiBase3}/api/v1/payments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-          body: JSON.stringify({ amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, description: cDesc.trim() || undefined }),
+          body: JSON.stringify(payload),
           signal: ctrl.signal,
         });
       } finally { clearTimeout(timer); }
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || res.statusText);
-      // Fecha o modal DE IMEDIATO — o backend já respondeu (<300ms).
-      // A cobrança É-kwanza corre em background no servidor.
-      setChargeOpen(false);
-      setCAmount(''); setCPhone(''); setCDesc(''); setCMsg('');
-      setCharging(false);
-      const rows = await fetchPayments(); // refresh em background, sem bloquear o fecho
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || res.statusText);
+      const rows = await fetchPayments();
       // Re-verifica o estado na É-kwanza aos 15s/45s/90s (o cliente aprova no telefone).
       [15000, 45000, 90000].forEach(dt => setTimeout(() => { syncPendentes(rows || undefined); }, dt));
     } catch (e: any) {
-      if (e?.name === 'AbortError') setCMsg('Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.');
-      else setCMsg('Erro: ' + e.message);
-      setCharging(false);
+      // Falhou: reabre o modal com os valores e o erro.
+      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCDesc(snap.desc);
+      setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
+      setChargeOpen(true);
     }
   };
   const syncNow = async () => {
