@@ -22,6 +22,8 @@
       ".spw-back{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem}" +
       ".spw-modal{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.2rem;font-family:sans-serif;color:#111;max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);overflow:auto;-webkit-overflow-scrolling:touch}" +
       "#spw-hist{max-height:34vh;max-height:34dvh;overflow:auto;-webkit-overflow-scrolling:touch}" +
+      ".spw-back2{z-index:100001}" +
+      "#spw-hist2{max-height:52vh;max-height:52dvh;overflow:auto;-webkit-overflow-scrolling:touch}" +
       ".spw-modal h3{margin:0 0 .2rem;font-size:1.05rem}" +
       ".spw-note{font-size:.75rem;color:#666;margin-bottom:.9rem}" +
       ".spw-label{display:block;font-size:.72rem;font-weight:700;margin:.6rem 0 .3rem}" +
@@ -74,7 +76,6 @@
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
       "<button id='spw-histbtn' style='width:100%;margin-top:.7rem;border:1px solid #d4d4d8;background:#fff;border-radius:8px;padding:.55rem;font-size:.8rem;font-weight:600;cursor:pointer;color:#111'>Os meus pagamentos</button>" +
-      "<div id='spw-hist' style='margin-top:.5rem;display:none'></div>" +
       "<div class='spw-actions'><button class='spw-close' id='spw-cancel'>Fechar</button><button class='spw-pay' id='spw-go'>Pagar</button></div>";
     document.body.appendChild(back);
 
@@ -135,10 +136,9 @@
     refreshAccess(m, entregas).then(function () { unlock(); loadHist(m); }).catch(unlock);
     setTimeout(unlock, 15000); // segurança: nunca prende o botão
     loadHist(m);
-    m.querySelector("#spw-histbtn").addEventListener("click", function () {
-      var box = m.querySelector("#spw-hist");
-      box.style.display = (box.style.display === "none" || !box.style.display) ? "block" : "none";
-      if (box.style.display === "block") loadHist(m);
+    m.querySelector("#spw-histbtn").addEventListener("click", async function () {
+      var list = await fetchHist(m);
+      openHistModal(m, list);
     });
     m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); loadHist(m); });
     m.querySelector("#spw-phone").addEventListener("change", function () { loadHist(m); });
@@ -146,7 +146,8 @@
   }
 
   function closeModal() {
-    var b = document.querySelector(".spw-back");
+    closeHistModal();
+    var b = document.querySelector(".spw-back:not(.spw-back2)");
     if (b) b.remove();
   }
 
@@ -325,11 +326,38 @@
     return s || "—";
   }
 
+  // Histórico em modal próprio POR CIMA do modal de pagamento.
+  function openHistModal(m, list) {
+    closeHistModal();
+    var back = el("div", "spw-back spw-back2");
+    var box = el("div", "spw-modal");
+    box.innerHTML = "<h3>Os meus pagamentos</h3><div class='spw-note'>SamoraFit · histórico</div>"
+      + "<div id='spw-hist2'></div>"
+      + "<div class='spw-actions'><button class='spw-close' id='spw-histclose' style='flex:1'>Fechar</button></div>";
+    back.appendChild(box);
+    document.body.appendChild(back);
+    back.addEventListener("click", function (e) { if (e.target === back) closeHistModal(); });
+    box.querySelector("#spw-histclose").addEventListener("click", closeHistModal);
+    renderHist(m, box.querySelector("#spw-hist2"), list);
+  }
+
+  function closeHistModal() {
+    var b = document.querySelector(".spw-back2");
+    if (b) b.remove();
+  }
+
   async function loadHist(m) {
-    var box = m.querySelector("#spw-hist");
-    var btn = m.querySelector("#spw-histbtn");
     var list = await fetchHist(m);
+    var btn = m.querySelector("#spw-histbtn");
     if (btn) btn.textContent = "Os meus pagamentos (" + list.length + ")";
+    var open = document.querySelector(".spw-back2 #spw-hist2");
+    if (open) renderHist(m, open, list);
+    return list;
+  }
+
+  function renderHist(m, box, list) {
+    if (!box) return;
+    if (!list.length) { box.innerHTML = "<div style='font-size:.78rem;color:#666'>Sem pagamentos ainda.</div>"; return; }
     if (!list.length) { box.innerHTML = ""; return list; }
     var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
     var entList = m._entregas || [];
