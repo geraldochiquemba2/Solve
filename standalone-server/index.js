@@ -1511,6 +1511,36 @@ app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
   }
 });
 
+// Acessos do aluno na Cademi por email (produto + validade) — para o widget.
+app.get("/api/v1/cademi/acesso", requireAuth, async (req, res) => {
+  try {
+    const email = String(req.query.email || "").trim();
+    if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
+    const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
+    const users = u.data?.usuario || [];
+    const found = users.find(x => String(x.email || "").toLowerCase() === email.toLowerCase()) || users[0];
+    if (!found?.id) return res.json({ data: [] });
+    const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
+    const acessos = a.data?.acesso || [];
+    const now = Date.now();
+    const data = acessos.map(ac => {
+      const fim = ac.encerra_em ? new Date(ac.encerra_em).getTime() : null;
+      return {
+        produto_id: ac.produto?.id ?? null,
+        produto_nome: ac.produto?.nome || "",
+        comecou_em: ac.comecou_em || null,
+        encerra_em: ac.encerra_em || null,
+        vitalicio: ac.duracao_tipo === "vitalicio" || !fim,
+        encerrado: !!ac.encerrado,
+        dias: fim ? Math.max(0, Math.ceil((fim - now) / 86400000)) : null,
+      };
+    });
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Manual: (re)enviar acesso à Cademi — backfill e teste
 app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res) => {
   const r = await sendCademiDelivery(req.params.code);

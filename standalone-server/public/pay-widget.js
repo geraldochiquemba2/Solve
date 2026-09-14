@@ -64,6 +64,7 @@
       "<h3>Pagar mensalidade</h3>" +
       "<div class='spw-note'>SamoraFit · pagamento</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
+      "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
       "<label class='spw-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
@@ -74,12 +75,14 @@
     document.body.appendChild(back);
 
     var sel = m.querySelector("#spw-prod");
+    sel.appendChild(new Option("Escolher conteúdo...", ""));
     entregas.forEach(function (o) {
       var op = document.createElement("option");
       op.value = o.id;
       op.textContent = o.nome + (o.preco ? " — " + o.preco + " Kz" : "");
       sel.appendChild(op);
     });
+    sel.value = "";
     function syncAmt() {
       var f = null;
       entregas.forEach(function (o) { if (o.id === sel.value) f = o; });
@@ -95,6 +98,8 @@
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
     autodetect(m);
+    setTimeout(function () { refreshAccess(m, entregas); }, 900);
+    m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); });
     m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method); });
   }
 
@@ -208,6 +213,37 @@
     } catch (e) {}
   }
 
+  // Acessos ativos do aluno: mostra tempo restante junto às opções.
+  async function refreshAccess(m, entregas) {
+    try {
+      var em = (m.querySelector("#spw-email").value || "").trim();
+      if (!em || em.indexOf("@") < 0) return;
+      var r = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(em));
+      var j = await r.json().catch(function () { return {}; });
+      var list = (j && Array.isArray(j.data)) ? j.data : [];
+      if (!list.length) return;
+      var sel = m.querySelector("#spw-prod");
+      var notes = [];
+      for (var i = 0; i < sel.options.length; i++) {
+        var op = sel.options[i];
+        if (!op.value) continue;
+        var base = op.textContent.split(" — ")[0];
+        for (var k = 0; k < list.length; k++) {
+          var ac = list[k];
+          var pn = String(ac.produto_nome || "").toLowerCase();
+          if (!pn) continue;
+          if (pn === base.toLowerCase() || base.toLowerCase().indexOf(pn) >= 0 || pn.indexOf(base.toLowerCase()) >= 0) {
+            var tag = ac.encerrado ? "expirado" : (ac.vitalicio ? "vitalício" : (ac.dias + (ac.dias === 1 ? " dia restante" : " dias restantes")));
+            op.textContent = base + " — " + tag;
+            if (!ac.encerrado) notes.push(base + ": " + tag);
+            break;
+          }
+        }
+      }
+      if (notes.length) m.querySelector("#spw-acessos").textContent = "Já tens acesso: " + notes.join(" · ");
+    } catch (e) {}
+  }
+
   function msg(m, t, err) {
     var d = m.querySelector("#spw-msg");
     d.textContent = t;
@@ -215,7 +251,10 @@
   }
 
   async function pagar(m, method) {
+    var prod = m.querySelector("#spw-prod").value;
+    if (!prod) { msg(m, "Escolhe o conteúdo.", true); return; }
     var amt = parseFloat(m.querySelector("#spw-amt").value);
+    var phone = m.querySelector("#spw-phone").value.trim();
     var phone = m.querySelector("#spw-phone").value.trim();
     var name = m.querySelector("#spw-name").value.trim();
     var email = m.querySelector("#spw-email").value.trim();
