@@ -1127,9 +1127,12 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
     broadcastPaymentUpdate({ type: "payment_created", code, status: "pendente" });
     res.status(201).json({ data: payment });
 
-    // Background: dispara cobrança Ekwanza sem bloquear a resposta.
-    if (m === "mcx_express" && customer_phone) {
+    // Background: dispara cobrança/referência Ekwanza sem bloquear a resposta.
+    // - mcx_express + telefone → cobrança push (GPO_...)
+    // - referencia → gera entidade + número de referência (REF_...)
+    if ((m === "mcx_express" && customer_phone) || m === "referencia") {
       setImmediate(async () => {
+        const isRef = m === "referencia";
         const applyStatus = async (rawStatus, providerTxId) => {
           // Mapeia resposta síncrona GPO (case-insensitive) para estado interno.
           const s = String(rawStatus || "").toLowerCase();
@@ -1160,6 +1163,22 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
             payment.ekwanza_code = chargeId;
           } catch {}
         };
+        // Guarda entidade + número de referência (pagamentos por referência).
+        const applyReference = async (ref) => {
+          const refNumber = ref?.referenceNumber || ref?.reference_number || null;
+          if (!refNumber) return;
+          try {
+            const dueDate = ref?.dueDate || ref?.due_date || null;
+            const entity = ref?.entity || null;
+            const meta = { phone: customer_phone || null, description: description || null, dueDate };
+            await pool.query(
+              "UPDATE payments SET reference_code = $1, entity = COALESCE($2, entity), metadata = $3 WHERE code = $4",
+              [String(refNumber), entity, JSON.stringify(meta), code]
+            );
+            broadcastPaymentUpdate({ type: "payment_updated", code, status: "pendente", reference: String(refNumber), entity });
+            console.log(`[PAYMENTS] ${code}: referência ${refNumber} entidade ${entity || "-"}`);
+          } catch (e) { console.error("[PAYMENTS] Falha a gravar referência:", e.message); }
+        };
         const recoverCharge = async (token) => {
           // O POST pode processar no servidor mesmo sem resposta: recuperar pelo TXID
           try {
@@ -1170,6 +1189,7 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
             const chkJson = await chk.json();
             const found = (chkJson.payments || [])[0];
             if (found?.id) await linkCharge(found.id);
+            await applyReference(found?.reference || null);
             return found || null;
           } catch { return null; }
         };
@@ -1189,17 +1209,21 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
               body: JSON.stringify({
                 amount: amt, currency: "AOA", description: description || `Pagamento ${code}`,
                 merchantTransactionId: code,
-                paymentMethod: `GPO_${await cfg("ekwanza_gpo_payment_method", process.env.EKWANZA_GPO_PAYMENT_METHOD || "")}`,
+                paymentMethod: isRef
+                  ? `REF_${await cfg("ekwanza_ref_payment_method", process.env.EKWANZA_REF_PAYMENT_METHOD || "")}`
+                  : `GPO_${await cfg("ekwanza_gpo_payment_method", process.env.EKWANZA_GPO_PAYMENT_METHOD || "")}`,
                 options: {
                   MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
                   ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
                 },
-                paymentInfo: { phoneNumber: customer_phone },
+                ...(customer_phone ? { paymentInfo: { phoneNumber: customer_phone } } : {}),
               }),
               signal: ctrl.signal,
             });
             const charge = await cResp.json().catch(() => null);
             if (charge?.id) await linkCharge(charge.id);
+            // Referência (entidade + número) pode vir na resposta síncrona.
+            await applyReference(charge?.responseStatus?.reference || charge?.reference || null);
             // A resposta síncrona já pode trazer o estado final — aplica-o.
             const syncStatus =
               charge?.status ||
@@ -1942,6 +1966,17 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
     const rawChargeStatus = String(charge.status ?? charge.paymentStatus ?? charge.state ?? "").toLowerCase();
     const statusMap = { success: "confirmado", successful: "confirmado", paid: "confirmado", confirmado: "confirmado", completed: "confirmado", pending: "pendente", pendente: "pendente", failed: "rejeitado", fail: "rejeitado", cancelled: "rejeitado", canceled: "rejeitado", expired: "rejeitado", rejected: "rejeitado", error: "rejeitado" };
     const newStatus = statusMap[rawChargeStatus] || payment.status;
+    // Preenche entidade + referência vindas da É-kwanza (pagamentos por referência).
+    const refNumber = charge.reference?.referenceNumber || charge.reference?.reference_number || null;
+    if (refNumber && (payment.reference_code !== String(refNumber) || !payment.entity)) {
+      try {
+        await pool.query(
+          "UPDATE payments SET reference_code = $1, entity = COALESCE($2, entity), updated_at = NOW() WHERE code = $3",
+          [String(refNumber), charge.reference?.entity || null, payment.code]
+        );
+        console.log(`[CHECK-STATUS] ${payment.code}: referência ${refNumber} entidade ${charge.reference?.entity || "-"}`);
+      } catch (e) { console.error("[CHECK-STATUS] Falha a gravar referência:", e.message); }
+    }
     const changed = newStatus !== payment.status;
     if (changed) {
       const paidAt = charge.status === "Success" ? "NOW()" : "paid_at";
