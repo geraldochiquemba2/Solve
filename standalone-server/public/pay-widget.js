@@ -79,7 +79,13 @@
     entregas.forEach(function (o) {
       var op = document.createElement("option");
       op.value = o.id;
-      op.textContent = o.nome + (o.preco ? " — " + o.preco + " Kz" : "");
+      // Sem preço no CRM = "disponível em breve", não selecionável.
+      if (o.preco) {
+        op.textContent = o.nome + " — " + o.preco + " Kz";
+      } else {
+        op.textContent = o.nome + " — disponível em breve";
+        op.disabled = true;
+      }
       sel.appendChild(op);
     });
     sel.value = "";
@@ -244,10 +250,17 @@
           var pn = String(ac.produto_nome || "").toLowerCase();
           if (!pn) continue;
           if (pn === base.toLowerCase() || base.toLowerCase().indexOf(pn) >= 0 || pn.indexOf(base.toLowerCase()) >= 0) {
+            var hasPrice = false;
+            entregas.forEach(function (o) { if (o.id === op.value && o.preco) hasPrice = true; });
+            var active = !ac.encerrado;
             var tag = ac.encerrado ? "expirado" : (ac.vitalicio ? "vitalício" : (ac.dias + (ac.dias === 1 ? " dia restante" : " dias restantes")));
-            op.textContent = base + " — " + tag;
-            // Com acesso ativo não dá para selecionar de novo.
-            if (!ac.encerrado) { op.disabled = true; notes.push(base + ": " + tag); }
+            // Rótulo: nome [+ preço] + estado. Sem preço = "em breve".
+            var priceTxt = "";
+            entregas.forEach(function (o) { if (o.id === op.value && o.preco) priceTxt = " · " + o.preco + " Kz"; });
+            op.textContent = hasPrice ? (base + priceTxt + " — " + tag) : (base + " — disponível em breve");
+            // Bloqueia: sem preço OU acesso ainda ativo. Expirado com preço volta a vender.
+            op.disabled = !hasPrice || active;
+            if (active) notes.push(base + ": " + tag);
             break;
           }
         }
@@ -265,6 +278,9 @@
   async function pagar(m, method) {
     var prod = m.querySelector("#spw-prod").value;
     if (!prod) { msg(m, "Escolhe o conteúdo.", true); return; }
+    var chosen = null;
+    entregas.forEach(function (o) { if (o.id === prod) chosen = o; });
+    if (!chosen || !chosen.preco) { msg(m, "Conteúdo ainda sem preço (disponível em breve).", true); return; }
     var amt = parseFloat(m.querySelector("#spw-amt").value);
     var phone = m.querySelector("#spw-phone").value.trim();
     var phone = m.querySelector("#spw-phone").value.trim();

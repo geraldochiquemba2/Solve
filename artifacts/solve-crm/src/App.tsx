@@ -994,7 +994,7 @@ function AcademiaPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const [produtoId, setProdutoId] = useState('');
-  const [entregasTxt, setEntregasTxt] = useState('');
+  const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
   const [autoDelivery, setAutoDelivery] = useState(false);
   const [cfgMsg, setCfgMsg] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
@@ -1005,11 +1005,11 @@ function AcademiaPage() {
       const d = r.data || {};
       if (d.cademi_produto_id) setProdutoId(String(d.cademi_produto_id));
       setAutoDelivery(String(d.cademi_auto_delivery) === '1');
-      // Lista de entregas: do endpoint (slugs reais) ou do default.
+      // Entregas reais (do endpoint): cada uma com o seu campo de preço.
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
         const list = Array.isArray(e.data) ? e.data : [];
-        if (list.length > 0) setEntregasTxt(list.map((o: any) => `${o.id} | ${o.nome}${o.preco ? ' | ' + o.preco : ''}`).join('\n'));
+        if (list.length > 0) setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
       } catch {}
     } catch {}
   };
@@ -1017,16 +1017,10 @@ function AcademiaPage() {
   const saveCfg = async () => {
     setSavingCfg(true); setCfgMsg('');
     try {
-      const list = entregasTxt.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-        const [id, ...rest] = l.split('|').map(s => s.trim());
-        const nome = rest.filter(s => isNaN(Number(s)) || s === '').join('|').trim() || rest.join('|').trim() || id;
-        const precoStr = rest.map(s => s.trim()).find(s => s !== '' && !isNaN(Number(s)));
-        return { id, nome: nome || id, ...(precoStr ? { preco: Number(precoStr) } : {}) };
-      }).filter(o => o.id);
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0', cademi_entregas: JSON.stringify(list) } }),
+        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0', cademi_entregas: JSON.stringify(entregasArr) } }),
       });
       if (!res.ok) throw new Error('Falha a guardar');
       setCfgMsg('Configuração guardada. Pagamentos confirmados passam a libertar acesso.');
@@ -1085,12 +1079,18 @@ function AcademiaPage() {
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
     <div className="grid-2">
       <div><label className="label">Entrega padrão *</label>
-      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: samorafit-workout" style={{ width: '100%' }} /></div>
+      <input className="input" value={produtoId} readOnly disabled placeholder="Ex: samorafit-workout" style={{ width: '100%', background: 'hsl(var(--secondary) / .5)' }} /></div>
       <div><label className="label">Envio automático</label>
-      <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
+      <select className="select" value={autoDelivery ? '1' : '0'} disabled style={{ width: '100%', background: 'hsl(var(--secondary) / .5)' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Entregas disponíveis (slug | Nome | preço Kz, uma por linha)</label>
-    <textarea className="input" value={entregasTxt} onChange={e => setEntregasTxt(e.target.value)} rows={3} placeholder={'samorafit-workout | SamoraFit Workout | 15000'} style={{ width: '100%', resize: 'vertical' }} /></div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
+    <div style={{ display: 'grid', gap: '.45rem' }}>
+      {entregasArr.length === 0 && <div className="section-note">A carregar entregas...</div>}
+      {entregasArr.map(o => <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
+        <div style={{ flex: 1, fontSize: '.78rem', fontWeight: 600 }}>{o.nome}<div className="mono" style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{o.id}</div></div>
+        <input className="input" type="number" min="0" value={o.preco ?? ''} onChange={e => setEntregasArr(entregasArr.map(x => x.id === o.id ? { ...x, preco: e.target.value === '' ? undefined : Number(e.target.value) } : x))} placeholder="Preço" style={{ width: '130px' }} />
+      </div>)}
+    </div></div>
     {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
     <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
   </Section>
