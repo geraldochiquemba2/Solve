@@ -132,7 +132,7 @@ const navGroups = [
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/planos', label: 'Planos', icon: Package }, { href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
   { label: 'Controlo de Acesso', items: [{ href: '/admin/acesso-fisico', label: 'Solve Access', icon: LockKeyhole }] },
-  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Academia', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
+  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
   { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }, { href: '/admin/auditoria', label: 'Auditoria', icon: ShieldCheck }, { href: '/admin/definicoes', label: 'Definições', icon: Settings }] },
 ];
 
@@ -249,7 +249,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
     { label: 'Dashboard', href: '/admin' }, { label: 'Leads', href: '/admin/leads' },
     { label: 'Pipeline', href: '/admin/pipeline' }, { label: 'Clientes', href: '/admin/clientes' },
     { label: 'Planos', href: '/admin/planos' }, { label: 'Pagamentos', href: '/admin/pagamentos' },
-    { label: 'Solve Access', href: '/admin/acesso-fisico' }, { label: 'Academia', href: '/admin/academia' },
+    { label: 'Solve Access', href: '/admin/acesso-fisico' }, { label: 'Cademi', href: '/admin/academia' },
     { label: 'Integrações', href: '/admin/integracoes' }, { label: 'Automações', href: '/admin/automacoes' },
     { label: 'API & Webhooks', href: '/admin/api-webhooks' }, { label: 'Utilizadores', href: '/admin/utilizadores' },
     { label: 'Auditoria', href: '/admin/auditoria' }, { label: 'Definições', href: '/admin/definicoes' },
@@ -1074,7 +1074,7 @@ function AcademiaPage() {
   const visible = students.filter(s => !search || (s.nome || '').toLowerCase().includes(search.toLowerCase()) || (s.email || '').toLowerCase().includes(search.toLowerCase()));
   const fmtD = (d: string | null) => { if (!d) return '—'; try { return new Date(d).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } };
 
-  return <><PageHeader eyebrow="Ecossistema · Formação" title="Academia" subtitle="Cursos e alunos da plataforma Cademi." action={<div className="page-actions" style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
+  return <><PageHeader eyebrow="Ecossistema · Formação" title="Cademi" subtitle="Cursos e alunos da plataforma Cademi." action={<div className="page-actions" style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
     <div className="grid-2">
