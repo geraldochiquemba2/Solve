@@ -1437,12 +1437,13 @@ async function sendCademiDelivery(paymentCode) {
       } catch {}
     }
     if (!email) return { ok: false, skipped: "sem email (preenche no cliente e reenvia)" };
-    const apiKey = await cfg("cademi_api_key", CADEMI_API_KEY);
     const r = await cademiFetch("/entrega/enviar", {
       method: "POST",
+      // Sem campo "token" no corpo: a auth é só o header Bearer.
+      // produto_id = slug da entrega Customizada (ex. "samorafit-workout").
       body: JSON.stringify({
         codigo: payment.code, status: "aprovado", produto_id: produtoId,
-        cliente_nome: nome || email, cliente_email: email, token: apiKey,
+        cliente_nome: nome || email, cliente_email: email,
       }),
     });
     if (!r.success) return { ok: false, skipped: `Cademi: ${r.error}` };
