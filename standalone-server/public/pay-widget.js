@@ -133,6 +133,11 @@
     refreshAccess(m, entregas).then(function () { unlock(); loadHist(m); }).catch(unlock);
     setTimeout(unlock, 15000); // segurança: nunca prende o botão
     loadHist(m);
+    m.querySelector("#spw-histbtn").addEventListener("click", function () {
+      var box = m.querySelector("#spw-hist");
+      box.style.display = (box.style.display === "none" || !box.style.display) ? "block" : "none";
+      if (box.style.display === "block") loadHist(m);
+    });
     m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); loadHist(m); });
     m.querySelector("#spw-phone").addEventListener("change", function () { loadHist(m); });
     m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method, entregas); });
@@ -227,14 +232,9 @@
       try {
         var em = (emailEl.value || "").trim();
         if (em && em.indexOf("@") > 0 && !nameEl.value) {
-          h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (j) {
+          h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; });           }).then(function (j) {
             if (j && j.data && j.data.nome && !nameEl.value) nameEl.value = j.data.nome;
-    loadHist(m);
-    m.querySelector("#spw-histbtn").addEventListener("click", function () {
-      var box = m.querySelector("#spw-hist");
-      box.style.display = (box.style.display === "none" || !box.style.display) ? "block" : "none";
-      if (box.style.display === "block") loadHist(m);
-    });
+            loadHist(m);
           }).catch(function () {});
         }
       } catch (e6) {}
