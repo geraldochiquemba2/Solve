@@ -183,6 +183,15 @@
       if (email && !emailEl.value) { emailEl.value = email; report.push("página: email"); }
       if (name && !nameEl.value) { nameEl.value = name; report.push("página: nome"); }
       if (phone && phone.length === 9 && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
+      // Nome oficial: pergunta ao CRM (Cademi → CRM → OVG) pelo email.
+      try {
+        var em = (emailEl.value || "").trim();
+        if (em && em.indexOf("@") > 0 && !nameEl.value) {
+          h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (j) {
+            if (j && j.data && j.data.nome && !nameEl.value) nameEl.value = j.data.nome;
+          }).catch(function () {});
+        }
+      } catch (e6) {}
       try {
         if (window.location.search.indexOf("spw_debug=1") >= 0) {
           var hdr = document.querySelector("header");

@@ -1486,6 +1486,30 @@ app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
   }
 });
 
+// Nome do aluno na Cademi pelo email (para o widget pré-preencher).
+app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
+  try {
+    const email = String(req.query.email || "").trim();
+    if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
+    // 1) Cademi primeiro (nome oficial do aluno)
+    try {
+      const r = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
+      const found = (r.data?.usuario || []).find(u => String(u.email || "").toLowerCase() === email.toLowerCase()) || (r.data?.usuario || [])[0];
+      if (found?.nome) return res.json({ data: { nome: found.nome, fonte: "cademi" } });
+    } catch {}
+    // 2) Fallback: base local (customers / ovg_members)
+    try {
+      const cr = await pool.query("SELECT name FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
+      if (cr.rows[0]?.name) return res.json({ data: { nome: cr.rows[0].name, fonte: "crm" } });
+      const or = await pool.query("SELECT name FROM ovg_members WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
+      if (or.rows[0]?.name) return res.json({ data: { nome: or.rows[0].name, fonte: "ovg" } });
+    } catch {}
+    res.status(404).json({ error: "nome não encontrado" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Manual: (re)enviar acesso à Cademi — backfill e teste
 app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res) => {
   const r = await sendCademiDelivery(req.params.code);
