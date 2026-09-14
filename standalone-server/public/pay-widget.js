@@ -273,9 +273,11 @@
         var base = op.textContent.split(" — ")[0];
         for (var k = 0; k < list.length; k++) {
           var ac = list[k];
-          var pn = String(ac.produto_nome || "").toLowerCase();
+          var pn = String(ac.produto_nome || "").toLowerCase().trim();
+          // Igualdade estrita (slug ou nome): "teste" NÃO pode bloquear "teste2".
+          var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
           if (!pn) continue;
-          if (pn === base.toLowerCase() || base.toLowerCase().indexOf(pn) >= 0 || pn.indexOf(base.toLowerCase()) >= 0) {
+          if (slug === op.value || pn === base.toLowerCase().trim()) {
             var hasPrice = false;
             entregas.forEach(function (o) { if (o.id === op.value && o.preco) hasPrice = true; });
             var active = !ac.encerrado;
@@ -428,9 +430,9 @@
         var alist = (aj && Array.isArray(aj.data)) ? aj.data : [];
         for (var ai = 0; ai < alist.length; ai++) {
           var ac = alist[ai];
-          var pn = String(ac.produto_nome || "").toLowerCase();
-          var cn = String(chosen.nome || "").toLowerCase();
-          var same = pn && cn && (pn === cn || cn.indexOf(pn) >= 0 || pn.indexOf(cn) >= 0);
+          var pn = String(ac.produto_nome || "").toLowerCase().trim();
+          var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+          var same = pn && (slug === prod || pn === String(chosen.nome || "").toLowerCase().trim());
           if (same && !ac.encerrado) {
             msg(m, "Já tens acesso ativo a este conteúdo.", true);
             btn.disabled = false;

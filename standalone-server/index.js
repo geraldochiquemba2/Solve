@@ -1170,15 +1170,16 @@ async function cademiActiveAccess(email, produtoSlug) {
     if (!email || !produtoSlug) return null;
     const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
     const users = u.data?.usuario || [];
-    const found = users.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase()) || users[0];
+    const found = users.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase());
     if (!found?.id) return null;
     const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
     const now = Date.now();
     for (const ac of (a.data?.acesso || [])) {
-      const pn = String(ac.produto?.nome || "").toLowerCase();
+      const pn = String(ac.produto?.nome || "").toLowerCase().trim();
       const slug = slugify(ac.produto?.nome || "");
       if (!pn) continue;
-      if (slug !== produtoSlug && pn !== produtoSlug && pn.indexOf(produtoSlug) < 0 && produtoSlug.indexOf(pn) < 0) continue;
+      // Igualdade estrita: "teste" NÃO bloqueia "teste2".
+      if (slug !== produtoSlug && pn !== produtoSlug) continue;
       const fim = ac.encerra_em ? new Date(ac.encerra_em).getTime() : null;
       const active = !ac.encerrado && (ac.duracao_tipo === "vitalicio" || !fim || fim > now);
       if (active) return ac.produto?.nome || produtoSlug;
@@ -1682,7 +1683,8 @@ app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
     // 1) Cademi primeiro (nome oficial do aluno)
     try {
       const r = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
-      const found = (r.data?.usuario || []).find(u => String(u.email || "").toLowerCase() === email.toLowerCase()) || (r.data?.usuario || [])[0];
+      const users = r.data?.usuario || [];
+      const found = users.find(u => String(u.email || "").toLowerCase() === email.toLowerCase());
       if (found?.nome) return res.json({ data: { nome: found.nome, fonte: "cademi" } });
     } catch {}
     // 2) Fallback: base local (customers / ovg_members)
@@ -1705,7 +1707,8 @@ app.get("/api/v1/cademi/acesso", requireAuth, async (req, res) => {
     if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
     const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
     const users = u.data?.usuario || [];
-    const found = users.find(x => String(x.email || "").toLowerCase() === email.toLowerCase()) || users[0];
+    // Sem fallback: email inexistente = sem acessos (nunca os do 1º da lista).
+    const found = users.find(x => String(x.email || "").toLowerCase() === email.toLowerCase());
     if (!found?.id) return res.json({ data: [] });
     const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
     const acessos = a.data?.acesso || [];
