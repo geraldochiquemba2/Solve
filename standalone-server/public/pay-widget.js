@@ -62,7 +62,7 @@
     back.appendChild(m);
     m.innerHTML =
       "<h3>Pagar mensalidade</h3>" +
-      "<div class='spw-note'>SamoraFit · pagamento seguro via Pay4All (É-kwanza)</div>" +
+      "<div class='spw-note'>SamoraFit · pagamento</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
