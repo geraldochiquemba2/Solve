@@ -1112,7 +1112,7 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 // fechar sem esperar pelo OAuth + POST GPO (10-45s).
 app.post("/api/v1/payments", requireAuth, async (req, res) => {
   try {
-    const { amount, method, customer_id, customer_phone, customer_email, customer_name, description, reference_code } = req.body || {};
+    const { amount, method, customer_id, customer_phone, customer_email, customer_name, cademi_produto, description, reference_code } = req.body || {};
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
     const m = method || "mcx_express";
@@ -1133,7 +1133,7 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
       `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
        VALUES ($1, $2, $3, $4, 'pendente', $5, $6, NOW() + INTERVAL '24 hours') RETURNING *`,
       [code, linkedId, amt, m, reference_code || code,
-       JSON.stringify({ phone: customer_phone || null, email: customer_email || null, name: customer_name || null, description: description || null })]
+       JSON.stringify({ phone: customer_phone || null, email: customer_email || null, name: customer_name || null, cademi_produto: cademi_produto || null, description: description || null })]
     );
     const payment = r.rows[0];
     // Resposta imediata — o frontend fecha o modal aqui.
@@ -1424,8 +1424,7 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
 async function sendCademiDelivery(paymentCode) {
   try {
     const auto = String(await cfg("cademi_auto_delivery", "")).trim();
-    const produtoId = String(await cfg("cademi_produto_id", "")).trim();
-    if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto_id por configurar (Academia)" };
+    const defProduto = String(await cfg("cademi_produto_id", "")).trim();
     const pr = await pool.query("SELECT * FROM payments WHERE code = $1", [paymentCode]);
     if (pr.rows.length === 0) return { ok: false, skipped: "pagamento inexistente" };
     const payment = pr.rows[0];
@@ -1433,6 +1432,9 @@ async function sendCademiDelivery(paymentCode) {
     let meta = {};
     try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
     if (meta.cademi_delivery === "sent") return { ok: false, skipped: "já enviado" };
+    // Entrega do pagamento (seletor) ou padrão da Academia.
+    const produtoId = String(meta.cademi_produto || defProduto).trim();
+    if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto por configurar (Academia)" };
     // Nome + email: metadata (formulário) → customers via customer_id → OVG pelo telefone
     let nome = meta.name || null, email = meta.email || null, phone = meta.phone || null;
     if (payment.customer_id) {
@@ -1466,6 +1468,23 @@ async function sendCademiDelivery(paymentCode) {
     return { ok: true, email };
   } catch (e) { return { ok: false, skipped: e.message }; }
 }
+
+// Lista de entregas Cademi (slugs reais, gerida no CRM > Academia).
+// Formato em settings@cademi_entregas: [{"id":"samorafit-workout","nome":"SamoraFit Workout"}]
+app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
+  try {
+    const raw = await cfg("cademi_entregas", "");
+    let list = [];
+    try { list = JSON.parse(raw); } catch {}
+    if (!Array.isArray(list) || list.length === 0) {
+      const def = String(await cfg("cademi_produto_id", "samorafit-workout")).trim() || "samorafit-workout";
+      list = [{ id: def, nome: "SamoraFit Workout" }];
+    }
+    res.json({ data: list });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Manual: (re)enviar acesso à Cademi — backfill e teste
 app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res) => {

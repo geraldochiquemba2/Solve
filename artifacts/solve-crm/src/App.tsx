@@ -760,9 +760,24 @@ function PaymentsPage() {
   const [cPhone, setCPhone] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cName, setCName] = useState('');
+  const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string }>>([]);
+  const [cProduto, setCProduto] = useState('');
   const [cDesc, setCDesc] = useState('');
   const [cMsg, setCMsg] = useState('');
   const [charging, setCharging] = useState(false);
+  // Entregas reais (slugs da Cademi) para o seletor de conteúdo.
+  useEffect(() => {
+    if (!chargeOpen) return;
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } })
+      .then(r => r.json())
+      .then(j => {
+        const list = Array.isArray(j.data) ? j.data : [];
+        setCEntregas(list);
+        if (!cProduto && list.length > 0) setCProduto(list[0].id);
+      })
+      .catch(() => {});
+  }, [chargeOpen]);
   const createCharge = async () => {
     const amt = parseFloat(cAmount);
     if (!amt || amt <= 0) { setCMsg('Indica um montante válido'); return; }
@@ -770,10 +785,10 @@ function PaymentsPage() {
     // Snapshot dos campos + FECHO IMEDIATO (optimista).
     // O POST corre em background: o modal fecha sempre, mesmo que o
     // servidor demore (É-kwanza) ou esteja na versão antiga.
-    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, description: cDesc.trim() || undefined };
-    const snap = { amount: cAmount, method: cMethod, phone: cPhone, email: cEmail, name: cName, desc: cDesc };
+    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined };
+    const snap = { amount: cAmount, method: cMethod, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc };
     setChargeOpen(false);
-    setCAmount(''); setCPhone(''); setCEmail(''); setCName(''); setCDesc(''); setCMsg('');
+    setCAmount(''); setCPhone(''); setCEmail(''); setCName(''); setCProduto(''); setCDesc(''); setCMsg('');
     setCharging(false);
     try {
       const apiBase3 = import.meta.env.VITE_API_URL || '';
@@ -795,7 +810,7 @@ function PaymentsPage() {
       [15000, 45000, 90000].forEach(dt => setTimeout(() => { syncPendentes(rows || undefined); }, dt));
     } catch (e: any) {
       // Falhou: reabre o modal com os valores e o erro.
-      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCDesc(snap.desc);
+      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCProduto(snap.produto); setCDesc(snap.desc);
       setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
       setChargeOpen(true);
     }
@@ -879,6 +894,11 @@ function PaymentsPage() {
       <div style={{ flex: 1 }}><label className="label">Email (p/ Cademi)</label>
       <input className="input" type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="aluno@email.com" style={{ width: '100%' }} /></div>
     </div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (Cademi) *</label>
+    <select className="select" value={cProduto} onChange={e => setCProduto(e.target.value)} style={{ width: '100%' }}>
+      {cEntregas.length === 0 && <option value="">A carregar...</option>}
+      {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+    </select></div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
     {cMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cMsg}</div>}
@@ -968,6 +988,7 @@ function AcademiaPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
   const [produtoId, setProdutoId] = useState('');
+  const [entregasTxt, setEntregasTxt] = useState('');
   const [autoDelivery, setAutoDelivery] = useState(false);
   const [cfgMsg, setCfgMsg] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
@@ -978,16 +999,26 @@ function AcademiaPage() {
       const d = r.data || {};
       if (d.cademi_produto_id) setProdutoId(String(d.cademi_produto_id));
       setAutoDelivery(String(d.cademi_auto_delivery) === '1');
+      // Lista de entregas: do endpoint (slugs reais) ou do default.
+      try {
+        const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+        const list = Array.isArray(e.data) ? e.data : [];
+        if (list.length > 0) setEntregasTxt(list.map((o: any) => `${o.id} | ${o.nome}`).join('\n'));
+      } catch {}
     } catch {}
   };
 
   const saveCfg = async () => {
     setSavingCfg(true); setCfgMsg('');
     try {
+      const list = entregasTxt.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+        const [id, ...rest] = l.split('|').map(s => s.trim());
+        return { id, nome: rest.join('|') || id };
+      }).filter(o => o.id);
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0' } }),
+        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0', cademi_entregas: JSON.stringify(list) } }),
       });
       if (!res.ok) throw new Error('Falha a guardar');
       setCfgMsg('Configuração guardada. Pagamentos confirmados passam a libertar acesso.');
@@ -1045,11 +1076,13 @@ function AcademiaPage() {
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
     <div className="grid-2">
-      <div><label className="label">ID do produto/entrega *</label>
-      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: 123 (ver ID nos Cursos)" style={{ width: '100%' }} /></div>
+      <div><label className="label">Entrega padrão *</label>
+      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: samorafit-workout" style={{ width: '100%' }} /></div>
       <div><label className="label">Envio automático</label>
       <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
     </div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Entregas disponíveis (slug | Nome, uma por linha)</label>
+    <textarea className="input" value={entregasTxt} onChange={e => setEntregasTxt(e.target.value)} rows={3} placeholder={'samorafit-workout | SamoraFit Workout'} style={{ width: '100%', resize: 'vertical' }} /></div>
     {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
     <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
   </Section>
