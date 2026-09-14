@@ -280,12 +280,14 @@
           if (!pn) continue;
           if (slug === op.value || pn === base.toLowerCase().trim()) {
             var hasPrice = false;
-            entregas.forEach(function (o) { if (o.id === op.value && o.preco) hasPrice = true; });
-            var active = !ac.encerrado;
-            var tag = ac.encerrado ? "expirado" : (ac.vitalicio ? "vitalício" : (ac.dias + (ac.dias === 1 ? " dia restante" : " dias restantes")));
-            // Rótulo: nome [+ preço] + estado. Sem preço = "em breve".
             var priceTxt = "";
-            entregas.forEach(function (o) { if (o.id === op.value && o.preco) priceTxt = " · " + o.preco + " Kz"; });
+            entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + o.preco + " Kz"; } });
+            var active = !ac.encerrado;
+            // Expirado mostra o preço NOVO (renovação); ativo mostra o tempo.
+            var tag = ac.encerrado
+              ? ("expirado" + (hasPrice ? " · renova por" + priceTxt : ""))
+              : (ac.vitalicio ? "vitalício" : (ac.dias + (ac.dias === 1 ? " dia restante" : " dias restantes")));
+            // Rótulo: nome [+ preço] + estado. Sem preço = "em breve".
             op.textContent = hasPrice ? (base + priceTxt + " — " + tag) : (base + " — disponível em breve");
             // Bloqueia: sem preço OU acesso ainda ativo. Expirado com preço volta a vender.
             op.disabled = !hasPrice || active;
