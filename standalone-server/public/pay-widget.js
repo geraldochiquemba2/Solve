@@ -18,7 +18,7 @@
   function css() {
     var s = document.createElement("style");
     s.textContent =
-      ".spw-btn{position:fixed;bottom:20px;right:20px;background:" + RED + ";color:#fff;padding:14px 18px;border-radius:50px;font-weight:700;border:0;cursor:pointer;z-index:99999;font-family:sans-serif;font-size:15px;box-shadow:0 8px 25px rgba(215,25,32,.35)}" +
+      ".spw-btn{position:fixed;bottom:20px;left:20px;background:" + RED + ";color:#fff;padding:14px 18px;border-radius:50px;font-weight:700;border:0;cursor:pointer;z-index:99999;font-family:sans-serif;font-size:15px;box-shadow:0 8px 25px rgba(215,25,32,.35)}" +
       ".spw-back{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem}" +
       ".spw-modal{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.2rem;font-family:sans-serif;color:#111;max-height:calc(100vh - 2rem);overflow:auto}" +
       ".spw-modal h3{margin:0 0 .2rem;font-size:1.05rem}" +
