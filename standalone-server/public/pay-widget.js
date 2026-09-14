@@ -20,7 +20,8 @@
     s.textContent =
       ".spw-btn{position:fixed;bottom:58px;right:20px;background:" + RED + ";color:#fff;padding:14px 18px;border-radius:50px;font-weight:700;border:0;cursor:pointer;z-index:99999;font-family:sans-serif;font-size:15px;box-shadow:0 8px 25px rgba(215,25,32,.35)}" +
       ".spw-back{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem}" +
-      ".spw-modal{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.2rem;font-family:sans-serif;color:#111;max-height:calc(100vh - 2rem);overflow:auto}" +
+      ".spw-modal{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:1.2rem;font-family:sans-serif;color:#111;max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);overflow:auto;-webkit-overflow-scrolling:touch}" +
+      "#spw-hist{max-height:34vh;max-height:34dvh;overflow:auto;-webkit-overflow-scrolling:touch}" +
       ".spw-modal h3{margin:0 0 .2rem;font-size:1.05rem}" +
       ".spw-note{font-size:.75rem;color:#666;margin-bottom:.9rem}" +
       ".spw-label{display:block;font-size:.72rem;font-weight:700;margin:.6rem 0 .3rem}" +
@@ -35,7 +36,8 @@
       ".spw-methods button{flex:1;border:1px solid #d4d4d8;background:#fff;border-radius:8px;padding:.55rem;cursor:pointer;font-size:.8rem;font-weight:600;color:#111}" +
       ".spw-methods button.on{background:#111;color:#fff;border-color:#111}" +
       ".spw-ref{background:#f4f4f5;border-radius:8px;padding:.7rem;margin-top:.7rem;font-size:.82rem}" +
-      ".spw-ref b{font-size:1rem;letter-spacing:.03em}";
+      ".spw-ref b{font-size:1rem;letter-spacing:.03em}" +
+      "@media (max-width:480px){.spw-modal{padding:.9rem}.spw-note{margin-bottom:.6rem}.spw-label{margin:.45rem 0 .25rem}.spw-actions{margin-top:.7rem}.spw-btn{bottom:76px;right:12px;padding:12px 15px;font-size:14px}}";
     document.head.appendChild(s);
   }
 
