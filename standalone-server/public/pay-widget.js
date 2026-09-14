@@ -103,11 +103,10 @@
     if (b) b.remove();
   }
 
-  // Deteta o aluno logado na Cademi (nome/email visíveis na página) e preenche.
+  // Deteta o aluno logado na Cademi (nome/email/telefone visíveis na página) e preenche.
   function autodetect(m) {
     try {
-      var nameEl = m.querySelector("#spw-name"), emailEl = m.querySelector("#spw-email");
-      if ((nameEl.value && emailEl.value)) return;
+      var nameEl = m.querySelector("#spw-name"), emailEl = m.querySelector("#spw-email"), phoneEl = m.querySelector("#spw-phone");
       var email = "";
       var mailto = document.querySelector('a[href^="mailto:"]');
       if (mailto) email = (mailto.getAttribute("href") || "").replace(/^mailto:/i, "").split("?")[0].trim();
@@ -132,8 +131,16 @@
         var avatar = document.querySelector("header img[alt], .avatar[alt], .profile img[alt]");
         if (avatar) { var a = (avatar.getAttribute("alt") || "").trim(); if (a && a.indexOf("@") < 0 && a.length < 60) name = a; }
       }
+      var phone = "";
+      var tel = document.querySelector('a[href^="tel:"]');
+      if (tel) phone = (tel.getAttribute("href") || "").replace(/^tel:/i, "").replace(/\D/g, "").slice(-9);
+      if (!phone) {
+        var telInput = document.querySelector('input[type="tel"]');
+        if (telInput && telInput.value) phone = String(telInput.value).replace(/\D/g, "").slice(-9);
+      }
       if (email && !emailEl.value) emailEl.value = email;
       if (name && !nameEl.value) nameEl.value = name;
+      if (phone && phone.length === 9 && !phoneEl.value) phoneEl.value = phone;
     } catch (e) {}
   }
 
