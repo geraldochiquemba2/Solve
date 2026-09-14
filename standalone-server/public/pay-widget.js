@@ -362,7 +362,9 @@
     var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
     var entList = m._entregas || [];
     list.forEach(function (p) {
-      var ref = (p.method !== "mcx_express" && p.reference_code) ? (" · Ref " + p.reference_code + (p.entity ? " / Ent " + p.entity : "")) : "";
+      var hasRealRef = p.reference_code && p.reference_code !== p.code;
+      var ref = (p.method !== "mcx_express" && hasRealRef) ? (" · Ref " + p.reference_code + (p.entity ? " / Ent " + p.entity : "")) : "";
+      var pendingRef = (p.method !== "mcx_express" && p.status === "pendente" && !hasRealRef) ? " · <span style='color:#b45309'>a gerar referência...</span>" : "";
       var prodNome = "";
       if (p.cademi_produto) {
         for (var ei = 0; ei < entList.length; ei++) {
@@ -372,7 +374,7 @@
       }
       html += "<div style='display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem'>"
         + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + p.amount + " Kz</span>"
-        + "<span style='color:#666'>" + statusLabel(p.status) + ref + "</span>"
+        + "<span style='color:#666'>" + statusLabel(p.status) + ref + pendingRef + "</span>"
         + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
         + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
         + "</div>";

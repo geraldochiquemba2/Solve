@@ -1245,7 +1245,7 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
     } catch {}
   };
   const linkCharge = async (chargeId) => {
-    if (!chargeId || !paymentId) return;
+    if (!chargeId || !paymentId || chargeId === "00000000-0000-0000-0000-000000000000") return;
     try {
       await pool.query("UPDATE payments SET ekwanza_code = $1 WHERE id = $2", [chargeId, paymentId]);
     } catch {}
@@ -1309,7 +1309,7 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
             MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
             ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
           },
-          ...(customer_phone ? { paymentInfo: { phoneNumber: customer_phone } } : {}),
+                ...(isRef ? {} : (customer_phone ? { paymentInfo: { phoneNumber: customer_phone } } : {})),
         }),
         signal: ctrl.signal,
       });
@@ -2349,7 +2349,9 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
     const charge = chargeData.payments?.[0] || chargeData.payment || chargeData.data || null;
     if (!charge) {
       // Referência nunca gerada (ex. config REF em falta na altura): tenta gerar agora.
-      if (payment.method === "referencia" && !payment.ekwanza_code) {
+      // Zero-UUID = tentativa falhada anterior, conta como ausente.
+      const noCharge = !payment.ekwanza_code || payment.ekwanza_code === "00000000-0000-0000-0000-000000000000";
+      if (payment.method === "referencia" && noCharge) {
         let meta0 = {};
         try { meta0 = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
         setImmediate(() => fireEkwanzaCharge({
