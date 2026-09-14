@@ -363,7 +363,7 @@
     var entList = m._entregas || [];
     list.forEach(function (p) {
       var hasRealRef = p.reference_code && p.reference_code !== p.code;
-      var ref = (p.method !== "mcx_express" && hasRealRef) ? (" · Ref " + p.reference_code + (p.entity ? " / Ent " + p.entity : "")) : "";
+      var ref = (p.method !== "mcx_express" && hasRealRef) ? (" · Referência " + p.reference_code + (p.entity ? " · Entidade " + p.entity : "")) : "";
       var pendingRef = (p.method !== "mcx_express" && p.status === "pendente" && !hasRealRef) ? " · <span style='color:#b45309'>a gerar referência...</span>" : "";
       var prodNome = "";
       if (p.cademi_produto) {
@@ -520,8 +520,31 @@
         }
         var box = m.querySelector("#spw-ref");
         if (ref) {
-          box.innerHTML = "<div class='spw-ref'>Entidade: <b>" + (ref.entity || "—") + "</b><br>Referência: <b>" + ref.referenceNumber + "</b><br>Valor: <b>" + amt + " Kz</b><br><span style='font-size:.72rem;color:#666'>Paga no ATM/MCX. O curso liberta após pagamento.</span></div>";
+          box.innerHTML = "<div class='spw-ref'>"
+            + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Entidade: <b>" + (ref.entity || "—") + "</b></span></div>"
+            + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Referência: <b>" + ref.referenceNumber + "</b></span><button id='spw-copyref' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.3rem .6rem;font-size:.72rem;cursor:pointer'>Copiar referência</button></div>"
+            + "<div style='margin-bottom:.3rem'>Valor: <b>" + amt + " Kz</b></div>"
+            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Paga no ATM/MCX. O curso liberta após pagamento.</div>"
+            + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
+            + "</div>";
           msg(m, "Referência gerada.");
+          var copyBtn = box.querySelector("#spw-copyref");
+          if (copyBtn) copyBtn.addEventListener("click", function () {
+            var txt = "Entidade " + (ref.entity || "") + " Referência " + ref.referenceNumber + " Valor " + amt + " Kz";
+            function done() { copyBtn.textContent = "Copiado!"; setTimeout(function () { copyBtn.textContent = "Copiar referência"; }, 1800); }
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
+            else {
+              var ta = document.createElement("textarea");
+              ta.value = txt;
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (e) {}
+              document.body.removeChild(ta);
+              done();
+            }
+          });
+          var cancelBtn = box.querySelector("#spw-cancelref");
+          if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });
         } else {
           msg(m, "Referência criada (" + code + "). Se os dados não aparecerem, fala connosco.", true);
         }
