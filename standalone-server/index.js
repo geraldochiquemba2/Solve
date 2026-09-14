@@ -108,7 +108,7 @@ function requireAuth(req, res, next) {
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com";
+const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com,https://brunosamora.cademi.com.br";
 app.use(cors({
   origin: CORS_ORIGIN.split(",").map(s => s.trim()),
   credentials: true,
