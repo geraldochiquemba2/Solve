@@ -67,7 +67,7 @@
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
-      "<label class='spw-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
+      "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
@@ -93,8 +93,19 @@
 
     var method = "express";
     var bExp = m.querySelector("#spw-m-exp"), bRef = m.querySelector("#spw-m-ref");
-    bExp.addEventListener("click", function () { method = "express"; bExp.className = "on"; bRef.className = ""; });
-    bRef.addEventListener("click", function () { method = "referencia"; bRef.className = "on"; bExp.className = ""; });
+    var phoneInput = m.querySelector("#spw-phone"), phoneLabel = m.querySelector("#spw-phone-label");
+    function setMethod(md) {
+      method = md;
+      var isExp = md === "express";
+      bExp.className = isExp ? "on" : "";
+      bRef.className = isExp ? "" : "on";
+      // Referência não precisa de telefone: esconde o campo.
+      phoneInput.style.display = isExp ? "" : "none";
+      phoneLabel.style.display = isExp ? "" : "none";
+      phoneLabel.textContent = "Telefone *";
+    }
+    bExp.addEventListener("click", function () { setMethod("express"); });
+    bRef.addEventListener("click", function () { setMethod("referencia"); });
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
     autodetect(m);
@@ -262,7 +273,8 @@
     var prod = m.querySelector("#spw-prod").value;
     var btn = m.querySelector("#spw-go");
     if (!amt || amt <= 0) { msg(m, "Indica um montante válido.", true); return; }
-    if (!phone) { msg(m, "Indica o número de telefone.", true); return; }
+    // Só o Express usa o número (cobrança push); referência não precisa.
+    if (method === "express" && !phone) { msg(m, "Indica o número de telefone.", true); return; }
     btn.disabled = true;
     btn.textContent = "A gerar...";
     try {
