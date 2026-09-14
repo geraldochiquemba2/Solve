@@ -67,8 +67,8 @@
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
       "<label class='spw-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
-      "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno'></div>" +
-      "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com'></div></div>" +
+      "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
+      "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
       "<div class='spw-actions'><button class='spw-close' id='spw-cancel'>Fechar</button><button class='spw-pay' id='spw-go'>Pagar</button></div>";
     document.body.appendChild(back);
