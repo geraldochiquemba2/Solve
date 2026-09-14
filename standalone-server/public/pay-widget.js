@@ -104,9 +104,20 @@
   }
 
   // Deteta o aluno logado na Cademi (nome/email/telefone visíveis na página) e preenche.
+  // 1) perfil guardado pelo próprio widget (último pagamento neste browser)
+  // 2) heurísticas da página. Devolve relatório para diagnóstico (?spw_debug=1).
   function autodetect(m) {
+    var report = [];
     try {
       var nameEl = m.querySelector("#spw-name"), emailEl = m.querySelector("#spw-email"), phoneEl = m.querySelector("#spw-phone");
+      try {
+        var saved = JSON.parse(localStorage.getItem("spw_profile") || "null");
+        if (saved) {
+          if (!nameEl.value && saved.name) { nameEl.value = saved.name; report.push("memória: nome"); }
+          if (!emailEl.value && saved.email) { emailEl.value = saved.email; report.push("memória: email"); }
+          if (!phoneEl.value && saved.phone) { phoneEl.value = saved.phone; report.push("memória: telefone"); }
+        }
+      } catch (e0) {}
       var email = "";
       var mailto = document.querySelector('a[href^="mailto:"]');
       if (mailto) email = (mailto.getAttribute("href") || "").replace(/^mailto:/i, "").split("?")[0].trim();
@@ -169,9 +180,22 @@
           if (mc.indexOf("@") > 0) email = mc;
         }
       } catch (e4) {}
-      if (email && !emailEl.value) emailEl.value = email;
-      if (name && !nameEl.value) nameEl.value = name;
-      if (phone && phone.length === 9 && !phoneEl.value) phoneEl.value = phone;
+      if (email && !emailEl.value) { emailEl.value = email; report.push("página: email"); }
+      if (name && !nameEl.value) { nameEl.value = name; report.push("página: nome"); }
+      if (phone && phone.length === 9 && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
+      try {
+        if (window.location.search.indexOf("spw_debug=1") >= 0) {
+          var hdr = document.querySelector("header");
+          var info = "achados: " + (report.join(", ") || "nenhum") +
+            " | header: " + (hdr ? (hdr.innerText || "").trim().slice(0, 120) : "sem header") +
+            " | inputs: " + document.querySelectorAll("input").length +
+            " | mailto: " + (!!document.querySelector('a[href^="mailto:"]')) +
+            " | dataLayer: " + (!!(window.dataLayer && window.dataLayer.length));
+          var d = m.querySelector("#spw-msg");
+          d.textContent = info;
+          d.style.color = "#666";
+        }
+      } catch (e5) {}
     } catch (e) {}
   }
 
@@ -201,6 +225,7 @@
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);
       var code = (j.data && j.data.code) || "";
+      try { localStorage.setItem("spw_profile", JSON.stringify({ name: name, email: email, phone: phone })); } catch (e9) {}
       if (method === "express") {
         msg(m, "Pedido enviado para " + phone + " (" + code + "). Aprova no Multicaixa...");
         for (var i = 0; i < 24; i++) {
