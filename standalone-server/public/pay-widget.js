@@ -533,7 +533,7 @@
           msg(m, "Referência gerada.");
           var copyBtn = box.querySelector("#spw-copyref");
           if (copyBtn) copyBtn.addEventListener("click", function () {
-            var txt = "Entidade " + (ref.entity || "") + " Referência " + ref.referenceNumber + " Valor " + amt + " Kz";
+            var txt = String(ref.referenceNumber);
             function done() { copyBtn.textContent = "Copiado!"; setTimeout(function () { copyBtn.textContent = "Copiar referência"; }, 1800); }
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
             else {
