@@ -1112,16 +1112,28 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 // fechar sem esperar pelo OAuth + POST GPO (10-45s).
 app.post("/api/v1/payments", requireAuth, async (req, res) => {
   try {
-    const { amount, method, customer_id, customer_phone, description, reference_code } = req.body || {};
+    const { amount, method, customer_id, customer_phone, customer_email, customer_name, description, reference_code } = req.body || {};
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
     const m = method || "mcx_express";
     const code = "SC" + Date.now().toString(36).toUpperCase();
+    // Autónomo: liga ao cliente pelo telefone (para o envio Cademi ter email).
+    let linkedId = customer_id || null;
+    if (!linkedId && customer_phone) {
+      try {
+        const digits = String(customer_phone).replace(/\D/g, "").slice(-9);
+        const found = await pool.query(
+          "SELECT id FROM customers WHERE REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'+',''), ' ', ''), '-', '') LIKE $1 ORDER BY created_at DESC LIMIT 1",
+          [`%${digits}`]
+        );
+        if (found.rows[0]) linkedId = found.rows[0].id;
+      } catch {}
+    }
     const r = await pool.query(
       `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
        VALUES ($1, $2, $3, $4, 'pendente', $5, $6, NOW() + INTERVAL '24 hours') RETURNING *`,
-      [code, customer_id || null, amt, m, reference_code || code,
-       JSON.stringify({ phone: customer_phone || null, description: description || null })]
+      [code, linkedId, amt, m, reference_code || code,
+       JSON.stringify({ phone: customer_phone || null, email: customer_email || null, name: customer_name || null, description: description || null })]
     );
     const payment = r.rows[0];
     // Resposta imediata — o frontend fecha o modal aqui.
@@ -1421,8 +1433,8 @@ async function sendCademiDelivery(paymentCode) {
     let meta = {};
     try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
     if (meta.cademi_delivery === "sent") return { ok: false, skipped: "já enviado" };
-    // Nome + email: customers via customer_id, senão OVG pelo telefone
-    let nome = null, email = null, phone = meta.phone || null;
+    // Nome + email: metadata (formulário) → customers via customer_id → OVG pelo telefone
+    let nome = meta.name || null, email = meta.email || null, phone = meta.phone || null;
     if (payment.customer_id) {
       try {
         const cr = await pool.query("SELECT name, email, phone FROM customers WHERE id = $1", [payment.customer_id]);

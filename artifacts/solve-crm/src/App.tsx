@@ -758,6 +758,8 @@ function PaymentsPage() {
   const [cAmount, setCAmount] = useState('');
   const [cMethod, setCMethod] = useState('mcx_express');
   const [cPhone, setCPhone] = useState('');
+  const [cEmail, setCEmail] = useState('');
+  const [cName, setCName] = useState('');
   const [cDesc, setCDesc] = useState('');
   const [cMsg, setCMsg] = useState('');
   const [charging, setCharging] = useState(false);
@@ -768,10 +770,10 @@ function PaymentsPage() {
     // Snapshot dos campos + FECHO IMEDIATO (optimista).
     // O POST corre em background: o modal fecha sempre, mesmo que o
     // servidor demore (É-kwanza) ou esteja na versão antiga.
-    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, description: cDesc.trim() || undefined };
-    const snap = { amount: cAmount, method: cMethod, phone: cPhone, desc: cDesc };
+    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, description: cDesc.trim() || undefined };
+    const snap = { amount: cAmount, method: cMethod, phone: cPhone, email: cEmail, name: cName, desc: cDesc };
     setChargeOpen(false);
-    setCAmount(''); setCPhone(''); setCDesc(''); setCMsg('');
+    setCAmount(''); setCPhone(''); setCEmail(''); setCName(''); setCDesc(''); setCMsg('');
     setCharging(false);
     try {
       const apiBase3 = import.meta.env.VITE_API_URL || '';
@@ -793,7 +795,7 @@ function PaymentsPage() {
       [15000, 45000, 90000].forEach(dt => setTimeout(() => { syncPendentes(rows || undefined); }, dt));
     } catch (e: any) {
       // Falhou: reabre o modal com os valores e o erro.
-      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCDesc(snap.desc);
+      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCDesc(snap.desc);
       setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
       setChargeOpen(true);
     }
@@ -871,6 +873,12 @@ function PaymentsPage() {
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Telefone {cMethod === 'mcx_express' ? '*' : '(opcional)'}</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
+    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+      <div style={{ flex: 1 }}><label className="label">Nome (p/ Cademi)</label>
+      <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="Nome do aluno" style={{ width: '100%' }} /></div>
+      <div style={{ flex: 1 }}><label className="label">Email (p/ Cademi)</label>
+      <input className="input" type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="aluno@email.com" style={{ width: '100%' }} /></div>
+    </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
     {cMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cMsg}</div>}
