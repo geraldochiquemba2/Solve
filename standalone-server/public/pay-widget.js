@@ -138,6 +138,37 @@
         var telInput = document.querySelector('input[type="tel"]');
         if (telInput && telInput.value) phone = String(telInput.value).replace(/\D/g, "").slice(-9);
       }
+      // Varrimento largo: inputs da página, dataLayer, JSON-LD, meta tags.
+      try {
+        if (!email || !name || !phone) {
+          var inputs = document.querySelectorAll("input");
+          for (var w = 0; w < inputs.length; w++) {
+            var inp = inputs[w];
+            var idn = ((inp.name || "") + " " + (inp.id || "") + " " + (inp.placeholder || "")).toLowerCase();
+            var val = String(inp.value || "").trim();
+            if (!val) continue;
+            if (!email && val.indexOf("@") > 0 && val.length < 80 && /email|e-mail|mail|usuario|user|aluno|conta|login/.test(idn)) email = val;
+            if (!phone && /tel|cel|fone|phone|whatsapp|numero|número/.test(idn)) {
+              var dg = val.replace(/\D/g, "").slice(-9);
+              if (dg.length === 9) phone = dg;
+            }
+            if (!name && /nome|name|aluno|usuario|user/.test(idn) && val.indexOf("@") < 0 && val.length < 60) name = val;
+          }
+        }
+      } catch (e2) {}
+      try {
+        if ((!email || !name) && window.dataLayer && window.dataLayer.length) {
+          var dl = JSON.stringify(window.dataLayer).slice(0, 20000);
+          if (!email) { var me = dl.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/); if (me) email = me[0]; }
+        }
+      } catch (e3) {}
+      try {
+        var metas = document.querySelectorAll('meta[name="user-email"], meta[name="email"], meta[property="profile:email"]');
+        for (var mI = 0; mI < metas.length && !email; mI++) {
+          var mc = (metas[mI].getAttribute("content") || "").trim();
+          if (mc.indexOf("@") > 0) email = mc;
+        }
+      } catch (e4) {}
       if (email && !emailEl.value) emailEl.value = email;
       if (name && !nameEl.value) nameEl.value = name;
       if (phone && phone.length === 9 && !phoneEl.value) phoneEl.value = phone;
