@@ -498,6 +498,23 @@
           await sleep(5000);
           var st2 = await checkStatus(code);
           if (st2 && st2.reference && st2.reference.referenceNumber) { ref = st2.reference; break; }
+          // Fallback: referência já gravada na BD (histórico).
+          try {
+            var hq = histParams(m);
+            if (hq) {
+              var hr = await h(API + "/api/v1/payments/minha-historico?" + hq);
+              var hj = await hr.json().catch(function () { return {}; });
+              var hlist = (hj && Array.isArray(hj.data)) ? hj.data : [];
+              for (var hi2 = 0; hi2 < hlist.length; hi2++) {
+                if (hlist[hi2].code === code && hlist[hi2].reference_code && hlist[hi2].reference_code !== code) {
+                  ref = { referenceNumber: hlist[hi2].reference_code, entity: hlist[hi2].entity };
+                  break;
+                }
+              }
+              if (ref) break;
+            }
+          } catch (eH) {}
+          if (st2 && st2.ekwanzaStatus === "GENERATING") { msg(m, "A gerar referência (" + code + ")..."); }
         }
         var box = m.querySelector("#spw-ref");
         if (ref) {
