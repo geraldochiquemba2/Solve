@@ -402,6 +402,9 @@
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);
       msg(m, "Pagamento " + code + " cancelado.");
+      // Volta ao normal: limpa o bloco da referência e recarrega tudo.
+      var refBox = m.querySelector("#spw-ref");
+      if (refBox) refBox.innerHTML = "<div style='font-size:.78rem;color:#666'>Pagamento " + code + " cancelado.</div>";
       await loadHist(m);
       await refreshAccess(m, currentEntregas(m));
     } catch (e) { msg(m, "Erro: " + (e.message || "falha"), true); }

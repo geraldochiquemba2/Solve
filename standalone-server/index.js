@@ -1188,6 +1188,14 @@ async function cademiActiveAccess(email, produtoSlug) {
   return null;
 }
 
+// Normaliza telefone AO: tira espaços, +, 00 e prefixo 244 → 9XXXXXXXX.
+function normPhone(p) {
+  let d = String(p || "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("244") && d.length > 9) d = d.slice(3);
+  return d;
+}
+
 // Grava o erro É-kwanza nos metadados (visível para diagnóstico, sem bloquear).
 async function saveEkwanzaError(code, msg) {
   try {
@@ -1351,10 +1359,14 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
 // fechar sem esperar pelo OAuth + POST GPO (10-45s).
 app.post("/api/v1/payments", requireAuth, async (req, res) => {
   try {
-    const { amount, method, customer_id, customer_phone, customer_email, customer_name, cademi_produto, description, reference_code } = req.body || {};
+    const { amount, method, customer_id, customer_phone: raw_phone, customer_email, customer_name, cademi_produto, description, reference_code } = req.body || {};
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
     const m = method || "mcx_express";
+    const customer_phone = normPhone(raw_phone) || null;
+    if (m === "mcx_express" && (!customer_phone || customer_phone.length !== 9)) {
+      return res.status(400).json({ error: "Número Express inválido (usa 9XXXXXXXX)" });
+    }
     const code = "SC" + Date.now().toString(36).toUpperCase();
     // Autónomo: liga ao cliente pelo telefone (para o envio Cademi ter email).
     let linkedId = customer_id || null;
