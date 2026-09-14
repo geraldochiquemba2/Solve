@@ -1473,9 +1473,10 @@ async function sendCademiDelivery(paymentCode) {
 // Formato em settings@cademi_entregas: [{"id":"samorafit-workout","nome":"SamoraFit Workout"}]
 app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
   try {
-    const raw = await cfg("cademi_entregas", "");
-    let list = [];
-    try { list = JSON.parse(raw); } catch {}
+    // Lê direto (jsonb vem como objeto; cfg() estragaria com .toString()).
+    const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
+    let list = srow?.rows?.[0]?.value ?? [];
+    if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
     if (!Array.isArray(list) || list.length === 0) {
       const def = String(await cfg("cademi_produto_id", "samorafit-workout")).trim() || "samorafit-workout";
       list = [{ id: def, nome: "SamoraFit Workout" }];
