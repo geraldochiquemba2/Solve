@@ -1270,7 +1270,10 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
 
 let _cademiLastCall = 0;
 async function cademiFetch(path, options = {}) {
-  const base = (await cfg("cademi_api_url", CADEMI_API_URL)).replace(/\/$/, "");
+  let base = (await cfg("cademi_api_url", CADEMI_API_URL)).replace(/\/$/, "");
+  // Normaliza: garante exatamente um sufixo /api/v1 (o .env traz sem,
+  // a tabela settings traz com — ambos têm de funcionar).
+  base = base.replace(/\/api\/v1$/, "") + "/api/v1";
   const key = await cfg("cademi_api_key", CADEMI_API_KEY);
   if (!key) {
     return { success: false, error: "Cademi não configurado (Integrações > Configurar)" };

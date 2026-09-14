@@ -49,7 +49,8 @@ class CademiClient {
   private apiKey: string;
 
   constructor() {
-    this.baseUrl = CADEMI_API_URL.replace(/\/$/, "");
+    // Normaliza: base nunca termina com /api/v1 (os paths já incluem o prefixo).
+    this.baseUrl = CADEMI_API_URL.replace(/\/$/, "").replace(/\/api\/v1$/, "");
     this.apiKey = CADEMI_API_KEY;
   }
 
