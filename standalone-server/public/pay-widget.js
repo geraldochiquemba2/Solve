@@ -71,7 +71,8 @@
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
-      "<div id='spw-hist' style='margin-top:.6rem'></div>" +
+      "<button id='spw-histbtn' style='width:100%;margin-top:.7rem;border:1px solid #d4d4d8;background:#fff;border-radius:8px;padding:.55rem;font-size:.8rem;font-weight:600;cursor:pointer;color:#111'>Os meus pagamentos</button>" +
+      "<div id='spw-hist' style='margin-top:.5rem;display:none'></div>" +
       "<div class='spw-actions'><button class='spw-close' id='spw-cancel'>Fechar</button><button class='spw-pay' id='spw-go'>Pagar</button></div>";
     document.body.appendChild(back);
 
@@ -228,7 +229,12 @@
         if (em && em.indexOf("@") > 0 && !nameEl.value) {
           h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (j) {
             if (j && j.data && j.data.nome && !nameEl.value) nameEl.value = j.data.nome;
-            loadHist(m);
+    loadHist(m);
+    m.querySelector("#spw-histbtn").addEventListener("click", function () {
+      var box = m.querySelector("#spw-hist");
+      box.style.display = (box.style.display === "none" || !box.style.display) ? "block" : "none";
+      if (box.style.display === "block") loadHist(m);
+    });
           }).catch(function () {});
         }
       } catch (e6) {}
@@ -317,7 +323,9 @@
 
   async function loadHist(m) {
     var box = m.querySelector("#spw-hist");
+    var btn = m.querySelector("#spw-histbtn");
     var list = await fetchHist(m);
+    if (btn) btn.textContent = "Os meus pagamentos (" + list.length + ")";
     if (!list.length) { box.innerHTML = ""; return list; }
     var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
     var entList = m._entregas || [];
