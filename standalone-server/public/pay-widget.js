@@ -56,16 +56,16 @@
   }
 
   function openModal(entregas) {
-    closeModal();
-    var back = el("div", "spw-back");
+    closeModal();    var back = el("div", "spw-back");
     var m = el("div", "spw-modal");
+    m._entregas = entregas || [];
     back.appendChild(m);
     m.innerHTML =
       "<h3>Pagar mensalidade</h3>" +
       "<div class='spw-note'>SamoraFit · pagamento</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
-      "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1'></div>" +
+      "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
       "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
@@ -320,10 +320,18 @@
     var list = await fetchHist(m);
     if (!list.length) { box.innerHTML = ""; return list; }
     var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
+    var entList = m._entregas || [];
     list.forEach(function (p) {
       var ref = (p.method !== "mcx_express" && p.reference_code) ? (" · Ref " + p.reference_code + (p.entity ? " / Ent " + p.entity : "")) : "";
+      var prodNome = "";
+      if (p.cademi_produto) {
+        for (var ei = 0; ei < entList.length; ei++) {
+          if (entList[ei].id === p.cademi_produto) { prodNome = entList[ei].nome; break; }
+        }
+        if (!prodNome) prodNome = p.cademi_produto;
+      }
       html += "<div style='display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem'>"
-        + "<span style='font-weight:700'>" + p.amount + " Kz</span>"
+        + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + p.amount + " Kz</span>"
         + "<span style='color:#666'>" + statusLabel(p.status) + ref + "</span>"
         + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
         + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
