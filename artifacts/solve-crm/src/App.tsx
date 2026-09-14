@@ -594,6 +594,18 @@ function PlansPage() {
 function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () => void }) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<any>(null);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
+
+  const sendCademi = async () => {
+    setSending(true); setSendResult(null);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: { 'X-API-Key': 'solve-crm-api-key-2024' } });
+      const data = await res.json().catch(() => null);
+      setSendResult(res.ok ? `Acesso libertado (${data?.email || ''})` : `Falha: ${data?.error || res.statusText}`);
+    } catch (e: any) { setSendResult('Erro: ' + e.message); }
+    setSending(false);
+  };
 
   const checkStatus = async () => {
     setChecking(true);
@@ -643,7 +655,15 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
         <button className="btn-secondary" onClick={checkStatus} disabled={checking} style={{ flex: 1 }}>
           {checking ? 'Verificando...' : 'Verificar Estado no É-kwanza'}
         </button>
+        <button className="btn-primary" onClick={sendCademi} disabled={sending} style={{ flex: 1 }}>
+          {sending ? 'A enviar...' : 'Enviar Cademi'}
+        </button>
       </div>
+      {sendResult && (
+        <div style={{ marginTop: '.4rem', padding: '.5rem .65rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.4rem', fontSize: '.72rem' }}>
+          <strong>Cademi:</strong> {sendResult}
+        </div>
+      )}
       {checkResult && (
         <div style={{ marginTop: '.4rem', padding: '.5rem .65rem', background: checkResult.changed ? 'hsl(142 70% 45% / .15)' : 'hsl(var(--secondary) / .45)', borderRadius: '.4rem', fontSize: '.72rem' }}>
           <strong>É-kwanza:</strong> {checkResult.ekwanzaStatus} {checkResult.changed && `(atualizado de ${checkResult.previousStatus})`}
@@ -939,6 +959,33 @@ function AcademiaPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [produtoId, setProdutoId] = useState('');
+  const [autoDelivery, setAutoDelivery] = useState(false);
+  const [cfgMsg, setCfgMsg] = useState('');
+  const [savingCfg, setSavingCfg] = useState(false);
+
+  const fetchCfg = async () => {
+    try {
+      const r: any = await fetch(`${apiBase}/api/v1/settings`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+      const d = r.data || {};
+      if (d.cademi_produto_id) setProdutoId(String(d.cademi_produto_id));
+      setAutoDelivery(String(d.cademi_auto_delivery) === '1');
+    } catch {}
+  };
+
+  const saveCfg = async () => {
+    setSavingCfg(true); setCfgMsg('');
+    try {
+      const res = await fetch(`${apiBase}/api/v1/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0' } }),
+      });
+      if (!res.ok) throw new Error('Falha a guardar');
+      setCfgMsg('Configuração guardada. Pagamentos confirmados passam a libertar acesso.');
+    } catch (e: any) { setCfgMsg('Erro: ' + e.message); }
+    setSavingCfg(false);
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -953,7 +1000,7 @@ function AcademiaPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); fetchCfg(); }, []);
 
   const openStudent = async (s: any) => {
     setSelected(s);
@@ -988,6 +1035,16 @@ function AcademiaPage() {
 
   return <><PageHeader eyebrow="Ecossistema · Formação" title="Academia" subtitle="Cursos e alunos da plataforma Cademi." action={<div className="page-actions" style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
+  <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
+    <div className="grid-2">
+      <div><label className="label">ID do produto/entrega *</label>
+      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: 123 (ver ID nos Cursos)" style={{ width: '100%' }} /></div>
+      <div><label className="label">Envio automático</label>
+      <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
+    </div>
+    {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
+    <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
+  </Section>
   {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados da Cademi...</div> : <>
     <Section title="Cursos" note={`${products.length} produtos`}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '.8rem' }}>

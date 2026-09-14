@@ -1024,6 +1024,7 @@ app.post("/webhooks/ekwanza", async (req, res) => {
         console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
       }
       broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
+      if (mappedStatus === "confirmado") setImmediate(() => sendCademiDelivery(merchantTransactionId));
     }
 
     res.json({ received: true });
@@ -1154,6 +1155,10 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
             }
             broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
             console.log(`[PAYMENTS] ${code}: pendente -> ${mapped} (resposta GPO: ${rawStatus})`);
+            if (mapped === "confirmado") {
+              const dr = await sendCademiDelivery(code);
+              if (!dr.ok) console.log(`[CADEMI] ${code}: ${dr.skipped}`);
+            }
           } catch {}
         };
         const linkCharge = async (chargeId) => {
@@ -1394,6 +1399,63 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
     } catch {}
   }
   res.json({ ok: true, cademiUsers: users.length, matched });
+});
+
+// ─── Cademi: acesso ao curso após pagamento confirmado ─────────────────────
+// Docs: api-docs.cademi.com.br — POST /api/v1/entrega/enviar
+// body: { codigo, status: "aprovado", produto_id, cliente_nome, cliente_email, token }
+// Config (tabela settings, editável no CRM > Academia):
+//   cademi_auto_delivery = "1"  +  cademi_produto_id = "<id do produto/entrega>"
+async function sendCademiDelivery(paymentCode) {
+  try {
+    const auto = String(await cfg("cademi_auto_delivery", "")).trim();
+    const produtoId = String(await cfg("cademi_produto_id", "")).trim();
+    if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto_id por configurar (Academia)" };
+    const pr = await pool.query("SELECT * FROM payments WHERE code = $1", [paymentCode]);
+    if (pr.rows.length === 0) return { ok: false, skipped: "pagamento inexistente" };
+    const payment = pr.rows[0];
+    if (payment.status !== "confirmado") return { ok: false, skipped: `estado ${payment.status}` };
+    let meta = {};
+    try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
+    if (meta.cademi_delivery === "sent") return { ok: false, skipped: "já enviado" };
+    // Nome + email: customers via customer_id, senão OVG pelo telefone
+    let nome = null, email = null, phone = meta.phone || null;
+    if (payment.customer_id) {
+      try {
+        const cr = await pool.query("SELECT name, email, phone FROM customers WHERE id = $1", [payment.customer_id]);
+        if (cr.rows[0]) { nome = cr.rows[0].name; email = cr.rows[0].email; phone = cr.rows[0].phone || phone; }
+      } catch {}
+    }
+    if (!email && phone) {
+      try {
+        const digits = String(phone).replace(/\D/g, "").slice(-9);
+        const or = await pool.query("SELECT email, name FROM ovg_members WHERE mobile_number LIKE $1 LIMIT 1", [`%${digits}`]);
+        if (or.rows[0]?.email) { email = or.rows[0].email; nome = nome || or.rows[0].name; }
+      } catch {}
+    }
+    if (!email) return { ok: false, skipped: "sem email (preenche no cliente e reenvia)" };
+    const apiKey = await cfg("cademi_api_key", CADEMI_API_KEY);
+    const r = await cademiFetch("/entrega/enviar", {
+      method: "POST",
+      body: JSON.stringify({
+        codigo: payment.code, status: "aprovado", produto_id: produtoId,
+        cliente_nome: nome || email, cliente_email: email, token: apiKey,
+      }),
+    });
+    if (!r.success) return { ok: false, skipped: `Cademi: ${r.error}` };
+    meta.cademi_delivery = "sent";
+    meta.cademi_delivery_at = new Date().toISOString();
+    await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]);
+    console.log(`[CADEMI] Acesso enviado: ${payment.code} → ${email} (produto ${produtoId})`);
+    return { ok: true, email };
+  } catch (e) { return { ok: false, skipped: e.message }; }
+}
+
+// Manual: (re)enviar acesso à Cademi — backfill e teste
+app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res) => {
+  const r = await sendCademiDelivery(req.params.code);
+  if (r.ok) return res.json({ ok: true, email: r.email });
+  res.status(400).json({ ok: false, error: r.skipped });
 });
 
 // Webhook recetor (configurar URL no painel Cademi: /api/v1/webhooks/cademi)
@@ -1987,6 +2049,7 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
       );
       console.log(`[CHECK-STATUS] ${payment.code}: ${payment.status} -> ${newStatus}`);
       broadcastPaymentUpdate({ type: "payment_updated", code: payment.code, status: newStatus });
+      if (newStatus === "confirmado") setImmediate(() => sendCademiDelivery(payment.code));
     }
     res.json({
       paymentId: id,
@@ -2197,6 +2260,7 @@ setInterval(async () => {
         }
         console.log(`[AUTO-SYNC] ${code}: pendente -> ${mapped} (GPO: ${ch.status})`);
         broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
+        if (mapped === "confirmado") setImmediate(() => sendCademiDelivery(code));
         await new Promise(r => setTimeout(r, 300));
       } catch (e) { console.error(`[AUTO-SYNC] ${code}:`, e.message); }
     }
