@@ -94,12 +94,47 @@
     bRef.addEventListener("click", function () { method = "referencia"; bRef.className = "on"; bExp.className = ""; });
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
+    autodetect(m);
     m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method); });
   }
 
   function closeModal() {
     var b = document.querySelector(".spw-back");
     if (b) b.remove();
+  }
+
+  // Deteta o aluno logado na Cademi (nome/email visíveis na página) e preenche.
+  function autodetect(m) {
+    try {
+      var nameEl = m.querySelector("#spw-name"), emailEl = m.querySelector("#spw-email");
+      if ((nameEl.value && emailEl.value)) return;
+      var email = "";
+      var mailto = document.querySelector('a[href^="mailto:"]');
+      if (mailto) email = (mailto.getAttribute("href") || "").replace(/^mailto:/i, "").split("?")[0].trim();
+      if (!email || email.indexOf("@") < 0) {
+        var bodyTxt = (document.body.innerText || "").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+        if (bodyTxt) email = bodyTxt[0];
+      }
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i) || "";
+          var v = String(localStorage.getItem(k) || "");
+          if (!email && /email|usuario|user|aluno/i.test(k) && v.indexOf("@") > 0 && v.length < 80) email = v.trim();
+        }
+      } catch (e) {}
+      var name = "";
+      var cands = document.querySelectorAll("header .user-name, header .username, .user-info .name, .profile-name, [class*='user-name'], [class*='username']");
+      for (var j = 0; j < cands.length; j++) {
+        var t = (cands[j].innerText || "").trim();
+        if (t && t.indexOf("@") < 0 && t.length > 1 && t.length < 60) { name = t; break; }
+      }
+      if (!name) {
+        var avatar = document.querySelector("header img[alt], .avatar[alt], .profile img[alt]");
+        if (avatar) { var a = (avatar.getAttribute("alt") || "").trim(); if (a && a.indexOf("@") < 0 && a.length < 60) name = a; }
+      }
+      if (email && !emailEl.value) emailEl.value = email;
+      if (name && !nameEl.value) nameEl.value = name;
+    } catch (e) {}
   }
 
   function msg(m, t, err) {
