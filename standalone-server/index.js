@@ -1469,15 +1469,33 @@ async function sendCademiDelivery(paymentCode) {
   } catch (e) { return { ok: false, skipped: e.message }; }
 }
 
-// Lista de entregas Cademi (slugs reais, gerida no CRM > Academia).
-// Formato em settings@cademi_entregas: [{"id":"samorafit-workout","nome":"SamoraFit Workout"}]
+// Lista de entregas Cademi (slugs reais).
+// 1) slugs derivados dos produtos reais da API (/produto → nome → slug)
+// 2) fundidos com a lista manual em settings@cademi_entregas (traz nome bonito + preço)
+function slugify(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
   try {
-    // Lê direto (jsonb vem como objeto; cfg() estragaria com .toString()).
-    const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
-    let list = srow?.rows?.[0]?.value ?? [];
-    if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
-    if (!Array.isArray(list) || list.length === 0) {
+    const byId = new Map();
+    // Manual primeiro (tem preço).
+    try {
+      const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
+      let manual = srow?.rows?.[0]?.value ?? [];
+      if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
+      (Array.isArray(manual) ? manual : []).forEach(o => { if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: o.preco } : {}) }); });
+    } catch {}
+    // Produtos reais da Cademi (aparecem automaticamente ao criar).
+    try {
+      const pr = await cademiFetch("/produto");
+      (pr.data?.produto || []).forEach(p => {
+        const slug = slugify(p.nome);
+        if (slug && !byId.has(slug)) byId.set(slug, { id: slug, nome: p.nome });
+      });
+    } catch {}
+    let list = [...byId.values()];
+    if (list.length === 0) {
       const def = String(await cfg("cademi_produto_id", "samorafit-workout")).trim() || "samorafit-workout";
       list = [{ id: def, nome: "SamoraFit Workout" }];
     }
