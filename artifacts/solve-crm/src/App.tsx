@@ -760,8 +760,14 @@ function PaymentsPage() {
   const [cPhone, setCPhone] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cName, setCName] = useState('');
-  const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string }>>([]);
+  const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
   const [cProduto, setCProduto] = useState('');
+  const pickProduto = (id: string) => {
+    setCProduto(id);
+    // Preço da tabela Cademi: preenche o montante (editável).
+    const found = cEntregas.find(o => o.id === id);
+    if (found?.preco) setCAmount(String(found.preco));
+  };
   const [cDesc, setCDesc] = useState('');
   const [cMsg, setCMsg] = useState('');
   const [charging, setCharging] = useState(false);
@@ -895,9 +901,9 @@ function PaymentsPage() {
       <input className="input" type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="aluno@email.com" style={{ width: '100%' }} /></div>
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (Cademi) *</label>
-    <select className="select" value={cProduto} onChange={e => setCProduto(e.target.value)} style={{ width: '100%' }}>
+    <select className="select" value={cProduto} onChange={e => pickProduto(e.target.value)} style={{ width: '100%' }}>
       {cEntregas.length === 0 && <option value="">A carregar...</option>}
-      {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+      {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}{o.preco ? ` — ${o.preco} Kz` : ''}</option>)}
     </select></div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
@@ -1003,7 +1009,7 @@ function AcademiaPage() {
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
         const list = Array.isArray(e.data) ? e.data : [];
-        if (list.length > 0) setEntregasTxt(list.map((o: any) => `${o.id} | ${o.nome}`).join('\n'));
+        if (list.length > 0) setEntregasTxt(list.map((o: any) => `${o.id} | ${o.nome}${o.preco ? ' | ' + o.preco : ''}`).join('\n'));
       } catch {}
     } catch {}
   };
@@ -1013,7 +1019,9 @@ function AcademiaPage() {
     try {
       const list = entregasTxt.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
         const [id, ...rest] = l.split('|').map(s => s.trim());
-        return { id, nome: rest.join('|') || id };
+        const nome = rest.filter(s => isNaN(Number(s)) || s === '').join('|').trim() || rest.join('|').trim() || id;
+        const precoStr = rest.map(s => s.trim()).find(s => s !== '' && !isNaN(Number(s)));
+        return { id, nome: nome || id, ...(precoStr ? { preco: Number(precoStr) } : {}) };
       }).filter(o => o.id);
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
@@ -1081,8 +1089,8 @@ function AcademiaPage() {
       <div><label className="label">Envio automático</label>
       <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Entregas disponíveis (slug | Nome, uma por linha)</label>
-    <textarea className="input" value={entregasTxt} onChange={e => setEntregasTxt(e.target.value)} rows={3} placeholder={'samorafit-workout | SamoraFit Workout'} style={{ width: '100%', resize: 'vertical' }} /></div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Entregas disponíveis (slug | Nome | preço Kz, uma por linha)</label>
+    <textarea className="input" value={entregasTxt} onChange={e => setEntregasTxt(e.target.value)} rows={3} placeholder={'samorafit-workout | SamoraFit Workout | 15000'} style={{ width: '100%', resize: 'vertical' }} /></div>
     {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
     <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
   </Section>
