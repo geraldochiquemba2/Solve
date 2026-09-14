@@ -129,7 +129,7 @@
       goBtn.disabled = false;
       goBtn.textContent = "Pagar";
     }
-    refreshAccess(m, entregas).then(unlock).catch(unlock);
+    refreshAccess(m, entregas).then(function () { unlock(); loadHist(m); }).catch(unlock);
     setTimeout(unlock, 15000); // segurança: nunca prende o botão
     loadHist(m);
     m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); loadHist(m); });
@@ -228,6 +228,7 @@
         if (em && em.indexOf("@") > 0 && !nameEl.value) {
           h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (j) {
             if (j && j.data && j.data.nome && !nameEl.value) nameEl.value = j.data.nome;
+            loadHist(m);
           }).catch(function () {});
         }
       } catch (e6) {}

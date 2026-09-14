@@ -995,6 +995,7 @@ function AcademiaPage() {
   const [syncMsg, setSyncMsg] = useState('');
   const [cobr, setCobr] = useState<any[]>([]);
   const [cobFilter, setCobFilter] = useState('Todos');
+  const [cademiView, setCademiView] = useState<'pagamentos' | 'alunos'>('pagamentos');
   const [produtoId, setProdutoId] = useState('');
   const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
   const [autoDelivery, setAutoDelivery] = useState(false);
@@ -1112,14 +1113,18 @@ function AcademiaPage() {
     <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', marginTop: '.8rem' }}>
       <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
     </div>
-    <Section title="Controlo de pagamentos" note={`${cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).length} alunos`} action={<select className="select" value={cobFilter} onChange={e => setCobFilter(e.target.value)}><option>Todos</option><option>Pendente</option><option>Em dia</option><option>Sem registo</option></select>}>
+    <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem' }}>
+      <button className={cademiView === 'pagamentos' ? 'btn-primary' : 'btn-secondary'} onClick={() => setCademiView('pagamentos')} style={{ flex: 1 }}>Ver pagamentos</button>
+      <button className={cademiView === 'alunos' ? 'btn-primary' : 'btn-secondary'} onClick={() => setCademiView('alunos')} style={{ flex: 1 }}>Ver alunos</button>
+    </div>
+    {cademiView === 'pagamentos' && <Section title="Controlo de pagamentos" note={`${cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).length} alunos`} action={<select className="select" value={cobFilter} onChange={e => setCobFilter(e.target.value)}><option>Todos</option><option>Pendente</option><option>Em dia</option><option>Sem registo</option></select>}>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>Aluno</th><th>Pagos</th><th>Total pago</th><th>Pendentes</th><th>Último</th><th>Estado</th></tr></thead>
-      <tbody>{cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).map(s => <tr key={s.cademi_id}><td style={{ fontWeight: 700 }}>{s.nome}<div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{s.email}</div></td><td>{s.pagos}</td><td className="mono">{money(s.total_pago)}</td><td>{s.pendentes}</td><td style={{ fontSize: '.68rem' }}>{s.ultimo ? `${s.ultimo.status} · ${money(s.ultimo.valor)}` : '—'}</td><td><Status tone={s.estado === 'em_dia' ? 'good' : s.estado === 'pendente' ? 'pending' : 'warn'}>{s.estado === 'em_dia' ? 'Em dia' : s.estado === 'pendente' ? 'Pendente' : 'Sem registo'}</Status></td></tr>)}</tbody></table></div>
-    </Section>
-    <Section title="Alunos" note={`${visible.length} de ${students.length}`}>
+      <tbody>{cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).map(s => <tr key={s.cademi_id}><td style={{ fontWeight: 700 }}>{s.nome}<div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{s.email}</div></td><td>{s.pagos}</td><td className="mono">{money(s.total_pago)}</td><td>{s.pendentes}</td><td style={{ fontSize: '.68rem' }}>{s.ultimo ? `${s.ultimo.status} · ${money(s.ultimo.valor)}` : '—'}</td><td><Status tone={s.estado === 'em_dia' ? 'good' : s.estado === 'pendente' ? 'pending' : 'warn'}>{s.estado === 'em_dia' ? 'Em dia' : s.estado === 'pendente' ? 'Pendente' : 'Sem registo'}</Status></td><td><button className="btn-quiet" onClick={() => { const f = students.find((x: any) => x.id === s.cademi_id) || { id: s.cademi_id, nome: s.nome, email: s.email }; openStudent(f); }} title="Ver detalhes do aluno"><Eye size={14} /></button></td></tr>)}</tbody></table></div>
+    </Section>}
+    {cademiView === 'alunos' && <Section title="Alunos" note={`${visible.length} de ${students.length}`}>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>Aluno</th><th>Email</th><th>Telemóvel</th><th>Último acesso</th><th /></tr></thead>
       <tbody>{visible.map(s => <tr key={s.id}><td style={{ fontWeight: 700 }}>{s.nome}</td><td>{s.email}</td><td>{s.celular || '—'}</td><td>{s.ultimo_acesso_em ? fmtD(s.ultimo_acesso_em) : 'Nunca'}</td><td><button className="btn-quiet" onClick={() => openStudent(s)} title="Ver acessos e progresso"><ChevronRight size={14} /></button></td></tr>)}</tbody></table></div>
-    </Section>
+    </Section>}
   </>}
   {selected && <div className="modal-backdrop" onClick={() => setSelected(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>{selected.nome}</h3>
