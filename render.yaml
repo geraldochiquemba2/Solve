@@ -18,5 +18,5 @@ services:
         value: e9k1vx_iju6n_g:_
       - key: OVG_CLUB_CODE
         value: LUA
-    healthCheckPath: /api/v1/health
+    healthCheckPath: /healthz
     autoDeploy: true
