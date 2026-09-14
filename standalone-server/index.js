@@ -783,7 +783,7 @@ app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
         if (row.code) customerId = row.code;
         else if (row.ovg_id) customerId = row.ovg_id;
         if (!customerId) { notFound++; continue; }
-        const r = await pool.query(
+    const r = await pool.query(
           `UPDATE ovg_members SET entry_date = $1 WHERE customer_number = $2`,
           [dateStr, String(customerId)]
         );
@@ -1000,6 +1000,16 @@ app.post("/webhooks/ekwanza", async (req, res) => {
     }
 
     if (merchantTransactionId && mappedStatus !== "pendente") {
+      // Cancelado pelo aluno: ignora callbacks tardios da É-kwanza.
+      try {
+        const cg = await pool.query("SELECT metadata FROM payments WHERE code = $1", [merchantTransactionId]);
+        const mm = cg.rows[0]?.metadata;
+        const mmo = typeof mm === "string" ? JSON.parse(mm) : (mm || {});
+        if (mmo.cancelled_by_user) {
+          console.log(`[EKWANZA-WEBHOOK] ${merchantTransactionId} ignorado (cancelado pelo aluno)`);
+          return res.json({ received: true, ignored: true });
+        }
+      } catch {}
       let upd;
       if (mappedStatus === "confirmado") {
         upd = await pool.query(
@@ -1107,6 +1117,76 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
   }
 });
 
+// Histórico do aluno (widget Cademi): por email e/ou telefone.
+app.get("/api/v1/payments/minha-historico", requireAuth, async (req, res) => {
+  try {
+    const email = String(req.query.email || "").toLowerCase().trim();
+    const digits = String(req.query.phone || "").replace(/\D/g, "").slice(-9);
+    if (!email && !digits) return res.status(400).json({ error: "email ou phone obrigatório" });
+    const conds = [], params = [];
+    if (email) { conds.push(`LOWER(COALESCE(p.metadata->>'email','')) = $${params.length + 1}`); params.push(email); }
+    if (digits) { conds.push(`RIGHT(REGEXP_REPLACE(COALESCE(p.metadata->>'phone',''), '[^0-9]', '', 'g'), 9) = $${params.length + 1}`); params.push(digits); }
+    const r = await pool.query(
+      `SELECT p.code, p.amount, p.method, p.status, p.reference_code, p.entity, p.ekwanza_code, p.created_at, p.expires_at, p.paid_at,
+              p.metadata->>'cademi_produto' AS cademi_produto
+       FROM payments p WHERE (${conds.join(" OR ")}) ORDER BY p.created_at DESC LIMIT 20`, params);
+    res.json({ data: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cancelar pagamento pendente (aluno). Só o próprio (confere email/telefone).
+app.post("/api/v1/payments/:code/cancel", requireAuth, async (req, res) => {
+  try {
+    const code = String(req.params.code);
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    const digits = String(req.body?.phone || "").replace(/\D/g, "").slice(-9);
+    const pr = await pool.query("SELECT * FROM payments WHERE code = $1", [code]);
+    if (pr.rows.length === 0) return res.status(404).json({ error: "Pagamento não encontrado" });
+    const payment = pr.rows[0];
+    if (payment.status !== "pendente") return res.status(400).json({ error: `Só pendentes (estado: ${payment.status})` });
+    let meta = {};
+    try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
+    const metaEmail = String(meta.email || "").toLowerCase();
+    const metaDigits = String(meta.phone || "").replace(/\D/g, "").slice(-9);
+    const mine = (email && metaEmail && email === metaEmail) || (digits && metaDigits && digits === metaDigits);
+    if (!mine) return res.status(403).json({ error: "Não é o teu pagamento" });
+    meta.cancelled_by_user = true;
+    meta.cancelled_at = new Date().toISOString();
+    await pool.query("UPDATE payments SET status = 'rejeitado', metadata = $1, updated_at = NOW() WHERE code = $2 AND status = 'pendente'",
+      [JSON.stringify(meta), code]);
+    broadcastPaymentUpdate({ type: "payment_updated", code, status: "rejeitado" });
+    console.log(`[PAYMENTS] ${code}: cancelado pelo aluno`);
+    res.json({ ok: true, code });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tem acesso ativo a este conteúdo? (trava pagar duas vezes — widget e CRM)
+async function cademiActiveAccess(email, produtoSlug) {
+  try {
+    if (!email || !produtoSlug) return null;
+    const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
+    const users = u.data?.usuario || [];
+    const found = users.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase()) || users[0];
+    if (!found?.id) return null;
+    const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
+    const now = Date.now();
+    for (const ac of (a.data?.acesso || [])) {
+      const pn = String(ac.produto?.nome || "").toLowerCase();
+      const slug = slugify(ac.produto?.nome || "");
+      if (!pn) continue;
+      if (slug !== produtoSlug && pn !== produtoSlug && pn.indexOf(produtoSlug) < 0 && produtoSlug.indexOf(pn) < 0) continue;
+      const fim = ac.encerra_em ? new Date(ac.encerra_em).getTime() : null;
+      const active = !ac.encerrado && (ac.duracao_tipo === "vitalicio" || !fim || fim > now);
+      if (active) return ac.produto?.nome || produtoSlug;
+    }
+  } catch {}
+  return null;
+}
+
 // Criar pagamento: regista como pendente e responde DE IMEDIATO (<300ms).
 // A cobrança Ekwanza corre em background (fire-and-forget) para o modal
 // fechar sem esperar pelo OAuth + POST GPO (10-45s).
@@ -1128,6 +1208,22 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
         );
         if (found.rows[0]) linkedId = found.rows[0].id;
       } catch {}
+    }
+    // Regra: 1 pagamento pendente de cada vez por aluno (email ou telefone).
+    if (customer_email || customer_phone) {
+      const em = String(customer_email || "").toLowerCase().trim();
+      const dg = String(customer_phone || "").replace(/\D/g, "").slice(-9);
+      const chk = await pool.query(
+        `SELECT code FROM payments WHERE status = 'pendente' AND (expires_at IS NULL OR expires_at > NOW()) AND (
+          ($1 <> '' AND LOWER(COALESCE(metadata->>'email','')) = $1) OR
+          ($2 <> '' AND RIGHT(REGEXP_REPLACE(COALESCE(metadata->>'phone',''), '[^0-9]', '', 'g'), 9) = $2)
+        ) LIMIT 1`, [em, dg]);
+      if (chk.rows[0]) return res.status(409).json({ error: `Já tens um pagamento pendente (${chk.rows[0].code}). Paga ou cancela antes de gerar outro.`, code: chk.rows[0].code });
+    }
+    // Trava: conteúdo com acesso ativo não se paga de novo.
+    if (customer_email && cademi_produto) {
+      const has = await cademiActiveAccess(String(customer_email), String(cademi_produto));
+      if (has) return res.status(409).json({ error: `Já tens acesso ativo a este conteúdo (${has}).` });
     }
     const r = await pool.query(
       `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
@@ -1181,13 +1277,20 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
           } catch {}
         };
         // Guarda entidade + número de referência (pagamentos por referência).
+        // Faz MERGE para não apagar email/nome/produto já gravados.
         const applyReference = async (ref) => {
           const refNumber = ref?.referenceNumber || ref?.reference_number || null;
           if (!refNumber) return;
           try {
             const dueDate = ref?.dueDate || ref?.due_date || null;
             const entity = ref?.entity || null;
-            const meta = { phone: customer_phone || null, description: description || null, dueDate };
+            const cur = await pool.query("SELECT metadata FROM payments WHERE code = $1", [code]);
+            let curMeta = {};
+            try {
+              const cm = cur.rows[0]?.metadata;
+              curMeta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
+            } catch {}
+            const meta = { ...curMeta, phone: customer_phone || curMeta.phone || null, description: description || curMeta.description || null, dueDate };
             await pool.query(
               "UPDATE payments SET reference_code = $1, entity = COALESCE($2, entity), metadata = $3 WHERE code = $4",
               [String(refNumber), entity, JSON.stringify(meta), code]
@@ -1395,6 +1498,72 @@ app.get("/api/v1/cademi/products/:id/lessons", requireAuth, async (req, res) => 
   const r = await cademiFetch(`/item/lista_por_produto/${encodeURIComponent(req.params.id)}`);
   if (!r.success) return res.status(502).json({ error: r.error });
   res.json({ data: r.data?.itens || [], total: (r.data?.itens || []).length });
+});
+
+// Editar aluno (nome, email, doc, celular)
+app.put("/api/v1/cademi/users/:id", requireAuth, async (req, res) => {
+  const { nome, email, doc, celular } = req.body || {};
+  const body = {};
+  if (nome !== undefined) body.nome = nome;
+  if (email !== undefined) body.email = email;
+  if (doc !== undefined) body.doc = doc;
+  if (celular !== undefined) body.celular = celular;
+  if (Object.keys(body).length === 0) return res.status(400).json({ error: "Nada para atualizar" });
+  const r = await cademiFetch(`/usuario/update/${encodeURIComponent(req.params.id)}`, { method: "POST", body: JSON.stringify(body) });
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data?.usuario || r.data || null });
+});
+
+// Adicionar tag ao aluno
+app.post("/api/v1/cademi/users/:id/tags", requireAuth, async (req, res) => {
+  const { tag_id } = req.body || {};
+  if (!tag_id) return res.status(400).json({ error: "tag_id é obrigatório" });
+  const r = await cademiFetch("/usuario/adicionar_tag", { method: "POST", body: JSON.stringify({ usuario_id: Number(req.params.id), tag_id: Number(tag_id) }) });
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data || null });
+});
+
+// Remover tag do aluno
+app.delete("/api/v1/cademi/users/:id/tags/:tagId", requireAuth, async (req, res) => {
+  const r = await cademiFetch("/usuario/remover_tag", { method: "POST", body: JSON.stringify({ usuario_id: Number(req.params.id), tag_id: Number(req.params.tagId) }) });
+  if (!r.success) return res.status(502).json({ error: r.error });
+  res.json({ data: r.data || null });
+});
+
+// Controlo de pagamentos por aluno: cruza Cademi × pagamentos do CRM.
+// Devolve por email: total pago, nº pagos/pendentes e último pagamento.
+app.get("/api/v1/cademi/alunos-cobranca", requireAuth, async (req, res) => {
+  try {
+    const r = await cademiFetch("/usuario?usuario_email_id_doc=");
+    if (!r.success) return res.status(502).json({ error: r.error });
+    const users = r.data?.usuario || [];
+    const agg = await pool.query(`
+      SELECT LOWER(COALESCE(p.metadata->>'email','')) AS email,
+        COUNT(*) FILTER (WHERE p.status = 'confirmado') AS pagos,
+        COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'confirmado'), 0) AS total_pago,
+        COUNT(*) FILTER (WHERE p.status = 'pendente') AS pendentes
+      FROM payments p
+      WHERE COALESCE(p.metadata->>'email','') <> ''
+      GROUP BY 1`);
+    const last = await pool.query(`
+      SELECT DISTINCT ON (LOWER(COALESCE(p.metadata->>'email',''))) LOWER(COALESCE(p.metadata->>'email','')) AS email,
+        p.status AS ultimo_status, p.amount AS ultimo_valor, p.created_at AS ultima_data, p.code AS ultimo_code
+      FROM payments p
+      WHERE COALESCE(p.metadata->>'email','') <> ''
+      ORDER BY 1, p.created_at DESC`);
+    const byEmail = {};
+    agg.rows.forEach(a => { byEmail[a.email] = { pagos: Number(a.pagos), total_pago: Number(a.total_pago), pendentes: Number(a.pendentes) }; });
+    last.rows.forEach(l => { (byEmail[l.email] = byEmail[l.email] || { pagos: 0, total_pago: 0, pendentes: 0 }).ultimo = { status: l.ultimo_status, valor: Number(l.ultimo_valor), data: l.ultima_data, code: l.ultimo_code }; });
+    const data = users.map(u => {
+      const em = String(u.email || "").toLowerCase();
+      const c = byEmail[em] || { pagos: 0, total_pago: 0, pendentes: 0 };
+      const estado = c.pendentes > 0 ? "pendente" : (c.pagos > 0 ? "em_dia" : "sem_registo");
+      return { cademi_id: u.id, nome: u.nome, email: u.email, celular: u.celular || null, ...c, estado };
+    });
+    res.json({ data, total: data.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Sync: grava cademi_id nos customers por email
@@ -2121,6 +2290,13 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
       return res.status(404).json({ error: "Pagamento não encontrado" });
     }
     const payment = paymentResult.rows[0];
+    // Cancelado pelo aluno: nunca reabre (mesmo que a É-kwanza aprove depois).
+    try {
+      const mm = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {});
+      if (mm.cancelled_by_user) {
+        return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "CANCELLED_BY_USER", currentStatus: payment.status, newStatus: payment.status, changed: false });
+      }
+    } catch {}
     const token = await getEkwanzaToken();
     const chargeResp = await fetch(`https://gwy-api.appypay.co.ao/v2.0/charges?merchantTransactionId=${encodeURIComponent(payment.code)}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },

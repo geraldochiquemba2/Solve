@@ -71,6 +71,7 @@
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
+      "<div id='spw-hist' style='margin-top:.6rem'></div>" +
       "<div class='spw-actions'><button class='spw-close' id='spw-cancel'>Fechar</button><button class='spw-pay' id='spw-go'>Pagar</button></div>";
     document.body.appendChild(back);
 
@@ -115,9 +116,25 @@
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
     autodetect(m);
-    setTimeout(function () { refreshAccess(m, entregas); }, 900);
-    m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); });
-    m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method); });
+    // Anti-race: seletor e botão bloqueados até os acessos carregarem.
+    var sel = m.querySelector("#spw-prod"), goBtn = m.querySelector("#spw-go");
+    var ready = false;
+    sel.disabled = true;
+    goBtn.disabled = true;
+    goBtn.textContent = "A carregar...";
+    function unlock() {
+      if (ready) return;
+      ready = true;
+      sel.disabled = false;
+      goBtn.disabled = false;
+      goBtn.textContent = "Pagar";
+    }
+    refreshAccess(m, entregas).then(unlock).catch(unlock);
+    setTimeout(unlock, 15000); // segurança: nunca prende o botão
+    loadHist(m);
+    m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); loadHist(m); });
+    m.querySelector("#spw-phone").addEventListener("change", function () { loadHist(m); });
+    m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method, entregas); });
   }
 
   function closeModal() {
@@ -269,29 +286,142 @@
     } catch (e) {}
   }
 
+  // Histórico do aluno (pendentes, pagos, cancelados, referências) + cancelar.
+  function histParams(m) {
+    var em = (m.querySelector("#spw-email").value || "").trim();
+    var ph = (m.querySelector("#spw-phone").value || "").replace(/\D/g, "").slice(-9);
+    var q = [];
+    if (em && em.indexOf("@") > 0) q.push("email=" + encodeURIComponent(em));
+    if (ph) q.push("phone=" + encodeURIComponent(ph));
+    return q.length ? q.join("&") : null;
+  }
+
+  async function fetchHist(m) {
+    var q = histParams(m);
+    if (!q) return [];
+    try {
+      var r = await h(API + "/api/v1/payments/minha-historico?" + q);
+      var j = await r.json().catch(function () { return {}; });
+      return (j && Array.isArray(j.data)) ? j.data : [];
+    } catch (e) { return []; }
+  }
+
+  function statusLabel(s) {
+    if (s === "confirmado") return "Pago";
+    if (s === "pendente") return "Pendente";
+    if (s === "rejeitado") return "Cancelado";
+    if (s === "expirado") return "Expirado";
+    return s || "—";
+  }
+
+  async function loadHist(m) {
+    var box = m.querySelector("#spw-hist");
+    var list = await fetchHist(m);
+    if (!list.length) { box.innerHTML = ""; return list; }
+    var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
+    list.forEach(function (p) {
+      var ref = (p.method !== "mcx_express" && p.reference_code) ? (" · Ref " + p.reference_code + (p.entity ? " / Ent " + p.entity : "")) : "";
+      html += "<div style='display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem'>"
+        + "<span style='font-weight:700'>" + p.amount + " Kz</span>"
+        + "<span style='color:#666'>" + statusLabel(p.status) + ref + "</span>"
+        + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
+        + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
+        + "</div>";
+    });
+    box.innerHTML = html;
+    var btns = box.querySelectorAll("[data-cancel]");
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        btn.addEventListener("click", function () { cancelPay(m, btn.getAttribute("data-cancel")); });
+      })(btns[i]);
+    }
+    return list;
+  }
+
+  async function cancelPay(m, code) {
+    var em = (m.querySelector("#spw-email").value || "").trim();
+    var ph = (m.querySelector("#spw-phone").value || "").trim();
+    if (!confirm("Cancelar o pagamento " + code + "?")) return;
+    try {
+      var r = await h(API + "/api/v1/payments/" + encodeURIComponent(code) + "/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: em || undefined, phone: ph || undefined })
+      });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      msg(m, "Pagamento " + code + " cancelado.");
+      await loadHist(m);
+      await refreshAccess(m, currentEntregas(m));
+    } catch (e) { msg(m, "Erro: " + (e.message || "falha"), true); }
+  }
+
+  function currentEntregas(m) {
+    var sel = m.querySelector("#spw-prod");
+    var out = [];
+    for (var i = 0; i < sel.options.length; i++) {
+      var op = sel.options[i];
+      if (op.value) out.push({ id: op.value, nome: op.textContent.split(" — ")[0] });
+    }
+    return out;
+  }
+
   function msg(m, t, err) {
     var d = m.querySelector("#spw-msg");
     d.textContent = t;
     d.style.color = err ? "#b91c1c" : "#15803d";
   }
 
-  async function pagar(m, method) {
+  async function pagar(m, method, entregas) {
     var prod = m.querySelector("#spw-prod").value;
     if (!prod) { msg(m, "Escolhe o conteúdo.", true); return; }
     var chosen = null;
-    entregas.forEach(function (o) { if (o.id === prod) chosen = o; });
+    (entregas || []).forEach(function (o) { if (o.id === prod) chosen = o; });
     if (!chosen || !chosen.preco) { msg(m, "Conteúdo ainda sem preço (disponível em breve).", true); return; }
     var amt = parseFloat(m.querySelector("#spw-amt").value);
     var phone = m.querySelector("#spw-phone").value.trim();
-    var phone = m.querySelector("#spw-phone").value.trim();
     var name = m.querySelector("#spw-name").value.trim();
     var email = m.querySelector("#spw-email").value.trim();
-    var prod = m.querySelector("#spw-prod").value;
     var btn = m.querySelector("#spw-go");
     if (!amt || amt <= 0) { msg(m, "Indica um montante válido.", true); return; }
     // Só o Express usa o número (cobrança push); referência não precisa.
     if (method === "express" && !phone) { msg(m, "Indica o número de telefone.", true); return; }
     btn.disabled = true;
+    btn.textContent = "A verificar...";
+    // Regra: 1 pagamento de cada vez — bloqueia se houver pendente aberto.
+    try {
+      var hist = await fetchHist(m);
+      for (var hi = 0; hi < hist.length; hi++) {
+        if (hist[hi].status === "pendente") {
+          msg(m, "Já tens um pagamento pendente (" + hist[hi].code + "). Paga ou cancela antes.", true);
+          await loadHist(m);
+          btn.disabled = false;
+          btn.textContent = "Pagar";
+          return;
+        }
+      }
+    } catch (eHist) {}
+    // Revalidação no clique: impede pagar conteúdo com acesso ativo (anti-race).
+    try {
+      if (email && email.indexOf("@") > 0) {
+        var ar = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(email));
+        var aj = await ar.json().catch(function () { return {}; });
+        var alist = (aj && Array.isArray(aj.data)) ? aj.data : [];
+        for (var ai = 0; ai < alist.length; ai++) {
+          var ac = alist[ai];
+          var pn = String(ac.produto_nome || "").toLowerCase();
+          var cn = String(chosen.nome || "").toLowerCase();
+          var same = pn && cn && (pn === cn || cn.indexOf(pn) >= 0 || pn.indexOf(cn) >= 0);
+          if (same && !ac.encerrado) {
+            msg(m, "Já tens acesso ativo a este conteúdo.", true);
+            btn.disabled = false;
+            btn.textContent = "Pagar";
+            refreshAccess(m, entregas || []);
+            return;
+          }
+        }
+      }
+    } catch (eVerify) {}
     btn.textContent = "A gerar...";
     try {
       var r = await h(API + "/api/v1/payments", {
@@ -333,12 +463,27 @@
     }
     btn.disabled = false;
     btn.textContent = "Pagar";
+    loadHist(m);
+  }
+
+  // Só mostra o botão a aluno com sessão: esconde na tela de login e
+  // em páginas sem indício de login (sem link sair/perfil e com form login).
+  function isLoggedIn() {
+    try {
+      if (document.querySelector('a[href*="logout" i], a[href*="sair" i], a[href*="sign-out" i]')) return true;
+      var loginForm = document.querySelector('#AcessoEmail, form[action*="/auth/login"], form[action*="/login"]');
+      if (loginForm) return false;
+      var tela = document.documentElement.getAttribute("data-tela") || "";
+      if (/login|cadastro|esqueci/i.test(tela)) return false;
+      if (document.querySelector("header .user-name, header .username, .user-info, .profile-name, [class*='user-name']")) return true;
+      // Sem sinais: mostra (área do aluno autenticada por defeito).
+      return true;
+    } catch (e) { return true; }
   }
 
   async function boot() {
     css();
-    // Memoriza o email digitado no login da Cademi (#AcessoEmail) para
-    // pré-preencher o pagamento depois de entrar.
+    // Memoriza o email digitado no login (corre mesmo sem botão visível).
     try {
       var loginEmail = document.querySelector("#AcessoEmail");
       if (loginEmail) {
@@ -356,7 +501,8 @@
         var loginForm = loginEmail.closest("form");
         if (loginForm) loginForm.addEventListener("submit", saveLogin);
       }
-    } catch (e) {}
+    } catch (eLogin) {}
+    if (!isLoggedIn()) return;
     var b = el("button", "spw-btn", "💳 Pagar mensalidade");
     document.body.appendChild(b);
     var entregas = [{ id: "samorafit-workout", nome: "SamoraFit Workout" }];
