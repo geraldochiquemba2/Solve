@@ -260,6 +260,26 @@
 
   async function boot() {
     css();
+    // Memoriza o email digitado no login da Cademi (#AcessoEmail) para
+    // pré-preencher o pagamento depois de entrar.
+    try {
+      var loginEmail = document.querySelector("#AcessoEmail");
+      if (loginEmail) {
+        var saveLogin = function () {
+          var v = String(loginEmail.value || "").trim();
+          if (v.indexOf("@") > 0) {
+            try {
+              var prev = JSON.parse(localStorage.getItem("spw_profile") || "{}");
+              prev.email = v;
+              localStorage.setItem("spw_profile", JSON.stringify(prev));
+            } catch (e) {}
+          }
+        };
+        loginEmail.addEventListener("change", saveLogin);
+        var loginForm = loginEmail.closest("form");
+        if (loginForm) loginForm.addEventListener("submit", saveLogin);
+      }
+    } catch (e) {}
     var b = el("button", "spw-btn", "💳 Pagar mensalidade");
     document.body.appendChild(b);
     var entregas = [{ id: "samorafit-workout", nome: "SamoraFit Workout" }];
