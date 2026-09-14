@@ -235,7 +235,8 @@
           if (pn === base.toLowerCase() || base.toLowerCase().indexOf(pn) >= 0 || pn.indexOf(base.toLowerCase()) >= 0) {
             var tag = ac.encerrado ? "expirado" : (ac.vitalicio ? "vitalício" : (ac.dias + (ac.dias === 1 ? " dia restante" : " dias restantes")));
             op.textContent = base + " — " + tag;
-            if (!ac.encerrado) notes.push(base + ": " + tag);
+            // Com acesso ativo não dá para selecionar de novo.
+            if (!ac.encerrado) { op.disabled = true; notes.push(base + ": " + tag); }
             break;
           }
         }
