@@ -367,7 +367,9 @@ async function ovgGetMembers(token) {
   return data.clients_data || data.data?.clients_data || [];
 }
 
-app.post("/api/v1/access/ovg-reseed", async (req, res) => {
+app.post("/api/v1/access/ovg-reseed", requireAuth, async (req, res) => {
+  // On-demand (zona de Clientes no CRM): sem polling de fundo (cota Neon).
+  // Aceita Bearer (login) ou X-API-Key (frontend/turnstile).
   const user = await cfg("ovg_username", OVG_USERNAME);
   const pass = await cfg("ovg_password", OVG_PASSWORD);
   if (!user || !pass) {

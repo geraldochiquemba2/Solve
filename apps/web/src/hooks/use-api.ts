@@ -298,6 +298,51 @@ export function useUnlockTurnstile() {
   });
 }
 
+// ─── OVG on-demand (zona de Clientes) ─────────────────────────────────────────
+// Liga o OVG sem polling de fundo (cota Neon): atualiza ao entrar nos Clientes,
+// no máximo 1x/hora (travão por lastSync do espelho). Botão manual força sempre.
+const OVG_REFRESH_MIN_MS = 60 * 60 * 1000;
+
+export function useOVGClientsRefresh(onRefreshed?: () => void) {
+  const [checking, setChecking] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [msg, setMsg] = useState('');
+
+  const refreshNow = async () => {
+    setUpdating(true); setMsg('');
+    try {
+      const r = await accessPost<{ ok: boolean; upserted: number; total: number }>('/api/v1/access/ovg-reseed', {});
+      setLastSync(new Date().toISOString());
+      setTotal(r.total ?? r.upserted ?? null);
+      setMsg(`${r.upserted ?? r.total ?? 0} sócios atualizados do OVG`);
+      onRefreshed?.();
+    } catch (e: any) {
+      setMsg('OVG indisponível: ' + (e.message || 'erro'));
+    } finally { setUpdating(false); }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const st = await accessGet<{ total: number; lastSync: string | null }>('/api/v1/access/ovg-status');
+        if (cancelled) return;
+        setLastSync(st.lastSync);
+        setTotal(st.total ?? null);
+        setChecking(false);
+        const age = st.lastSync ? Date.now() - new Date(st.lastSync).getTime() : Infinity;
+        if (age > OVG_REFRESH_MIN_MS) await refreshNow();
+      } catch { if (!cancelled) setChecking(false); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return { checking, updating, lastSync, total, msg, refreshNow, clearMsg: () => setMsg('') };
+}
+
 // ─── SSE Real-time Stream ─────────────────────────────────────────────────────
 export interface AccessStreamEvent {
   tipo: string;
