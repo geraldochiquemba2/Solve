@@ -1715,10 +1715,12 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
           updated++;
         } else {
           const code = "CL-" + Date.now().toString(36).toUpperCase() + "-" + String(u.id);
+          // Entrada real: 1º acesso na Cademi (comecou_em) ou criação da conta — nunca NOW() do import.
+          const joinedReal = u.comecou_em || u.criado_em || null;
           const ins = await pool.query(
             `INSERT INTO customers (id, code, name, email, phone, cademi_id, state, joined_at, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW()) RETURNING id`,
-            [code, u.nome || "Aluno Cademi", email, u.celular || null, String(u.id), u.ultimo_acesso_em ? "activo" : "inactivo"]);
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), NOW(), NOW()) RETURNING id`,
+            [code, u.nome || "Aluno Cademi", email, u.celular || null, String(u.id), u.ultimo_acesso_em ? "activo" : "inactivo", joinedReal]);
           customerId = ins.rows[0].id;
           created++;
         }
