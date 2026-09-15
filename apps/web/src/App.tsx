@@ -1130,9 +1130,9 @@ function AcademiaPage() {
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
     <div className="grid-2">
       <div><label className="label">Entrega padrão *</label>
-      <input className="input" value={produtoId} readOnly disabled placeholder="Ex: samorafit-workout" style={{ width: '100%', background: 'hsl(var(--secondary) / .5)' }} /></div>
+      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: samorafit-workout" style={{ width: '100%' }} /></div>
       <div><label className="label">Envio automático</label>
-      <select className="select" value={autoDelivery ? '1' : '0'} disabled style={{ width: '100%', background: 'hsl(var(--secondary) / .5)' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
+      <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
     <div style={{ display: 'grid', gap: '.45rem' }}>
