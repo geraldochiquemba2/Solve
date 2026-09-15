@@ -101,6 +101,8 @@ function mapApiCustomer(c: any): Customer {
     joined = formatDate(c.entryDate);
   } else if (isAccessClient && c._accessStats?.ultimoAcesso) {
     joined = relativeDate(c._accessStats.ultimoAcesso);
+  } else if (c.entryDate) {
+    joined = formatDate(c.entryDate);
   } else if (c.joinedAt) {
     joined = relativeDate(c.joinedAt);
   } else if (c.subscriptionEnd) {
@@ -485,7 +487,7 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
     {customer.ovgId && (
       <div style={{ marginTop: '.7rem', padding: '.5rem .7rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.5rem', fontSize: '.75rem', display: 'grid', gap: '.3rem' }}>
         <div style={{ fontWeight: 700, fontSize: '.72rem' }}>Dados OVG</div>
-        {[['Nº sócio', customer.ovgId], ['NIF', customer.nif || '—'], ['Clube', customer.club || '—']].map(([l, v]) => (
+        {[['Nº sócio', customer.ovgId], ['NIF', customer.nif || '—'], ['Clube', customer.club || '—'], ['Sócio desde', customer.entryDate || '—']].map(([l, v]) => (
           <div key={l} style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{l}:</span><strong>{v}</strong></div>
         ))}
       </div>
