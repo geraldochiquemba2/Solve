@@ -8,7 +8,7 @@ import {
   BriefcaseBusiness, Building2, Check, CheckCircle2, ChevronDown, ChevronRight,
   CircleDollarSign, Clock3, Code2, Command, CreditCard, Database, Edit3, Eye,
   FileClock, FileKey2, Filter, HeartPulse, History, KeyRound, LayoutDashboard,
-  LifeBuoy, Link2, ListFilter, LockKeyhole, LogOut, Menu, MoreHorizontal, Package,
+  LifeBuoy, Link2, ListFilter, LockKeyhole, LogOut, Menu, MoreHorizontal,
   Pause, Play, Plus, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal,
   Sparkles, Target, ToggleLeft, ToggleRight, Trash2, TrendingUp, Upload, UserRound,
   Users, WalletCards, Webhook, X, Zap
@@ -144,7 +144,7 @@ function mapApiCustomer(c: any): Customer {
 const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
-  { label: 'Receita e acesso', items: [{ href: '/admin/planos', label: 'Planos', icon: Package }, { href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
+  { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
   { label: 'Controlo de Acesso', items: [{ href: '/admin/acesso-fisico', label: 'Solve Access', icon: LockKeyhole }] },
   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
   { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }, { href: '/admin/auditoria', label: 'Auditoria', icon: ShieldCheck }, { href: '/admin/definicoes', label: 'Definições', icon: Settings }] },
