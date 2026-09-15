@@ -592,10 +592,18 @@ function PlansPage() {
         headers: { 'X-API-Key': apiKey },
       });
       const j: any = await res.json().catch(() => ({}));
-      if (res.ok) {
-        if (j.deactivated) alert(j.message || 'Plano desativado (tinha subscrições e o histórico foi preservado)');
-        fetchPlans();
+      if (res.status === 409 && j.error === 'has_dependencies') {
+        if (!confirm(`"${p.name}" tem ${j.subscriptions} subscrições e ${j.payments} pagamentos. APAGAR TUDO? (irreversível, histórico some do Controlo e do site)`)) return;
+        const res2 = await fetch(`${apiBase}/api/v1/plans/${p.id}?force=1`, {
+          method: 'DELETE',
+          headers: { 'X-API-Key': apiKey },
+        });
+        const j2: any = await res2.json().catch(() => ({}));
+        if (res2.ok) { alert('Plano e histórico apagados'); fetchPlans(); }
+        else alert('Erro: ' + (j2.error || 'ao apagar'));
+        return;
       }
+      if (res.ok) fetchPlans();
       else alert('Erro: ' + (j.error || 'ao apagar'));
     } catch (e: any) { alert('Erro: ' + e.message); }
   };

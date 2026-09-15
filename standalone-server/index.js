@@ -2530,15 +2530,21 @@ app.put("/api/v1/plans/:id", requireAuth, async (req, res) => {
 app.delete("/api/v1/plans/:id", requireAuth, async (req, res) => {
   try {
     const id = String(req.params.id);
-    // Com subscrições não se apaga (FK): desativa e preserva o histórico.
+    // Planos são negócio à parte: apagar leva subscrições + pagamentos.
+    // Sem ?force=1 e com dependências -> 409 com contagens (o UI pede 2ª confirmação).
     const used = await pool.query("SELECT COUNT(*) AS cnt FROM subscriptions WHERE plan_id = $1", [id]);
-    if (parseInt(used.rows[0]?.cnt || "0", 10) > 0) {
-      await pool.query("UPDATE plans SET active = false, updated_at = NOW() WHERE id = $1", [id]);
-      return res.json({ ok: true, id, deactivated: true, message: "Plano com subscrições: desativado em vez de apagado (histórico preservado)" });
+    const n = parseInt(used.rows[0]?.cnt || "0", 10);
+    if (n > 0 && req.query.force !== "1" && req.query.force !== "true") {
+      const pay = await pool.query("SELECT COUNT(*) AS cnt FROM payments p JOIN subscriptions s ON s.id = p.subscription_id WHERE s.plan_id = $1", [id]);
+      return res.status(409).json({ error: "has_dependencies", subscriptions: n, payments: parseInt(pay.rows[0]?.cnt || "0", 10), message: `Plano com ${n} subscrições. Confirme de novo para APAGAR TUDO (inclui pagamentos).` });
+    }
+    if (n > 0) {
+      await pool.query("DELETE FROM payments WHERE subscription_id IN (SELECT id FROM subscriptions WHERE plan_id = $1)", [id]);
+      await pool.query("DELETE FROM subscriptions WHERE plan_id = $1", [id]);
     }
     const result = await pool.query("DELETE FROM plans WHERE id = $1 RETURNING id", [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Plano não encontrado" });
-    res.json({ ok: true, id: req.params.id });
+    res.json({ ok: true, id: req.params.id, deleted: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
