@@ -14,6 +14,9 @@ const statements = [
   // 2. Colunas em falta em payments
   `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "entity" varchar(50)`,
   `ALTER TABLE "payments" ADD COLUMN IF NOT EXISTS "expires_at" timestamp`,
+  // 2b. Colunas em falta em customers (snapshot sem joined_at/gender)
+  `ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "joined_at" timestamp`,
+  `ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "gender" varchar(20)`,
   // 3. Tabelas criadas depois da snapshot
   `CREATE TABLE IF NOT EXISTS "api_keys" (
      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

@@ -769,7 +769,23 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
     res.json({ data: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Fase Cademi-CRM: fallback à tabela CRM customers (uuid)
+    try {
+      const fb = await pool.query(
+        `SELECT c.id::text AS id, c.name,
+          COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
+          c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
+          c.state AS client_status, false AS online, false AS bloqueado,
+          NULL AS numero_entradas, NULL AS limite_entradas,
+          COALESCE(c.company,'') AS company
+         FROM customers c WHERE c.id::text = $1 LIMIT 1`,
+        [String(req.params.id)]
+      );
+      if (fb.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
+      res.json({ data: fb.rows[0] });
+    } catch (e2) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
@@ -1893,6 +1909,16 @@ async function qNum(sql, params = [], fallback = 0) {
   } catch { return fallback; }
 }
 
+// Fase Cademi-CRM: tenta a query do ginásio; sem as tabelas-espelho cai para a tabela CRM.
+async function qNumGymOrCrm(gymSql, crmSql, params = []) {
+  try {
+    const r = await pool.query(gymSql, params);
+    return parseFloat(r.rows[0]?.cnt ?? 0);
+  } catch {
+    return qNum(crmSql, params, 0);
+  }
+}
+
 async function getIntegrationsLive() {
   const [ovgCount, ovgSync, payCount, paySync, leadCount, cademi, cademiKey] = await Promise.all([
     qNum("SELECT COUNT(*) as cnt FROM ovg_members"),
@@ -1916,9 +1942,14 @@ async function getIntegrationsLive() {
 app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
   try {
     const [totalCustomers, activeCustomers, totalLeads, revenue30d, pendingPayments, latePayments, integrations] = await Promise.all([
-      qNum(`SELECT COUNT(*) as cnt FROM clientes WHERE ${isMember("clientes")} AND ${notDeleted("clientes")}`),
+      // Fase Cademi-CRM: sem tabelas do ginásio, conta a tabela CRM customers
+      qNumGymOrCrm(
+        `SELECT COUNT(*) as cnt FROM clientes WHERE ${isMember("clientes")} AND ${notDeleted("clientes")}`,
+        `SELECT COUNT(*) as cnt FROM customers`),
       // Activo = status ativo E sócio (não funcionário) E com pelo menos 1 acesso na catraca
-      qNum(`SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND ${isMember("c")} AND ${notDeleted("c")} AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)`),
+      qNumGymOrCrm(
+        `SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND ${isMember("c")} AND ${notDeleted("c")} AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)`,
+        `SELECT COUNT(*) as cnt FROM customers WHERE state = 'activo'`),
       qNum("SELECT COUNT(*) as cnt FROM leads"),
       qNum("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '30 days'"),
       qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'pendente'"),
