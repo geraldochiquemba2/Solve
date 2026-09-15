@@ -1066,12 +1066,18 @@ function AcademiaPage() {
     try {
       const a: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/access`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
       const acessos = a.data?.acesso || [];
-      const withProgress = await Promise.all(acessos.map(async (ac: any) => {
+    const withProgress = await Promise.all(acessos.map(async (ac: any) => {
+      try {
+        const pr: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/progress/${ac.produto.id}`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+        // Total de aulas do curso (o progresso só traz completas/assistidas)
+        let totalAulas: number | null = null;
         try {
-          const pr: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/progress/${ac.produto.id}`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
-          return { ...ac, progresso: pr.data || null };
-        } catch { return { ...ac, progresso: null }; }
-      }));
+          const ls: any = await fetch(`${apiBase}/api/v1/cademi/products/${ac.produto.id}/lessons`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+          if (typeof ls.total === 'number') totalAulas = ls.total;
+        } catch {}
+        return { ...ac, progresso: pr.data || null, totalAulas };
+      } catch { return { ...ac, progresso: null, totalAulas: null }; }
+    }));
       setDetail({ ...a.data, acesso: withProgress });
     } catch (e) { console.error(e); }
     setLoadingDetail(false);
@@ -1146,7 +1152,7 @@ function AcademiaPage() {
       return <div key={i} className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .6)', padding: '.8rem', marginBottom: '.6rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong style={{ fontSize: '.82rem' }}>{ac.produto?.nome}</strong><Status tone={ac.encerrado ? 'warn' : 'good'}>{ac.encerrado ? 'Encerrado' : (ac.duracao_tipo === 'vitalicio' ? 'Vitalício' : 'Ativo')}</Status></div>
         <div style={{ fontSize: '.7rem', color: 'hsl(var(--muted-foreground))', marginTop: '.3rem' }}>Início: {fmtD(ac.comecou_em)}{ac.encerra_em ? ` · Fim: ${fmtD(ac.encerra_em)}` : ''}</div>
-        {ac.progresso && <div style={{ marginTop: '.5rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.7rem' }}><span>Progresso</span><strong>{ac.progresso.total}</strong></div><div style={{ height: 6, borderRadius: 3, background: 'hsl(var(--muted))', marginTop: '.25rem' }}><div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: 3, background: 'hsl(var(--accent))' }} /></div><div style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))', marginTop: '.25rem' }}>{ac.progresso.completas ?? 0} de {(ac.progresso.completas ?? 0) + 0} aulas completas · {ac.progresso.assistidas ?? 0} assistidas</div></div>}
+        {ac.progresso && <div style={{ marginTop: '.5rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.7rem' }}><span>Progresso</span><strong>{ac.progresso.total}</strong></div><div style={{ height: 6, borderRadius: 3, background: 'hsl(var(--muted))', marginTop: '.25rem' }}><div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: 3, background: 'hsl(var(--accent))' }} /></div><div style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))', marginTop: '.25rem' }}>{ac.progresso.completas ?? 0} de {ac.totalAulas ?? '?'} aulas completas · {ac.progresso.assistidas ?? 0} assistidas</div></div>}
       </div>;
     }) : <div style={{ padding: '1rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Sem acessos a cursos</div>)}
     <div style={{ display: 'flex', marginTop: '.5rem' }}><button className="btn-secondary" onClick={() => setSelected(null)} style={{ flex: 1 }}>Fechar</button></div>
