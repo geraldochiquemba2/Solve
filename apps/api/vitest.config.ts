@@ -20,15 +20,15 @@ export default defineConfig({
     alias: [
       {
         find: /^@workspace\/db\/schema$/,
-        replacement: path.resolve(__dirname, "../../lib/db/src/schema/index.ts"),
+        replacement: path.resolve(__dirname, "../../packages/db/src/schema/index.ts"),
       },
       {
         find: /^@workspace\/db$/,
-        replacement: path.resolve(__dirname, "../../lib/db/src/index.ts"),
+        replacement: path.resolve(__dirname, "../../packages/db/src/index.ts"),
       },
       {
         find: /^@workspace\/api-zod$/,
-        replacement: path.resolve(__dirname, "../../lib/api-zod/src/index.ts"),
+        replacement: path.resolve(__dirname, "../../packages/api-zod/src/index.ts"),
       },
     ],
   },

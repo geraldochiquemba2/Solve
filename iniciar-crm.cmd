@@ -3,7 +3,7 @@ title Solve Corporate CRM — Tunnel + Backend
 echo ============================================
 echo   1. A iniciar o CRM Backend (porta 3000)...
 echo ============================================
-cd /d "C:\Users\Geraldo\Downloads\Solve-Corporate-CRM\Solve-Corporate-CRM\artifacts\api-server"
+cd /d "%~dp0apps\api"
 start /b node --enable-source-maps ./dist/index.mjs
 
 echo ============================================
@@ -13,5 +13,11 @@ echo.
 echo   COPIA O URL QUE APARECE EM BAIXO:
 echo   (precisas dele para o PC da catraca)
 echo.
-C:\Users\Geraldo\cloudflared.exe tunnel --url http://localhost:3000
+where cloudflared >nul 2>nul
+if %errorlevel%==0 (
+  cloudflared tunnel --url http://localhost:3000
+) else (
+  echo [AVISO] cloudflared nao esta no PATH.
+  echo Instala em https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+)
 pause

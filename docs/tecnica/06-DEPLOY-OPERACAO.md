@@ -18,7 +18,9 @@ métodos GPO/REF), `CADEMI_API_URL/KEY`, `CORS_ORIGIN`, `API_KEY`.
 Prioridade: **env > tabela `settings`** (editável em Integrações/Definições).
 
 ## Jobs (dentro do servidor)
-Expiração 5min, auto-sync É-kwanza 60s, keep-alive 10min, SSE acessos 5s.
+Expiração 5min, auto-sync É-kwanza 5min (quota Neon), OVG 30min,
+keep-alive 10min, SSE acessos 10–15s (só com clientes ligados).
+Frontend: dashboards/listas 5min, pagamentos 2min, catraca 1min, sem refetch ao focar janela.
 
 ## Problemas comuns
 | Sintoma | Ver |
@@ -32,7 +34,7 @@ Expiração 5min, auto-sync É-kwanza 60s, keep-alive 10min, SSE acessos 5s.
 | Login loop | limpar cookies/localStorage (`token`, `portal_token`) |
 
 ## Local (dev)
-Backend: `standalone-server/` com env de `artifacts/api-server/.env`
+Backend: `apps/api/` com env de `apps/api/.env`
 (`PORT=3000`, mata processo antigo na porta primeiro). Frontend:
-`artifacts/solve-crm` com `VITE_API_URL=http://localhost:3000`
+`apps/web` com `VITE_API_URL=http://localhost:3000`
 (`PORT=5173 BASE_PATH=/ pnpm dev`). URLs: `localhost:5173` + `:3000`.

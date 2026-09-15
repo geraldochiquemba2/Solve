@@ -10,13 +10,33 @@ services:
         value: production
       - key: PORT
         value: 3000
+      - key: JWT_SECRET
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://solve-sqoh.onrender.com
+      - key: CORS_ORIGIN
+        value: https://solve-sqoh.onrender.com
       - key: OVG_API_URL
         value: https://samorafitstudio.onvirtualgym.com
       - key: OVG_USERNAME
         value: solvecorporate@partners.onvirtualgym.com
       - key: OVG_PASSWORD
-        value: e9k1vx_iju6n_g:_
+        sync: false
       - key: OVG_CLUB_CODE
         value: LUA
+      - key: EKWANZA_CLIENT_ID
+        sync: false
+      - key: EKWANZA_CLIENT_SECRET
+        sync: false
+      - key: EKWANZA_GPO_URL
+        sync: false
+      - key: EKWANZA_ACCOUNT
+        value: 06100363
+      - key: CADEMI_API_URL
+        sync: false
+      - key: CADEMI_API_KEY
+        sync: false
     healthCheckPath: /healthz
     autoDeploy: true

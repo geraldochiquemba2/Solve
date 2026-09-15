@@ -1,5 +1,6 @@
 const fs = require('fs');
-const file = 'C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/artifacts/solve-crm/src/App.tsx';
+// DEPRECATED one-shot (ja executado). Manter apenas como historico.
+const file = 'C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/apps/web/src/App.tsx';
 let c = fs.readFileSync(file, 'utf8');
 
 // Fix double-encoded UTF-8

@@ -1,5 +1,6 @@
-const { Client } = require('C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/lib/db/node_modules/pg');
-const bcrypt = require('C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/artifacts/api-server/node_modules/bcryptjs');
+// DEPRECATED one-shot com segredo embutido. NAO usar sem limpar a connectionString.
+const { Client } = require('C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/packages/db/node_modules/pg');
+const bcrypt = require('C:/Users/Geraldo/Downloads/Solve-Corporate-CRM/Solve-Corporate-CRM/apps/api/node_modules/bcryptjs');
 
 const client = new Client({
   connectionString: 'postgresql://neondb_owner:npg_bXxHCos9Z3Nl@ep-rapid-heart-a5mtx2z6-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require',

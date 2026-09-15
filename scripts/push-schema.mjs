@@ -2,7 +2,7 @@ import pg from 'pg';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-const sql = readFileSync(resolve('..', 'lib', 'db', 'drizzle', '0000_empty_hydra.sql'), 'utf-8');
+const sql = readFileSync(resolve(import.meta.dirname, '..', 'packages', 'db', 'drizzle', '0000_empty_hydra.sql'), 'utf-8');
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
