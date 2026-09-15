@@ -1669,6 +1669,19 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
     const plansR = await pool.query("SELECT id, name, price FROM plans WHERE active = true");
     const planByName = {};
     plansR.rows.forEach(p => { planByName[String(p.name).toLowerCase()] = p; });
+    // Preços fonte da verdade: settings "Preços por conteúdo" (ecrã Cademi no CRM).
+    // Chave = slug (ex: samorafit-workout). Fallback = plans.price.
+    let settingsPrices = {};
+    try {
+      const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
+      let manual = (srow && srow.rows && srow.rows[0] && srow.rows[0].value) ?? [];
+      if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
+      (Array.isArray(manual) ? manual : []).forEach(o => {
+        if (o && o.id !== undefined && o.preco !== undefined && o.preco !== null && o.preco !== "") {
+          settingsPrices[String(o.id).toLowerCase()] = Number(o.preco);
+        }
+      });
+    } catch {}
     let created = 0, updated = 0, subs = 0, pays = 0;
     const errors = [];
     for (const u of users) {
@@ -1703,6 +1716,16 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
           const prodName = String((x.produto && x.produto.nome) || "").trim();
           const plan = planByName[prodName.toLowerCase()];
           if (!plan) continue;
+          // Preço: ecrã "Preços por conteúdo" manda; alinha o plano.
+          const slug = slugify(prodName);
+          let amount = Number(plan.price) || 0;
+          if (settingsPrices[slug] !== undefined) {
+            amount = settingsPrices[slug];
+            if (Number(plan.price) !== amount) {
+              await pool.query("UPDATE plans SET price = $1, updated_at = NOW() WHERE id = $2", [amount, plan.id]);
+              plan.price = amount;
+            }
+          }
           const start = x.comecou_em ? new Date(x.comecou_em) : new Date();
           const end = x.encerra_em ? new Date(x.encerra_em) : null;
           const ex = await pool.query(
@@ -1722,7 +1745,7 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
             `INSERT INTO payments (id, code, customer_id, subscription_id, amount, method, status, paid_at, reconciled_at, metadata, created_at, updated_at)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, 'cademi_import', 'confirmado', $5, NOW(), $6, NOW(), NOW())
              ON CONFLICT (code) DO NOTHING`,
-            [payCode, customerId, subId, plan.price, start,
+            [payCode, customerId, subId, amount, start,
              JSON.stringify({ email, cademi_user_id: u.id, cademi_produto: prodName, imported: true })]);
           if (pr.rowCount > 0) pays++;
         }
