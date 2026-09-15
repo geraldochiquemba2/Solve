@@ -1622,23 +1622,80 @@ app.get("/api/v1/cademi/alunos-cobranca", requireAuth, async (req, res) => {
   }
 });
 
-// Sync: grava cademi_id nos customers por email
+// Sync Cademi → CRM: cria/atualiza customers + subscriptions + payments (confirmado)
+// para alunos com acesso ativo. Idempotente: re-correr não duplica (code único).
+// Alimenta o "Controlo de pagamentos" (/cademi/alunos-cobranca cruza por metadata.email).
 app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
-  const r = await cademiFetch("/usuario?usuario_email_id_doc=");
-  if (!r.success) return res.status(502).json({ error: r.error });
-  const users = r.data?.usuario || [];
-  let matched = 0;
-  for (const u of users) {
-    if (!u.email) continue;
-    try {
-      const upd = await pool.query(
-        "UPDATE customers SET cademi_id = $1 WHERE LOWER(email) = LOWER($2)",
-        [String(u.id), u.email]
-      );
-      if (upd.rowCount > 0) matched++;
-    } catch {}
+  try {
+    const r = await cademiFetch("/usuario?usuario_email_id_doc=");
+    if (!r.success) return res.status(502).json({ error: r.error });
+    const users = r.data?.usuario || [];
+    const plansR = await pool.query("SELECT id, name, price FROM plans WHERE active = true");
+    const planByName = {};
+    plansR.rows.forEach(p => { planByName[String(p.name).toLowerCase()] = p; });
+    let created = 0, updated = 0, subs = 0, pays = 0;
+    const errors = [];
+    for (const u of users) {
+      try {
+        const email = String(u.email || "").trim();
+        if (!email) continue;
+        const cr = await pool.query("SELECT id FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
+        let customerId;
+        if (cr.rows.length > 0) {
+          customerId = cr.rows[0].id;
+          await pool.query(
+            "UPDATE customers SET name = $1, phone = COALESCE($2, phone), cademi_id = $3, updated_at = NOW() WHERE id = $4",
+            [u.nome || "Aluno Cademi", u.celular || null, String(u.id), customerId]);
+          updated++;
+        } else {
+          const code = "CL-" + Date.now().toString(36).toUpperCase() + "-" + String(u.id);
+          const ins = await pool.query(
+            `INSERT INTO customers (id, code, name, email, phone, cademi_id, state, joined_at, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW()) RETURNING id`,
+            [code, u.nome || "Aluno Cademi", email, u.celular || null, String(u.id), u.ultimo_acesso_em ? "activo" : "inactivo"]);
+          customerId = ins.rows[0].id;
+          created++;
+        }
+        // Acessos ativos na Cademi = pagantes -> subscription + payment confirmado
+        let acessos = [];
+        try {
+          const ar = await cademiFetch(`/usuario/acesso/${encodeURIComponent(u.id)}`);
+          acessos = ((ar && ar.data && ar.data.acesso) || []).filter(x =>
+            !x.encerrado && (!x.encerra_em || new Date(x.encerra_em) > new Date()));
+        } catch {}
+        for (const x of acessos) {
+          const prodName = String((x.produto && x.produto.nome) || "").trim();
+          const plan = planByName[prodName.toLowerCase()];
+          if (!plan) continue;
+          const start = x.comecou_em ? new Date(x.comecou_em) : new Date();
+          const end = x.encerra_em ? new Date(x.encerra_em) : null;
+          const ex = await pool.query(
+            "SELECT id FROM subscriptions WHERE customer_id = $1 AND plan_id = $2 AND start_date = $3 LIMIT 1",
+            [customerId, plan.id, start]);
+          let subId = ex.rows[0] && ex.rows[0].id;
+          if (!subId) {
+            const si = await pool.query(
+              `INSERT INTO subscriptions (id, customer_id, plan_id, start_date, end_date, active, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW()) RETURNING id`,
+              [customerId, plan.id, start, end]);
+            subId = si.rows[0].id;
+            subs++;
+          }
+          const payCode = `CADEMI-${u.id}-${x.produto.id}`;
+          const pr = await pool.query(
+            `INSERT INTO payments (id, code, customer_id, subscription_id, amount, method, status, paid_at, reconciled_at, metadata, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'cademi_import', 'confirmado', $5, NOW(), $6, NOW(), NOW())
+             ON CONFLICT (code) DO NOTHING`,
+            [payCode, customerId, subId, plan.price, start,
+             JSON.stringify({ email, cademi_user_id: u.id, cademi_produto: prodName, imported: true })]);
+          if (pr.rowCount > 0) pays++;
+        }
+      } catch (e) { errors.push(`${u.email || u.id}: ${e.message}`); }
+    }
+    res.json({ ok: true, cademiUsers: users.length, created, updated, subscriptions: subs, payments: pays, errors: errors.slice(0, 10) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  res.json({ ok: true, cademiUsers: users.length, matched });
 });
 
 // ─── Cademi: acesso ao curso após pagamento confirmado ─────────────────────
