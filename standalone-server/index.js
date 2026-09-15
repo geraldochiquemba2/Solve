@@ -1755,16 +1755,11 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
           const prodName = String((x.produto && x.produto.nome) || "").trim();
           const plan = planByName[prodName.toLowerCase()];
           if (!plan) continue;
-          // Preço: ecrã "Preços por conteúdo" manda; alinha o plano.
+          // Preço do pagamento: ecrã "Preços por conteúdo". Os PLANOS são negócio
+          // à parte (ginásio, geridos na página Planos) e o sync NUNCA lhes toca —
+          // o match por nome serve só para pendurar a subscription no plano certo.
           const slug = slugify(prodName);
-          let amount = Number(plan.price) || 0;
-          if (settingsPrices[slug] !== undefined) {
-            amount = settingsPrices[slug];
-            if (Number(plan.price) !== amount) {
-              await pool.query("UPDATE plans SET price = $1, updated_at = NOW() WHERE id = $2", [amount, plan.id]);
-              plan.price = amount;
-            }
-          }
+          const amount = settingsPrices[slug] !== undefined ? settingsPrices[slug] : (Number(plan.price) || 0);
           const start = x.comecou_em ? new Date(x.comecou_em) : new Date();
           const end = x.encerra_em ? new Date(x.encerra_em) : null;
           const ex = await pool.query(
