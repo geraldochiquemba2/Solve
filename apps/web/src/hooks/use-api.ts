@@ -589,6 +589,7 @@ export function useListCustomersManual() {
       cademiId: null,
       leadId: null,
       gender: o.sex || '',
+      club: o.club ?? null,
       entryDate: o.entry_date || null,
     })).filter((c: any) => {
       const em = String(c.email || '').toLowerCase();

@@ -59,7 +59,7 @@ const queryClient = new QueryClient({
 });
 
 type Lead = { id: string; name: string; company: string; source: string; status: string; owner: string; value: number; last: string; email: string };
-type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; entryDate?: string | null; lessonsLeft?: number | null; lessonsLimit?: number | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
+type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; nif?: string | null; club?: string | null; ovgId?: string | null; cademiId?: string | null; entryDate?: string | null; lessonsLeft?: number | null; lessonsLimit?: number | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
 
 const LEAD_API_TO_PT: Record<string, string> = { novo_lead: 'Novo Lead', contacto: 'Novo Lead', qualificado: 'Qualificação', proposta: 'Proposta', negociacao: 'Negociação', convertido: 'Convertido', perdido: 'Perdido' };
 const LEAD_PT_TO_API: Record<string, string> = { 'Novo Lead': 'novo_lead', 'Qualificação': 'qualificado', 'Proposta': 'proposta', 'Negociação': 'negociacao', 'Convertido': 'convertido', 'Perdido': 'perdido' };
@@ -128,6 +128,10 @@ function mapApiCustomer(c: any): Customer {
     email: c.email ?? '',
     phone: c.phone ?? '',
     gender: c.gender === 'M' ? 'Masculino' : c.gender === 'F' ? 'Feminino' : c.gender ?? '',
+    nif: c.nif ?? null,
+    club: c.club ?? null,
+    ovgId: c.ovgId ?? null,
+    cademiId: c.cademiId ?? null,
     entryDate: c.entryDate ?? null,
     lessonsLeft: c.numero_entradas ?? c.lessonsLeft ?? null,
     lessonsLimit: c.limite_entradas ?? c.lessonsLimit ?? null,
@@ -476,6 +480,14 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
       <div style={{ marginTop: '.7rem', padding: '.5rem .7rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.5rem', fontSize: '.75rem' }}>
         <span style={{ color: 'hsl(var(--muted-foreground))' }}>Género:</span>{' '}
         <span style={{ fontWeight: 600 }}>{customer.gender}</span>
+      </div>
+    )}
+    {customer.ovgId && (
+      <div style={{ marginTop: '.7rem', padding: '.5rem .7rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.5rem', fontSize: '.75rem', display: 'grid', gap: '.3rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '.72rem' }}>Dados OVG</div>
+        {[['Nº sócio', customer.ovgId], ['NIF', customer.nif || '—'], ['Clube', customer.club || '—']].map(([l, v]) => (
+          <div key={l} style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{l}:</span><strong>{v}</strong></div>
+        ))}
       </div>
     )}</Section><Section title="Saúde da conta" note="Indicadores de retenção"><div style={{ display: 'grid', gap: '.9rem' }}>{(() => {
         const unlimited = customer.lessonsLimit === -1;
