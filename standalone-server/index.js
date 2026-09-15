@@ -124,6 +124,21 @@ app.get("/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Diagnóstico TEMPORÁRIO (remover após whitelist): IP público de saída do Render.
+// Se a OVG bloquear por IP, este é o IP a autorizar no lado deles.
+app.get("/api/v1/debug/egress-ip", requireAuth, async (_req, res) => {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch("https://api.ipify.org?format=json", { signal: ctrl.signal });
+      res.json(await r.json());
+    } finally { clearTimeout(timer); }
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ─── Diagnostic: list all tables ────────────────────────────────────────────
 app.get("/api/v1/db-acessos", async (req, res) => {
   try {
@@ -339,16 +354,16 @@ async function ovgLogin() {
   console.log("OVG login:", url);
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
     body: JSON.stringify({ username: user, password: pass }),
   });
   const body = await resp.text();
   console.log("OVG login status:", resp.status, "body:", body.substring(0, 200));
-  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status} ${body}`);
+  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status} ${body.substring(0, 300)}`);
   const data = JSON.parse(body);
   console.log("OVG login keys:", Object.keys(data));
   const token = data.token || data.Token || data.access_token;
-  if (!token) throw new Error(`OVG: no token in response. Keys: ${Object.keys(data).join(',')} Body: ${body.substring(0, 300)}`);
+  if (!token) throw new Error(`OVG: no token in response. Keys: ${Object.keys(data).join(',')} Msg: ${(data.msg || data.message || data.error || '').toString().slice(0, 200)} Body: ${body.substring(0, 300)}`);
   return token;
 }
 
@@ -358,7 +373,7 @@ async function ovgGetMembers(token) {
   const url = `${base}/ListOfCustomersDataDetailed/${club}`;
   console.log("OVG members:", url);
   const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
   });
   const body = await resp.text();
   console.log("OVG members status:", resp.status, "body length:", body.length);
