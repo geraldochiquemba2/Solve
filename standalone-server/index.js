@@ -758,7 +758,8 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
           c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
           c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
           c.state AS client_status, false AS online, false AS bloqueado,
-          NULL AS numero_entradas, NULL AS limite_entradas,
+          CASE WHEN s.lessons_total IS NULL THEN NULL ELSE s.lessons_total - COALESCE(s.lessons_done, 0) END AS numero_entradas,
+          s.lessons_total AS limite_entradas,
           COALESCE(c.company,'') AS company, p.name AS "planName",
           s.end_date::text AS "subscriptionEnd", c.code,
           c.ovg_id AS "ovgId", c.cademi_id AS "cademiId", c.lead_id::text AS "leadId"
@@ -1701,6 +1702,8 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
     } catch {}
     let created = 0, updated = 0, subs = 0, pays = 0;
     const errors = [];
+    // Total de aulas por produto (cache): evita 1 chamada por acesso.
+    const lessonsCache = {};
     for (const u of users) {
       try {
         const email = String(u.email || "").trim();
@@ -1783,6 +1786,25 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
             [payCode, customerId, subId, amount, start,
              JSON.stringify({ email, cademi_user_id: u.id, cademi_produto: prodName, imported: true })]);
           if (pr.rowCount > 0) pays++;
+          // Aulas em falta: progresso (completas) + total de itens do produto -> subscription.
+          // A lista Clientes lê daqui (zero chamadas extra por linha).
+          try {
+            let lt = lessonsCache[plan.id];
+            if (lt === undefined) {
+              try {
+                const lr = await cademiFetch(`/item/lista_por_produto/${encodeURIComponent(x.produto.id)}`);
+                const itens = (lr && lr.data && lr.data.itens) || [];
+                lt = Array.isArray(itens) ? itens.length : 0;
+              } catch { lt = 0; }
+              lessonsCache[plan.id] = lt;
+            }
+            let done = 0;
+            try {
+              const pg = await cademiFetch(`/usuario/progresso_por_produto/${encodeURIComponent(u.id)}/${encodeURIComponent(x.produto.id)}`);
+              done = Number((pg && pg.data && pg.data.completas)) || 0;
+            } catch {}
+            await pool.query("UPDATE subscriptions SET lessons_total = $1, lessons_done = $2, updated_at = NOW() WHERE id = $3", [lt, done, subId]);
+          } catch {}
         }
       } catch (e) { errors.push(`${u.email || u.id}: ${e.message}`); }
     }

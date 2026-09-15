@@ -17,6 +17,9 @@ const statements = [
   // 2b. Colunas em falta em customers (snapshot sem joined_at/gender)
   `ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "joined_at" timestamp`,
   `ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "gender" varchar(20)`,
+  // 2c. Aulas em falta por subscription (sync Cademi preenche; lista Clientes lê daqui)
+  `ALTER TABLE "subscriptions" ADD COLUMN IF NOT EXISTS "lessons_total" integer`,
+  `ALTER TABLE "subscriptions" ADD COLUMN IF NOT EXISTS "lessons_done" integer DEFAULT 0`,
   // 3. Tabelas criadas depois da snapshot
   `CREATE TABLE IF NOT EXISTS "api_keys" (
      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
