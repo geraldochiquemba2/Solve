@@ -2324,18 +2324,41 @@ app.get("/api/v1/ovg/members", requireAuth, async (req, res) => {
 
 app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
   try {
-    const fields = [];
-    const params = [];
-    // NOTA: pg_sync.py reenvia online/bloqueado/numero_entradas a cada 10s —
-    // por isso só nome/telefone/email são editáveis aqui (enviados uma vez).
-    if (req.body.nome !== undefined) { fields.push("nome = $" + (params.length + 1)); params.push(req.body.nome); }
-    if (req.body.telefone !== undefined) { fields.push("telefone = $" + (params.length + 1)); params.push(req.body.telefone); }
-    if (req.body.email !== undefined) { fields.push("email = $" + (params.length + 1)); params.push(req.body.email); }
-    if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email)" });
-    params.push(req.params.id);
-    const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE (id_cliente::text = $${params.length} OR numero_cartao = $${params.length}) RETURNING id_cliente, nome, telefone, email`, params);
-    if (r.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
-    res.json({ data: r.rows[0] });
+    const id = String(req.params.id);
+    // 1) Espelho do ginásio (id numérico ou cartão) — só nome/telefone/email.
+    // NOTA: pg_sync.py reenvia online/bloqueado/numero_entradas a cada 10s.
+    try {
+      const fields = [];
+      const params = [];
+      if (req.body.nome !== undefined) { fields.push("nome = $" + (params.length + 1)); params.push(req.body.nome); }
+      if (req.body.telefone !== undefined) { fields.push("telefone = $" + (params.length + 1)); params.push(req.body.telefone); }
+      if (req.body.email !== undefined) { fields.push("email = $" + (params.length + 1)); params.push(req.body.email); }
+      if (fields.length > 0) {
+        const gp = [...params, id];
+        const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE (id_cliente::text = $${params.length + 1} OR numero_cartao = $${params.length + 1}) RETURNING id_cliente, nome, telefone, email`, gp);
+        if (r.rows.length > 0) return res.json({ data: r.rows[0] });
+      }
+    } catch {}
+    // 2) Tabela CRM customers (uuid) — nome/telefone/email + género (M/F).
+    // O espelho OVG é só-leitura (ids "ovg-*"): 404 abaixo é esperado para esses.
+    const cfields = [];
+    const cparams = [];
+    if (req.body.nome !== undefined) { cfields.push("name = $" + (cparams.length + 1)); cparams.push(req.body.nome); }
+    if (req.body.telefone !== undefined) { cfields.push("phone = $" + (cparams.length + 1)); cparams.push(req.body.telefone); }
+    if (req.body.email !== undefined) { cfields.push("email = $" + (cparams.length + 1)); cparams.push(req.body.email); }
+    if (req.body.genero !== undefined) {
+      let g = String(req.body.genero || "").trim();
+      if (/^masculino/i.test(g)) g = "M";
+      else if (/^feminino/i.test(g)) g = "F";
+      else if (g !== "" && g !== "M" && g !== "F") return res.status(400).json({ error: "Género inválido (M/F)" });
+      cfields.push("gender = NULLIF($" + (cparams.length + 1) + ", '')");
+      cparams.push(g);
+    }
+    if (cfields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email, genero)" });
+    cparams.push(id);
+    const r2 = await pool.query(`UPDATE customers SET ${cfields.join(", ")}, updated_at = NOW() WHERE id::text = $${cparams.length} RETURNING id::text AS id, name, email, phone, gender`, cparams);
+    if (r2.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
+    res.json({ data: r2.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

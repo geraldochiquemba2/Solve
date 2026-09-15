@@ -417,11 +417,12 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
   const [, setLocation] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [fName, setFName] = useState(''); const [fPhone, setFPhone] = useState(''); const [fEmail, setFEmail] = useState('');
+  const [fName, setFName] = useState(''); const [fPhone, setFPhone] = useState(''); const [fEmail, setFEmail] = useState(''); const [fGender, setFGender] = useState('');
   const [editMsg, setEditMsg] = useState(''); const [saving, setSaving] = useState(false);
   const openEdit = () => {
     if (!customer) return;
     setFName(customer.name || ''); setFPhone(customer.phone || ''); setFEmail(customer.email || '');
+    setFGender(customer.gender === 'Masculino' ? 'M' : customer.gender === 'Feminino' ? 'F' : '');
     setEditMsg(''); setEditOpen(true);
   };
   const saveEdit = async () => {
@@ -434,7 +435,7 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
       const res = await fetch(`${base}/api/v1/customers/${encodeURIComponent(customer.id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ nome: fName.trim(), telefone: fPhone, email: fEmail }),
+        body: JSON.stringify({ nome: fName.trim(), telefone: fPhone, email: fEmail, genero: fGender }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || res.statusText); }
       setEditOpen(false); onChanged?.();
@@ -486,7 +487,7 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
         return rows.map(([l, v, p]) => <div key={l as string}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.73rem', marginBottom: '.35rem' }}><span>{l as string}</span><strong>{v as string}</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${p as number}%`, background: (p as number) === 100 ? 'hsl(155 41% 43%)' : undefined }} /></div></div>)})()}</div></Section></div>
   {editOpen && <div className="modal-backdrop" onClick={() => setEditOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Editar cliente</h3>
-    <div className="section-note" style={{ marginBottom: '1rem' }}>Só nome, telefone e email (a catraca gere o resto).</div>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>Só nome, telefone, email e género (a catraca gere o resto).</div>
     <label className="label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} style={{ width: '100%' }} />
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
@@ -495,6 +496,8 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
       <div style={{ flex: 1 }}><label className="label">Email</label>
       <input className="input" value={fEmail} onChange={e => setFEmail(e.target.value)} /></div>
     </div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Género</label>
+      <select className="select" value={fGender} onChange={e => setFGender(e.target.value)} style={{ width: '100%' }}><option value="">Não definido</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div>
     {editMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{editMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
       <button className="btn-secondary" onClick={() => setEditOpen(false)} style={{ flex: 1 }}>Cancelar</button>
