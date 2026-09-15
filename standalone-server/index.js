@@ -758,7 +758,7 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
           c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
           c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
           c.state AS client_status, false AS online, false AS bloqueado,
-          CASE WHEN s.lessons_total IS NULL THEN NULL ELSE s.lessons_total - COALESCE(s.lessons_done, 0) END AS numero_entradas,
+          CASE WHEN COALESCE(s.lessons_total, 0) = 0 THEN NULL ELSE s.lessons_total - COALESCE(s.lessons_done, 0) END AS numero_entradas,
           s.lessons_total AS limite_entradas,
           COALESCE(c.company,'') AS company, p.name AS "planName",
           s.end_date::text AS "subscriptionEnd", c.code,
@@ -1801,7 +1801,9 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
             let done = 0;
             try {
               const pg = await cademiFetch(`/usuario/progresso_por_produto/${encodeURIComponent(u.id)}/${encodeURIComponent(x.produto.id)}`);
-              done = Number((pg && pg.data && pg.data.completas)) || 0;
+              // Raw Cademi: data.progresso.completas (a rota /progress/:id/:pid desembrulha; aqui é direto)
+              const pgd = (pg && pg.data && (pg.data.progresso || pg.data)) || {};
+              done = Number(pgd.completas) || 0;
             } catch {}
             await pool.query("UPDATE subscriptions SET lessons_total = $1, lessons_done = $2, updated_at = NOW() WHERE id = $3", [lt, done, subId]);
           } catch {}
