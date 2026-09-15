@@ -10,7 +10,12 @@ import { dirname, join } from "path";
 const { Pool } = pg;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  // Fase 2 BDs: o CRM (Cademi) usa CRM_DATABASE_URL (BD nova).
+  // DATABASE_URL mantém a do ginásio (projeto antigo) — intocada.
+  // Filtra channel_binding (Neon) como em packages/db — o driver pg não o suporta.
+  connectionString: (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "")
+    .replace("&channel_binding=require", "")
+    .replace("channel_binding=require&", ""),
   ssl: { rejectUnauthorized: false }
 });
 
@@ -1451,7 +1456,7 @@ async function cademiFetch(path, options = {}) {
   try {
     const resp = await fetch(`${base}${path}`, {
       ...options,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, ...(options.headers || {}) },
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", Authorization: `Bearer ${key}`, ...(options.headers || {}) },
     });
     const data = await resp.json();
     if (!resp.ok || data.success === false) {
@@ -2504,7 +2509,7 @@ app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
 });
 
 setInterval(async () => {
-  if (sseClients.size === 0) return;
+  if (sseClients.size === 0) return; // quota Neon: só consulta com clientes ligados (era 5s)
   try {
     const result = await pool.query(
       `${ACCESS_SELECT} WHERE a.id_acesso > $1 AND ${isMember("c")} AND ${notDeleted("c")} ORDER BY a.id_acesso DESC LIMIT 50`,
@@ -2518,7 +2523,7 @@ setInterval(async () => {
       }
     }
   } catch {}
-}, 5000);
+}, 15 * 1000);
 
 // ─── Serve frontend (built files) ─────────────────────────────────────────
 import { existsSync } from "fs";
@@ -2559,7 +2564,9 @@ if (SELF_PING_URL) {
   console.log(`[KEEP-ALIVE] ativo: ${SELF_PING_URL} a cada ${SELF_PING_INTERVAL / 60000} min`);
 }
 
-// Periodic expiration check for payments (every 5 minutes)
+// Expiração de pendentes: 15min (cota Neon mensal) — override via EXPIRY_INTERVAL_MS.
+// Fase Cademi-CRM: sem tabelas do ginásio, só payments de compras Cademi.
+const EXPIRY_INTERVAL_MS = Number(process.env.EXPIRY_INTERVAL_MS || 15 * 60 * 1000);
 setInterval(async () => {
   try {
     const result = await pool.query(
@@ -2571,11 +2578,13 @@ setInterval(async () => {
   } catch (err) {
     console.error("[EXPIRY] Error:", err.message);
   }
-}, 5 * 60 * 1000);
+}, EXPIRY_INTERVAL_MS);
 
-// Auto-sync: consulta a É-kwanza a cada 60s para pagamentos pendentes
+// Auto-sync É-kwanza (pendentes Cademi): 15min (cota Neon mensal; era 5min) — override via AUTOSYNC_INTERVAL_MS.
+// O webhook /webhooks/ekwanza continua a atualizar em tempo real; isto é só rede de segurança.
 // (o webhook nem sempre dispara; sem isto o estado fica preso em "pendente").
 let _autoSyncRunning = false;
+const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 15 * 60 * 1000);
 setInterval(async () => {
   if (_autoSyncRunning) return;
   _autoSyncRunning = true;
@@ -2618,4 +2627,4 @@ setInterval(async () => {
   } finally {
     _autoSyncRunning = false;
   }
-}, 60 * 1000);
+}, AUTOSYNC_INTERVAL_MS);
