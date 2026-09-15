@@ -590,8 +590,12 @@ function PlansPage() {
         method: 'DELETE',
         headers: { 'X-API-Key': apiKey },
       });
-      if (res.ok) fetchPlans();
-      else alert('Erro ao apagar');
+      const j: any = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (j.deactivated) alert(j.message || 'Plano desativado (tinha subscrições e o histórico foi preservado)');
+        fetchPlans();
+      }
+      else alert('Erro: ' + (j.error || 'ao apagar'));
     } catch (e: any) { alert('Erro: ' + e.message); }
   };
 
