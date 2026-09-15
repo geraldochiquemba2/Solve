@@ -733,7 +733,27 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    // Fase Cademi-CRM: sem tabelas do ginásio -> lista da tabela CRM customers
+    try {
+      const fb = await pool.query(
+        `SELECT c.id::text AS id, c.name,
+          COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
+          c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
+          c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
+          c.state AS client_status, false AS online, false AS bloqueado,
+          NULL AS numero_entradas, NULL AS limite_entradas,
+          COALESCE(c.company,'') AS company, p.name AS "planName",
+          s.end_date::text AS "subscriptionEnd", c.code,
+          c.ovg_id AS "ovgId", c.cademi_id AS "cademiId", c.lead_id::text AS "leadId"
+         FROM customers c
+         LEFT JOIN LATERAL (SELECT * FROM subscriptions WHERE customer_id = c.id ORDER BY start_date DESC LIMIT 1) s ON true
+         LEFT JOIN plans p ON p.id = s.plan_id
+         ORDER BY c.name ASC`
+      );
+      res.json({ data: fb.rows, total: fb.rows.length });
+    } catch (e2) {
+      res.json({ data: [], total: 0 });
+    }
   }
 });
 
