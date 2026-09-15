@@ -538,6 +538,12 @@ export function useListCustomersManual() {
     refetchInterval: 180000,
     retry: false,
   });
+  // Espelho OVG (304 sócios): 3ª fonte da fusão — sem ela a lista só mostra o Cademi.
+  const ovgQuery = useQuery({
+    queryKey: ['customers-ovg'],
+    queryFn: () => apiGet<{ data: any[]; total: number }>('/api/v1/ovg/members'),
+    retry: false,
+  });
   return useMemo(() => {
     const apiCustomers = apiQuery.data?.data ?? [];
     const accessCustomers = (accessQuery.data?.data ?? []).map((c: any) => ({
@@ -563,9 +569,35 @@ export function useListCustomersManual() {
       _accessStats: { total: c.total_acessos, autorizados: c.acessos_autorizados, negados: c.acessos_negados, ultimoAcesso: c.ultimo_acesso },
     }));
     const seen = new Set(apiCustomers.map((c: CustomerData) => String(c.id)));
+    const seenContact = new Set(apiCustomers.flatMap((c: CustomerData) => [String(c.email || '').toLowerCase(), String(c.phone || '').replace(/\D/g, '').slice(-9)].filter(Boolean)));
     const merged = [...apiCustomers, ...accessCustomers.filter((c: any) => !seen.has(String(c.id)))];
-    return { data: { data: merged, total: merged.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading, refetch: () => { apiQuery.refetch(); accessQuery.refetch(); } };
-  }, [apiQuery.data, accessQuery.data, apiQuery.isLoading, accessQuery.isLoading]);
+    // OVG: entra se email+telefone ainda não existirem (evita duplicar quem já é cliente Cademi)
+    const ovgCustomers = ((ovgQuery.data?.data ?? []) as any[]).map((o: any) => ({
+      id: `ovg-${o.customer_number}`,
+      code: String(o.customer_number ?? ''),
+      name: o.name ?? '',
+      email: o.email ?? '',
+      phone: o.mobile_number ?? '',
+      company: '',
+      nif: o.nif ?? null,
+      state: o.status === 'ATIVO' ? 'activo' : o.status === 'INATIVO' ? 'inactivo' : 'activo',
+      planName: null,
+      subscriptionEnd: null,
+      createdAt: o.last_entry || o.entry_date || '',
+      updatedAt: o.synced_at || '',
+      ovgId: String(o.customer_number ?? ''),
+      cademiId: null,
+      leadId: null,
+      gender: o.sex || '',
+      entryDate: o.entry_date || null,
+    })).filter((c: any) => {
+      const em = String(c.email || '').toLowerCase();
+      const ph = String(c.phone || '').replace(/\D/g, '').slice(-9);
+      return !(em && seenContact.has(em)) && !(ph && seenContact.has(ph));
+    });
+    const mergedAll = [...merged, ...ovgCustomers];
+    return { data: { data: mergedAll, total: mergedAll.length }, isLoading: apiQuery.isLoading || accessQuery.isLoading || ovgQuery.isLoading, refetch: () => { apiQuery.refetch(); accessQuery.refetch(); ovgQuery.refetch(); } };
+  }, [apiQuery.data, accessQuery.data, ovgQuery.data, apiQuery.isLoading, accessQuery.isLoading, ovgQuery.isLoading]);
 }
 
 export function useImportCustomerDates() {
