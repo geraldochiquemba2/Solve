@@ -1,5 +1,6 @@
 // Seed da BD NOVA — fase Cademi-CRM (SEM ginásio).
-// Cria: admin, integrações (cademi operacional; ovg/whatsapp inativos), planos dos 4 produtos Cademi.
+// Cria: admin + integrações (cademi operacional; ovg/whatsapp inativos).
+// PLANOS: negócio à parte — NUNCA nascem da Cademi. Criar só na página Planos.
 // Uso:  DATABASE_URL="<nova-url-neon>" node packages/db/seed-cademi-db.cjs
 // NUNCA hardcoded: a URL vem do ambiente.
 const { Client } = require('pg');
@@ -54,24 +55,7 @@ async function run() {
     );
   }
   console.log('OK integrações (cademi=operacional, ovg=inativo).');
-
-  // 3. Planos = produtos reais da Cademi (confirmados via API a 15/09/2026)
-  const products = [
-    { name: 'SamoraFit Workout', price: 25000 },
-    { name: 'teste', price: 0 },
-    { name: 'teste2', price: 0 },
-    { name: 'teste3', price: 0 },
-  ];
-  for (const p of products) {
-    const r = await client.query('SELECT id FROM plans WHERE name=$1', [p.name]);
-    if (r.rows.length === 0) {
-      await client.query(
-        `INSERT INTO plans (id, name, price, periodicity, active, created_at, updated_at) VALUES ($1,$2,$3,'mensal',true,$4,$5)`,
-        [uuid(), p.name, p.price, now(), now()]
-      );
-      console.log('OK plano:', p.name);
-    } else console.log('OK plano já existe:', p.name);
-  }
+  console.log('NOTA: planos criam-se só na página Planos (nunca da Cademi).');
 
   await client.end();
   console.log('Seed Cademi-CRM concluído.');
