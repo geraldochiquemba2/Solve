@@ -758,14 +758,15 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
           c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
           c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
           c.state AS client_status, false AS online, false AS bloqueado,
-          CASE WHEN COALESCE(s.lessons_total, 0) = 0 THEN NULL ELSE s.lessons_total - COALESCE(s.lessons_done, 0) END AS numero_entradas,
-          s.lessons_total AS limite_entradas,
+          CASE WHEN sl.t = 0 THEN NULL ELSE sl.t - sl.d END AS numero_entradas,
+          CASE WHEN sl.t = 0 THEN NULL ELSE sl.t END AS limite_entradas,
           COALESCE(c.company,'') AS company, p.name AS "planName",
           s.end_date::text AS "subscriptionEnd", c.code,
           c.ovg_id AS "ovgId", c.cademi_id AS "cademiId", c.lead_id::text AS "leadId"
          FROM customers c
          LEFT JOIN LATERAL (SELECT * FROM subscriptions WHERE customer_id = c.id ORDER BY start_date DESC LIMIT 1) s ON true
          LEFT JOIN plans p ON p.id = s.plan_id
+         LEFT JOIN LATERAL (SELECT COALESCE(SUM(lessons_total), 0) AS t, COALESCE(SUM(lessons_done), 0) AS d FROM subscriptions WHERE customer_id = c.id) sl ON true
          ORDER BY c.name ASC`
       );
       res.json({ data: fb.rows, total: fb.rows.length });
