@@ -1722,6 +1722,22 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
           customerId = ins.rows[0].id;
           created++;
         }
+        // Enriquece género/telefone via espelho OVG (a Cademi não tem género).
+        // Só preenche vazios; corre no sync manual (custo irrisório, sem polling).
+        try {
+          const digits = String(u.celular || '').replace(/\D/g, '').slice(-9);
+          const om = await pool.query(
+            `SELECT sex, mobile_number FROM ovg_members
+             WHERE sex IN ('M','F') AND (LOWER(email) = LOWER($1)
+               OR ($2 <> '' AND RIGHT(REGEXP_REPLACE(COALESCE(mobile_number,''), '[^0-9]', '', 'g'), 9) = $2))
+             LIMIT 1`,
+            [email, digits]);
+          if (om.rows.length > 0) {
+            await pool.query(
+              `UPDATE customers SET gender = COALESCE(gender, $1), phone = COALESCE(phone, $2), updated_at = NOW() WHERE id = $3`,
+              [om.rows[0].sex, om.rows[0].mobile_number, customerId]);
+          }
+        } catch {}
         // Acessos ativos na Cademi = pagantes -> subscription + payment confirmado
         let acessos = [];
         try {
