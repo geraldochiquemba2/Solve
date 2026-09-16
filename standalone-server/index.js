@@ -1375,7 +1375,10 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
           paymentMethod: `${methodPrefix}_${methodId}`,
           options: {
             MerchantIdentifier: await cfg("ekwanza_account_number", process.env.EKWANZA_ACCOUNT_NUMBER || ""),
-            ApiKey: await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
+            // REF usa a chave GPR, Express (GPO) usa a chave GPO (folha E+ do comerciante).
+            ApiKey: isRef
+              ? await cfg("ekwanza_gpr_api_key", process.env.EKWANZA_GPR_API_KEY || process.env.EKWANZA_GPO_API_KEY || "")
+              : await cfg("ekwanza_gpo_api_key", process.env.EKWANZA_GPO_API_KEY || ""),
           },
                 ...(isRef ? {} : (customer_phone ? { paymentInfo: { phoneNumber: customer_phone } } : {})),
         }),

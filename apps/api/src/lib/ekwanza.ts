@@ -8,6 +8,7 @@ const EKWANZA_CLIENT_SECRET = process.env.EKWANZA_CLIENT_SECRET || "";
 const EKWANZA_RESOURCE = process.env.EKWANZA_RESOURCE || "";
 const EKWANZA_NOTIFICATION_TOKEN = process.env.EKWANZA_NOTIFICATION_TOKEN || "";
 const EKWANZA_API_KEY = process.env.EKWANZA_API_KEY || "";
+const EKWANZA_GPR_API_KEY = process.env.EKWANZA_GPR_API_KEY || "";
 const EKWANZA_MERCHANT_ID = process.env.EKWANZA_MERCHANT_ID || "";
 const EKWANZA_ACCOUNT_NUMBER = process.env.EKWANZA_ACCOUNT_NUMBER || "";
 const EKWANZA_MERCHANT_REGISTER_NUMBER = process.env.EKWANZA_MERCHANT_REGISTER_NUMBER || "";
@@ -18,6 +19,7 @@ class EkwanzaClient {
   private baseUrl: string;
   private notificationToken: string;
   private apiKey: string;
+  private gprApiKey: string;
   private merchantId: string;
   private accountNumber: string;
   private merchantRegisterNumber: string;
@@ -30,6 +32,7 @@ class EkwanzaClient {
     this.baseUrl = EKWANZA_API_URL;
     this.notificationToken = EKWANZA_NOTIFICATION_TOKEN;
     this.apiKey = EKWANZA_API_KEY;
+    this.gprApiKey = EKWANZA_GPR_API_KEY;
     this.merchantId = EKWANZA_MERCHANT_ID;
     this.accountNumber = EKWANZA_ACCOUNT_NUMBER;
     this.merchantRegisterNumber = EKWANZA_MERCHANT_REGISTER_NUMBER;
@@ -179,7 +182,8 @@ class EkwanzaClient {
       paymentMethod,
       options: {
         MerchantIdentifier: this.accountNumber,
-        ApiKey: this.apiKey,
+        // REF usa a chave GPR, Express (GPO) usa a chave GPO (folha E+ do comerciante).
+        ApiKey: phoneNumber ? this.apiKey : (this.gprApiKey || this.apiKey),
       },
     };
     if (phoneNumber) {
