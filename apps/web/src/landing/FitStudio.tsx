@@ -63,7 +63,7 @@ export default function FitStudio() {
               
               <h1 className="font-heading font-normal text-5xl md:text-6xl lg:text-[5rem] text-zinc-900 dark:text-white mb-6 tracking-tight leading-[1.05]">
                 O Teu Templo <br/>
-                <span className="font-bold text-[#D71920]">Elite.</span>
+                <span className="font-bold text-[#042251]">Elite.</span>
               </h1>
               
               <p className="font-body text-zinc-500 dark:text-zinc-400 text-lg leading-relaxed mb-10 font-light max-w-md mx-auto lg:mx-0">
@@ -71,7 +71,7 @@ export default function FitStudio() {
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-5">
-                <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-10 py-4 bg-zinc-900 hover:bg-[#D71920] text-white font-body font-medium tracking-wide text-sm transition-colors duration-500 flex items-center justify-center gap-4 group">
+                <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-10 py-4 bg-zinc-900 hover:bg-[#042251] text-white font-body font-medium tracking-wide text-sm transition-colors duration-500 flex items-center justify-center gap-4 group">
                   Agendar Visita
                   <ArrowRight size={16} className="text-zinc-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
                 </button>
@@ -127,9 +127,9 @@ export default function FitStudio() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="p-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:border-[#D71920]/30 transition-all duration-300 shadow-sm hover:shadow-md group"
+              className="p-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:border-[#042251]/30 transition-all duration-300 shadow-sm hover:shadow-md group"
             >
-              <div className="w-14 h-14 bg-[#f5f5f7] dark:bg-zinc-900 flex items-center justify-center mb-6 text-zinc-400 group-hover:text-[#D71920] group-hover:bg-red-50 transition-colors">
+              <div className="w-14 h-14 bg-[#f5f5f7] dark:bg-zinc-900 flex items-center justify-center mb-6 text-zinc-400 group-hover:text-[#042251] group-hover:bg-[#042251]/10 transition-colors">
                 <item.icon size={28} />
               </div>
               <h3 className="font-heading font-bold text-xl text-zinc-900 dark:text-white mb-3">{item.title}</h3>
@@ -194,7 +194,7 @@ export default function FitStudio() {
                   'Desconto em Crioterapia'
                 ].map((feat, i) => (
                   <li key={i} className="flex items-center gap-3 text-zinc-700 font-medium text-sm">
-                    <CheckCircle2 size={16} className="text-[#D71920] shrink-0" /> {feat}
+                    <CheckCircle2 size={16} className="text-[#042251] shrink-0" /> {feat}
                   </li>
                 ))}
               </ul>
@@ -204,7 +204,7 @@ export default function FitStudio() {
             </div>
 
             {/* Premium PT */}
-            <div className="bg-[#D71920] text-white p-10 border border-[#D71920] flex flex-col relative shadow-[0_20px_50px_rgba(215,25,32,0.25)] transform md:-translate-y-4">
+            <div className="bg-[#042251] text-white p-10 border border-[#042251] flex flex-col relative shadow-[0_20px_50px_rgba(4,34,81,0.25)] transform md:-translate-y-4">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
                 Mais Popular
               </div>
@@ -227,7 +227,7 @@ export default function FitStudio() {
                   </li>
                 ))}
               </ul>
-              <button onClick={() => { setInitialPlanId(plans.find(p => p.name?.toLowerCase().includes('premium'))?.id || plans[0]?.id); setCheckoutOpen(true); }} className="w-full py-4 font-bold bg-white dark:bg-zinc-950 text-[#D71920] hover:bg-zinc-100 dark:bg-zinc-800 transition-colors shadow-lg">
+              <button onClick={() => { setInitialPlanId(plans.find(p => p.name?.toLowerCase().includes('premium'))?.id || plans[0]?.id); setCheckoutOpen(true); }} className="w-full py-4 font-bold bg-white dark:bg-zinc-950 text-[#042251] hover:bg-zinc-100 dark:bg-zinc-800 transition-colors shadow-lg">
                 Agendar Entrevista
               </button>
             </div>
@@ -283,9 +283,9 @@ export default function FitStudio() {
               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-80" />
               <div className="absolute bottom-0 left-0 p-8 w-full transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
                 <h3 className="font-heading font-bold text-2xl text-white mb-1">{pt.name}</h3>
-                <p className="text-[#D71920] font-bold text-sm tracking-widest uppercase mb-4">{pt.role}</p>
+                <p className="text-[#042251] font-bold text-sm tracking-widest uppercase mb-4">{pt.role}</p>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity delay-100">
-                  <a href="#" className="w-10 h-10 bg-zinc-900/10 flex items-center justify-center text-white hover:bg-[#D71920] transition-colors"><Instagram size={18} /></a>
+                  <a href="#" className="w-10 h-10 bg-zinc-900/10 flex items-center justify-center text-white hover:bg-[#042251] transition-colors"><Instagram size={18} /></a>
                 </div>
               </div>
             </div>
@@ -299,14 +299,14 @@ export default function FitStudio() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 max-w-5xl mx-auto">
             {/* Morada */}
             <div className="flex gap-6 p-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-              <div className="w-16 h-16 shrink-0 bg-[#D71920]/10 flex items-center justify-center text-[#D71920]">
+              <div className="w-16 h-16 shrink-0 bg-[#042251]/10 flex items-center justify-center text-[#042251]">
                 <MapPin size={28} />
               </div>
               <div>
                 <h4 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white mb-2">Morada</h4>
                 <p className="font-body text-zinc-500 dark:text-zinc-400 mb-1 text-lg">Avenida da Liberdade, 100</p>
                 <p className="font-body text-zinc-500 dark:text-zinc-400 mb-6 text-lg">Lisboa, Portugal</p>
-                <button onClick={openForm} className="text-sm font-bold text-[#D71920] hover:text-[#b3141a] transition-colors border-b border-[#D71920]/30 hover:border-[#D71920] pb-1">
+                <button onClick={openForm} className="text-sm font-bold text-[#042251] hover:text-[#021838] transition-colors border-b border-[#042251]/30 hover:border-[#042251] pb-1">
                   Abrir no Google Maps &rarr;
                 </button>
               </div>
@@ -314,7 +314,7 @@ export default function FitStudio() {
 
             {/* Horário */}
             <div className="flex gap-6 p-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-              <div className="w-16 h-16 shrink-0 bg-[#D71920]/10 flex items-center justify-center text-[#D71920]">
+              <div className="w-16 h-16 shrink-0 bg-[#042251]/10 flex items-center justify-center text-[#042251]">
                 <Clock size={28} />
               </div>
               <div className="w-full">

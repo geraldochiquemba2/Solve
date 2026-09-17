@@ -191,7 +191,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor }}>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#D71920' }}>Inscrição</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#042251' }}>Inscrição</p>
                 <h2 className="font-heading font-bold text-lg" style={{ color: textPrimary }}>{program.name}</h2>
               </div>
               <button onClick={handleClose} className="p-1.5 rounded-[7px] transition-colors" style={{ color: textMuted }}>
@@ -207,14 +207,14 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                     <div
                       className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                       style={{
-                        backgroundColor: step >= s.n ? '#D71920' : (isDark ? '#1a1a1f' : '#f0f0f2'),
+                        backgroundColor: step >= s.n ? '#042251' : (isDark ? '#1a1a1f' : '#f0f0f2'),
                         color: step >= s.n ? '#fff' : textMuted,
                       }}
                     >
                       {step > s.n ? <CheckCircle2 size={14} /> : s.n}
                     </div>
                     <span className="text-xs font-medium hidden sm:block truncate" style={{ color: step >= s.n ? textPrimary : textMuted }}>{s.label}</span>
-                    {i < steps.length - 1 && <div className="flex-1 h-px min-w-[20px]" style={{ backgroundColor: step > s.n ? '#D71920' : borderColor }} />}
+                    {i < steps.length - 1 && <div className="flex-1 h-px min-w-[20px]" style={{ backgroundColor: step > s.n ? '#042251' : borderColor }} />}
                   </div>
                 ))}
               </div>
@@ -266,18 +266,18 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                         className="w-full text-left p-4 rounded-[7px] border transition-all"
                         style={{
                           backgroundColor: selectedPlan?.id === plan.id ? (isDark ? '#1a1a1f' : '#fff8f8') : 'transparent',
-                          borderColor: selectedPlan?.id === plan.id ? '#D71920' : borderColor,
-                          boxShadow: selectedPlan?.id === plan.id ? '0 0 0 1px #D71920' : 'none',
+                          borderColor: selectedPlan?.id === plan.id ? '#042251' : borderColor,
+                          boxShadow: selectedPlan?.id === plan.id ? '0 0 0 1px #042251' : 'none',
                         }}
                       >
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <span className="font-heading font-bold text-sm" style={{ color: textPrimary }}>{plan.name}</span>
                             {plan.highlighted && (
-                              <span className="ml-2 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: '#D71920', color: '#fff' }}>Popular</span>
+                              <span className="ml-2 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: '#042251', color: '#fff' }}>Popular</span>
                             )}
                           </div>
-                          <span className="font-heading font-black text-lg" style={{ color: '#D71920' }}>
+                          <span className="font-heading font-black text-lg" style={{ color: '#042251' }}>
                             {formatKz(plan.priceMonthly)}<span className="text-xs font-normal" style={{ color: textMuted }}>/mês</span>
                           </span>
                         </div>
@@ -313,14 +313,14 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                       <div 
                         key={opt.id}
                         onClick={() => setCycle(opt.id as any)}
-                        className="relative p-4 border rounded-[7px] cursor-pointer transition-all hover:border-red-500"
+                        className="relative p-4 border rounded-[7px] cursor-pointer transition-all hover:border-[#042251]"
                         style={{ 
-                          borderColor: cycle === opt.id ? '#D71920' : borderColor,
-                          backgroundColor: cycle === opt.id ? (isDark ? '#2d1115' : '#fff5f5') : cardBg
+                          borderColor: cycle === opt.id ? '#042251' : borderColor,
+                          backgroundColor: cycle === opt.id ? (isDark ? '#0A1B33' : '#EEF2F9') : cardBg
                         }}
                       >
                         {cycle === opt.id && (
-                          <div className="absolute top-4 right-4 text-red-600">
+                          <div className="absolute top-4 right-4 text-[#042251]">
                             <CheckCircle2 size={20} />
                           </div>
                         )}
@@ -328,12 +328,12 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                           <div className="flex items-center gap-3 mb-1">
                             <h4 className="font-heading font-bold" style={{ color: textPrimary }}>{opt.title}</h4>
                             {opt.discount && opt.discount > 0 && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#042251]/10 text-[#042251]">
                                 Poupa {opt.discount}%
                               </span>
                             )}
                           </div>
-                          <div className="font-bold text-xl mb-1" style={{ color: '#D71920' }}>
+                          <div className="font-bold text-xl mb-1" style={{ color: '#042251' }}>
                             {formatKz(opt.price)}
                           </div>
                           <p className="text-xs" style={{ color: textMuted }}>{opt.label}</p>
@@ -366,7 +366,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                         <span className="font-bold" style={{ color: textPrimary }}>
                           {isContactOnly ? 'Valor' : 'Total a Pagar'}
                         </span>
-                        <span className="font-bold text-lg" style={{ color: isContactOnly ? textMuted : '#D71920' }}>
+                        <span className="font-bold text-lg" style={{ color: isContactOnly ? textMuted : '#042251' }}>
                           {isContactOnly ? 'Sob Consulta' : formatKz(cycle === 'monthly' ? selectedPlan.priceMonthly 
                                   : cycle === 'quarterly' ? selectedPlan.priceMonthly * 3 
                                   : cycle === 'biannual' ? selectedPlan.priceMonthly * 6 
@@ -413,7 +413,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                     <p className="text-xs" style={{ color: textMuted }}>
                       {isContactOnly ? 'Confirmaremos em breve por email ou telefone.' : 'Confirmaremos em breve por email. Segue o estado no Dashboard.'}
                     </p>
-                    <button onClick={handleClose} className="mt-2 px-6 py-2.5 font-bold text-sm rounded-[7px] text-white" style={{ backgroundColor: '#D71920' }}>
+                    <button onClick={handleClose} className="mt-2 px-6 py-2.5 font-bold text-sm rounded-[7px] text-white" style={{ backgroundColor: '#042251' }}>
                       Fechar
                     </button>
                   </motion.div>
@@ -460,7 +460,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                       }
                     }}
                     className="flex items-center gap-2 px-5 py-2.5 font-bold text-sm text-white rounded-[7px]"
-                    style={{ backgroundColor: '#D71920', boxShadow: '0 4px 16px rgba(215,25,32,0.3)' }}
+                    style={{ backgroundColor: '#042251', boxShadow: '0 4px 16px rgba(4,34,81,0.3)' }}
                   >
                     Continuar <ChevronRight size={16} />
                   </button>
@@ -469,7 +469,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                     onClick={handleCheckout}
                     disabled={loading}
                     className="flex items-center gap-2 px-5 py-2.5 font-bold text-sm text-white rounded-[7px] disabled:opacity-60"
-                    style={{ backgroundColor: '#D71920', boxShadow: '0 4px 16px rgba(215,25,32,0.3)' }}
+                    style={{ backgroundColor: '#042251', boxShadow: '0 4px 16px rgba(4,34,81,0.3)' }}
                   >
                     {loading 
                       ? <><Loader2 size={16} className="animate-spin" /> A processar...</> 

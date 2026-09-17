@@ -91,28 +91,28 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                 
                 <div>
                   <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Nome Completo *</label>
-                  <input required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#D71920] focus:ring-1 focus:ring-[#D71920] transition-all outline-none" placeholder="O seu nome" />
+                  <input required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="O seu nome" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Email *</label>
-                    <input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#D71920] focus:ring-1 focus:ring-[#D71920] transition-all outline-none" placeholder="exemplo@email.com" />
+                    <input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="exemplo@email.com" />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Telemóvel *</label>
-                    <input required type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#D71920] focus:ring-1 focus:ring-[#D71920] transition-all outline-none" placeholder="+244 ..." />
+                    <input required type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="+244 ..." />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Morada Completa *</label>
-                  <input required type="text" name="address" value={formData.address} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#D71920] focus:ring-1 focus:ring-[#D71920] transition-all outline-none" placeholder="Rua, Número, Código Postal, Cidade" />
+                  <input required type="text" name="address" value={formData.address} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Rua, Número, Código Postal, Cidade" />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">NIF <span className="text-zinc-400 font-normal">(Opcional)</span></label>
-                  <input type="text" name="nif" value={formData.nif} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#D71920] focus:ring-1 focus:ring-[#D71920] transition-all outline-none" placeholder="Número de Contribuinte" />
+                  <input type="text" name="nif" value={formData.nif} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Número de Contribuinte" />
                 </div>
 
               </form>
@@ -164,7 +164,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                   type="submit" 
                   form="checkout-form"
                   disabled={loading}
-                  className="w-full bg-[#D71920] hover:bg-[#FF3038] text-white font-bold h-14 shadow-[0_4px_20px_rgba(215,25,32,0.3)] transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full bg-[#042251] hover:bg-[#0A3A75] text-white font-bold h-14 shadow-[0_4px_20px_rgba(4,34,81,0.3)] transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <>

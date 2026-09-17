@@ -203,7 +203,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                   <button onClick={() => {
                     setCartOpen(false)
                     setCheckoutOpen(true)
-                  }} className="w-full bg-[#D71920] hover:bg-[#FF3038] text-white font-bold h-14 shadow-[0_4px_20px_rgba(215,25,32,0.3)] transition-colors">
+                  }} className="w-full bg-[#042251] hover:bg-[#0A3A75] text-white font-bold h-14 shadow-[0_4px_20px_rgba(4,34,81,0.3)] transition-colors">
                     Finalizar Compra
                   </button>
                 </div>

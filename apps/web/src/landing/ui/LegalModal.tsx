@@ -53,7 +53,7 @@ export default function LegalModal({ isOpen, onClose, title, children }: LegalMo
                 <h2 className="font-heading font-black text-2xl text-white">{title}</h2>
                 <button
                   onClick={onClose}
-                  className="w-10 h-10 bg-[#1a1a1a] border border-[#2A2A2A] flex items-center justify-center text-white/50 hover:text-white hover:bg-[#D71920] hover:border-[#D71920] transition-all flex-shrink-0"
+                  className="w-10 h-10 bg-[#1a1a1a] border border-[#2A2A2A] flex items-center justify-center text-white/50 hover:text-white hover:bg-[#042251] hover:border-[#042251] transition-all flex-shrink-0"
                   aria-label="Fechar"
                 >
                   <X size={20} />

@@ -120,8 +120,8 @@ export default function FAQ() {
                 onClick={() => setActiveCategory(cat)}
                 className={`px-4 py-2 text-sm font-body font-semibold transition-all ${
                   activeCategory === cat
-                    ? 'bg-[#D71920] text-white'
-                    : 'bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:border-[#D71920]/40'
+                    ? 'bg-[#042251] text-white'
+                    : 'bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:border-[#042251]/40'
                 }`}
                 id={`faq-category-${cat.toLowerCase()}`}
               >
@@ -156,7 +156,7 @@ export default function FAQ() {
                   id={`faq-item-${i}`}
                 >
                   <div className="flex-1">
-                    <span className="text-[#D71920] text-xs font-body font-semibold tracking-widest uppercase block mb-1">{faq.category}</span>
+                    <span className="text-[#042251] text-xs font-body font-semibold tracking-widest uppercase block mb-1">{faq.category}</span>
                     <span className="font-heading font-bold text-zinc-900 dark:text-white text-base">{faq.question}</span>
                   </div>
                   <motion.div
@@ -164,7 +164,7 @@ export default function FAQ() {
                     transition={{ duration: 0.3 }}
                     className="flex-shrink-0 w-8 h-8 bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"
                   >
-                    <ChevronDown size={16} className={isOpen ? 'text-[#D71920]' : 'text-zinc-400'} />
+                    <ChevronDown size={16} className={isOpen ? 'text-[#042251]' : 'text-zinc-400'} />
                   </motion.div>
                 </button>
 

@@ -81,7 +81,7 @@ export default function Agenda() {
             return (
               <motion.div
                 key={event.id}
-                className="group bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 hover:border-[#D71920]/30 transition-all duration-400"
+                className="group bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 hover:border-[#042251]/30 transition-all duration-400"
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -91,10 +91,10 @@ export default function Agenda() {
                 <div className="flex flex-col md:flex-row gap-6 items-start">
 
                   {/* Date block */}
-                  <div className="flex-shrink-0 w-20 h-20 bg-[#D71920]/10 border border-[#D71920]/20 flex flex-col items-center justify-center group-hover:bg-[#D71920]/20 transition-all">
-                    <span className="font-heading font-black text-2xl text-[#D71920] leading-none">{event.date.day}</span>
-                    <span className="font-body text-[#D71920]/70 text-xs font-semibold tracking-widest uppercase">{event.date.month}</span>
-                    <span className="font-body text-[#D71920]/70 text-xs">{event.date.year}</span>
+                  <div className="flex-shrink-0 w-20 h-20 bg-[#042251]/10 border border-[#042251]/20 flex flex-col items-center justify-center group-hover:bg-[#042251]/20 transition-all">
+                    <span className="font-heading font-black text-2xl text-[#042251] leading-none">{event.date.day}</span>
+                    <span className="font-body text-[#042251]/70 text-xs font-semibold tracking-widest uppercase">{event.date.month}</span>
+                    <span className="font-body text-[#042251]/70 text-xs">{event.date.year}</span>
                   </div>
 
                   {/* Content */}
@@ -112,15 +112,15 @@ export default function Agenda() {
                     {/* Meta info */}
                     <div className="flex flex-wrap gap-4 mb-4">
                       <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-body">
-                        <Clock size={13} className="text-[#D71920]" />
+                        <Clock size={13} className="text-[#042251]" />
                         {event.time}
                       </div>
                       <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-body">
-                        <MapPin size={13} className="text-[#D71920]" />
+                        <MapPin size={13} className="text-[#042251]" />
                         {event.location}
                       </div>
                       <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-body">
-                        <Users size={13} className="text-[#D71920]" />
+                        <Users size={13} className="text-[#042251]" />
                         {event.spotsLeft} vagas disponíveis
                       </div>
                     </div>
@@ -128,7 +128,7 @@ export default function Agenda() {
                     {/* Spots progress */}
                     <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
                       <motion.div
-                        className="h-full bg-[#D71920]"
+                        className="h-full bg-[#042251]"
                         initial={{ width: 0 }}
                         whileInView={{ width: `${pctFilled}%` }}
                         viewport={{ once: true }}

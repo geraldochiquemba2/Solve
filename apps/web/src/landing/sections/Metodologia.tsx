@@ -101,15 +101,15 @@ export default function Metodologia() {
                   onClick={() => setActive(i)}
                   className={`flex items-center gap-4 p-4 border text-left transition-all duration-300 group ${
                     active === i
-                      ? 'bg-[#D71920]/10 border-[#D71920]/50 shadow-[0_0_30px_rgba(215,25,32,0.1)]'
-                      : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-[#D71920]/30 hover:bg-[#D71920]/5'
+                      ? 'bg-[#042251]/10 border-[#042251]/50 shadow-[0_0_30px_rgba(4,34,81,0.1)]'
+                      : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-[#042251]/30 hover:bg-[#042251]/5'
                   }`}
                   id={`metodologia-pillar-${i}`}
                 >
                   <div className={`w-12 h-12 flex items-center justify-center flex-shrink-0 transition-all ${
-                    active === i ? 'bg-[#D71920] shadow-[0_8px_20px_rgba(215,25,32,0.35)]' : 'bg-zinc-50 dark:bg-zinc-900 group-hover:bg-[#D71920]/20'
+                    active === i ? 'bg-[#042251] shadow-[0_8px_20px_rgba(4,34,81,0.35)]' : 'bg-zinc-50 dark:bg-zinc-900 group-hover:bg-[#042251]/20'
                   }`}>
-                    <Icon size={20} className={active === i ? 'text-white' : 'text-[#D71920]'} />
+                    <Icon size={20} className={active === i ? 'text-white' : 'text-[#042251]'} />
                   </div>
                   <div>
                     <div className={`font-heading font-bold text-base transition-colors ${active === i ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-300 group-hover:text-zinc-900 dark:text-white'}`}>
@@ -118,7 +118,7 @@ export default function Metodologia() {
                     <div className="text-zinc-500 dark:text-zinc-400 text-xs font-body mt-0.5">{pillar.subtitle}</div>
                   </div>
                   <div className="ml-auto">
-                    <span className={`font-heading font-black text-2xl transition-colors ${active === i ? 'text-[#D71920]' : 'text-zinc-300'}`}>
+                    <span className={`font-heading font-black text-2xl transition-colors ${active === i ? 'text-[#042251]' : 'text-zinc-300'}`}>
                       {pillar.number}
                     </span>
                   </div>
@@ -130,18 +130,18 @@ export default function Metodologia() {
           {/* Right: Active pillar detail */}
           <motion.div
             key={active}
-            className="bg-white dark:bg-zinc-950 border border-[#D71920]/20 p-8 sticky top-28"
+            className="bg-white dark:bg-zinc-950 border border-[#042251]/20 p-8 sticky top-28"
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
           >
             {/* Icon + title */}
             <div className="flex items-start gap-5 mb-6">
-              <div className="w-16 h-16 bg-[#D71920] flex items-center justify-center shadow-[0_12px_30px_rgba(215,25,32,0.35)] flex-shrink-0">
+              <div className="w-16 h-16 bg-[#042251] flex items-center justify-center shadow-[0_12px_30px_rgba(4,34,81,0.35)] flex-shrink-0">
                 <ActiveIcon size={28} className="text-white" />
               </div>
               <div>
-                <div className="text-[#D71920] text-xs font-body font-semibold tracking-widest uppercase mb-1">{activePillar.number} / 05</div>
+                <div className="text-[#042251] text-xs font-body font-semibold tracking-widest uppercase mb-1">{activePillar.number} / 05</div>
                 <h3 className="font-heading font-black text-2xl text-zinc-900 dark:text-white">{activePillar.title}</h3>
                 <p className="text-zinc-500 dark:text-zinc-400 text-sm font-body">{activePillar.subtitle}</p>
               </div>
@@ -156,8 +156,8 @@ export default function Metodologia() {
             <div className="space-y-3 mb-8">
               {activePillar.benefits.map((benefit) => (
                 <div key={benefit} className="flex items-center gap-3">
-                  <div className="w-5 h-5 bg-[#D71920]/15 border border-[#D71920]/30 flex items-center justify-center flex-shrink-0">
-                    <div className="w-1.5 h-1.5 bg-[#D71920]" />
+                  <div className="w-5 h-5 bg-[#042251]/15 border border-[#042251]/30 flex items-center justify-center flex-shrink-0">
+                    <div className="w-1.5 h-1.5 bg-[#042251]" />
                   </div>
                   <span className="font-body text-zinc-600 dark:text-zinc-300 text-sm">{benefit}</span>
                 </div>

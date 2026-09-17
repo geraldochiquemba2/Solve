@@ -61,13 +61,13 @@ export default function ThemeToggle() {
                 onClick={() => { setTheme(value); setIsOpen(false) }}
                 className={`w-full px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
                   theme === value
-                    ? 'text-[#D71920] font-bold bg-red-50 dark:bg-red-950/30'
+                    ? 'text-[#042251] font-bold bg-[#042251]/10 dark:bg-[#042251]/25'
                     : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                 }`}
               >
                 <Icon size={15} />
                 {label}
-                {theme === value && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#D71920]" />}
+                {theme === value && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#042251]" />}
               </button>
             ))}
           </motion.div>

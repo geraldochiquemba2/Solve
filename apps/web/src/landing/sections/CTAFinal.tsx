@@ -9,7 +9,7 @@ export default function CTAFinal() {
       <div className="absolute inset-0">
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[500px] opacity-10"
-          style={{ background: 'radial-gradient(ellipse, #D71920 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse, #042251 0%, transparent 70%)' }}
         />
         <div
           className="absolute inset-0 opacity-[0.03]"
@@ -54,7 +54,7 @@ export default function CTAFinal() {
                 '+120 Organizações Públicas e Privadas já transformadas',
               ].map((point) => (
                 <div key={point} className="flex items-center gap-3">
-                  <CheckCircle size={16} className="text-[#D71920] flex-shrink-0" />
+                  <CheckCircle size={16} className="text-[#042251] flex-shrink-0" />
                   <span className="font-body text-zinc-600 dark:text-zinc-300 text-sm">{point}</span>
                 </div>
               ))}
@@ -64,10 +64,10 @@ export default function CTAFinal() {
             <div className="flex flex-wrap gap-4">
               <a
                 href="tel:+244000000000"
-                className="flex items-center gap-3 px-5 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:border-[#D71920]/40 transition-all font-body text-sm font-medium"
+                className="flex items-center gap-3 px-5 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-white hover:border-[#042251]/40 transition-all font-body text-sm font-medium"
                 id="cta-phone-link"
               >
-                <Phone size={16} className="text-[#D71920]" />
+                <Phone size={16} className="text-[#042251]" />
                 +244 000 000 000
               </a>
               <a

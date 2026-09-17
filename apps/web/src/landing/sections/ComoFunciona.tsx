@@ -43,7 +43,7 @@ export default function ComoFunciona() {
         <div className="hidden lg:block">
           {/* Connector line */}
           <div className="relative flex items-start justify-between mb-0">
-            <div className="absolute top-[26px] left-[10%] right-[10%] h-0.5 bg-gradient-to-r from-[#D71920] via-[#D71920]/50 to-[#D71920]/20" />
+            <div className="absolute top-[26px] left-[10%] right-[10%] h-0.5 bg-gradient-to-r from-[#042251] via-[#042251]/50 to-[#042251]/20" />
 
             {steps.map((step, i) => {
               const Icon = step.icon
@@ -59,12 +59,12 @@ export default function ComoFunciona() {
                   {/* Step circle */}
                   <div className={`relative z-10 w-14 h-14 flex items-center justify-center mb-6 transition-all ${
                     i === 0
-                      ? 'bg-[#D71920] shadow-[0_0_30px_rgba(215,25,32,0.5)]'
-                      : 'bg-white dark:bg-zinc-950 border-2 border-[#D71920]/50'
+                      ? 'bg-[#042251] shadow-[0_0_30px_rgba(4,34,81,0.5)]'
+                      : 'bg-white dark:bg-zinc-950 border-2 border-[#042251]/50'
                   }`}>
-                    <Icon size={22} className={i === 0 ? 'text-white' : 'text-[#D71920]'} />
+                    <Icon size={22} className={i === 0 ? 'text-white' : 'text-[#042251]'} />
                   </div>
-                  <div className="font-body text-[#D71920]/60 text-xs font-bold tracking-widest mb-2">{step.number}</div>
+                  <div className="font-body text-[#042251]/60 text-xs font-bold tracking-widest mb-2">{step.number}</div>
                   <h3 className="font-heading font-bold text-zinc-900 dark:text-white text-base mb-2 leading-tight">{step.title}</h3>
                   <p className="font-body text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">{step.description}</p>
                 </motion.div>
@@ -90,18 +90,18 @@ export default function ComoFunciona() {
                 <div className="flex flex-col items-center flex-shrink-0 w-14">
                   <div className={`w-14 h-14 flex items-center justify-center flex-shrink-0 ${
                     i === 0
-                      ? 'bg-[#D71920] shadow-[0_0_20px_rgba(215,25,32,0.4)]'
-                      : 'bg-white dark:bg-zinc-950 border-2 border-[#D71920]/40'
+                      ? 'bg-[#042251] shadow-[0_0_20px_rgba(4,34,81,0.4)]'
+                      : 'bg-white dark:bg-zinc-950 border-2 border-[#042251]/40'
                   }`}>
-                    <Icon size={20} className={i === 0 ? 'text-white' : 'text-[#D71920]'} />
+                    <Icon size={20} className={i === 0 ? 'text-white' : 'text-[#042251]'} />
                   </div>
                   {i < steps.length - 1 && (
-                    <div className="w-0.5 flex-1 bg-gradient-to-b from-[#D71920]/50 to-transparent mt-2" />
+                    <div className="w-0.5 flex-1 bg-gradient-to-b from-[#042251]/50 to-transparent mt-2" />
                   )}
                 </div>
                 {/* Content */}
                 <div className="pt-2 pb-4">
-                  <span className="font-body text-[#D71920]/60 text-xs font-bold tracking-widest">{step.number}</span>
+                  <span className="font-body text-[#042251]/60 text-xs font-bold tracking-widest">{step.number}</span>
                   <h3 className="font-heading font-bold text-zinc-900 dark:text-white text-lg mt-1 mb-2">{step.title}</h3>
                   <p className="font-body text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">{step.description}</p>
                 </div>

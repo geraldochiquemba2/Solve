@@ -54,18 +54,18 @@ export default function BrunoSamora() {
             {/* Photo */}
             <div
               className="photo-placeholder w-full aspect-[4/5] mb-6"
-              style={{ boxShadow: '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(215,25,32,0.15)' }}
+              style={{ boxShadow: '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(4,34,81,0.15)' }}
             >
               <div className="grid-pattern" />
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-                <div className="w-20 h-20 bg-[#D71920]/20 border border-[#D71920]/30 flex items-center justify-center">
-                  <span className="font-heading font-black text-3xl text-[#D71920]">BS</span>
+                <div className="w-20 h-20 bg-[#042251]/20 border border-[#042251]/30 flex items-center justify-center">
+                  <span className="font-heading font-black text-3xl text-[#042251]">BS</span>
                 </div>
                 <div className="text-center px-8">
-                  <div className="font-heading font-bold text-white text-base bg-[#D71920] px-3 py-1 inline-block mb-2">
+                  <div className="font-heading font-bold text-white text-base bg-[#042251] px-3 py-1 inline-block mb-2">
                     [ ESPAÇO PARA FOTOGRAFIA ]
                   </div>
-                  <div className="text-[#D71920]/80 text-xs font-body tracking-widest uppercase mt-1">Bruno Samora • Alta Performance</div>
+                  <div className="text-[#042251]/80 text-xs font-body tracking-widest uppercase mt-1">Bruno Samora • Alta Performance</div>
                 </div>
               </div>
             </div>
@@ -73,8 +73,8 @@ export default function BrunoSamora() {
             {/* Credentials grid */}
             <div className="grid grid-cols-2 gap-3">
               {credentials.map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 hover:border-[#D71920]/30 transition-colors">
-                  <Icon size={16} className="text-[#D71920] flex-shrink-0" />
+                <div key={text} className="flex items-center gap-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 hover:border-[#042251]/30 transition-colors">
+                  <Icon size={16} className="text-[#042251] flex-shrink-0" />
                   <span className="font-body text-zinc-600 dark:text-zinc-300 text-xs leading-tight">{text}</span>
                 </div>
               ))}
@@ -88,7 +88,7 @@ export default function BrunoSamora() {
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
           >
-            <blockquote className="font-heading text-xl md:text-2xl font-bold text-zinc-900 dark:text-white leading-relaxed mb-6 pl-6 border-l-2 border-[#D71920]">
+            <blockquote className="font-heading text-xl md:text-2xl font-bold text-zinc-900 dark:text-white leading-relaxed mb-6 pl-6 border-l-2 border-[#042251]">
               "A alta performance não é um traço de personalidade — é uma competência que se treina, sistematiza e replica."
             </blockquote>
 
@@ -117,17 +117,17 @@ export default function BrunoSamora() {
                 >
                   {/* Timeline left */}
                   <div className="flex flex-col items-center flex-shrink-0 w-14">
-                    <div className="w-8 h-8 bg-[#D71920] flex items-center justify-center text-white font-heading font-black text-[9px] text-center leading-none flex-shrink-0">
+                    <div className="w-8 h-8 bg-[#042251] flex items-center justify-center text-white font-heading font-black text-[9px] text-center leading-none flex-shrink-0">
                       {milestone.year.slice(2)}
                     </div>
                     {i < milestones.length - 1 && (
-                      <div className="w-px flex-1 bg-gradient-to-b from-[#D71920]/50 to-transparent mt-2" />
+                      <div className="w-px flex-1 bg-gradient-to-b from-[#042251]/50 to-transparent mt-2" />
                     )}
                   </div>
                   {/* Content */}
                   <div className="pt-1 pb-2">
                     <div className="flex items-center gap-3 mb-1">
-                      <span className="font-body text-[#D71920] text-xs font-bold tracking-widest">{milestone.year}</span>
+                      <span className="font-body text-[#042251] text-xs font-bold tracking-widest">{milestone.year}</span>
                     </div>
                     <div className="font-heading font-bold text-zinc-900 dark:text-white text-base mb-1">{milestone.title}</div>
                     <div className="font-body text-zinc-600 dark:text-zinc-300 text-sm leading-relaxed">{milestone.description}</div>

@@ -19,13 +19,7 @@ import '@/lib/api';
 
 // Landing page
 import LandingLayout from '@/landing/LandingLayout';
-import Landing from '@/landing/Landing';
 import LandingLogin from '@/landing/Login';
-import FitMotivacao from '@/landing/FitMotivacao';
-import Formacao from '@/landing/Formacao';
-import Store from '@/landing/Store';
-import ProductDetail from '@/landing/ProductDetail';
-import FitWorkout from '@/landing/FitWorkout';
 import FitStudio from '@/landing/FitStudio';
 // Portal do Cliente (/conta/*) — sessão separada (portal_token), OTP via WhatsApp
 import ContaLogin from '@/portal/ContaLogin';
@@ -145,9 +139,8 @@ const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
-  { label: 'Controlo de Acesso', items: [{ href: '/admin/acesso-fisico', label: 'Solve Access', icon: LockKeyhole }] },
   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
-  { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }, { href: '/admin/auditoria', label: 'Auditoria', icon: ShieldCheck }, { href: '/admin/definicoes', label: 'Definições', icon: Settings }] },
+  { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }] },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
@@ -268,7 +261,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
     { label: 'API & Webhooks', href: '/admin/api-webhooks' }, { label: 'Utilizadores', href: '/admin/utilizadores' },
     { label: 'Auditoria', href: '/admin/auditoria' }, { label: 'Definições', href: '/admin/definicoes' },
   ].filter(c => c.label.toLowerCase().includes(cmdQ.toLowerCase()));
-  return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="A operação está estável. Eis o que merece a sua atenção." action={<button className="btn-primary" data-testid="button-dashboard-action" onClick={() => { setCmdQ(''); setCmdOpen(true); }}><Command size={14} /> Abrir comando <span className="mono" style={{ fontSize: '.65rem', opacity: .65 }}>⌘ K</span></button>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita recorrente" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="últimos 30 dias" onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="Cobranças pendentes" value={overview?.pendingPayments ? (overview.pendingPayments + ' transações') : '0 transações'} note={pendingNote} negative onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /><Metric label="Clientes activos" value={overview?.activeCustomers?.toString() ?? '0'} note={activeNote} onClick={() => setLocation('/admin/clientes')} /></div><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Aulas esgotadas" value={exhaustedLessons.toString()} note="saldo 0 (renovar)" negative={exhaustedLessons > 0} onClick={() => setLocation('/admin/clientes?filtro=Esgotadas')} /><Metric label="Bloqueados" value={blockedCount.toString()} note="contas bloqueadas" negative={blockedCount > 0} onClick={() => setLocation('/admin/clientes?filtro=Bloqueado')} /><Metric label="Negados hoje" value={deniedToday.toString()} note="na catraca" negative={deniedToday > 0} onClick={() => setLocation('/admin/acesso-fisico?resultado=negado&data=hoje')} /><Metric label="No ginásio" value={onlineNow.toString()} note="agora" onClick={() => setLocation('/admin/acesso-fisico')} /></div>
+  return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="A operação está estável. Eis o que merece a sua atenção." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita recorrente" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="últimos 30 dias" onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="Cobranças pendentes" value={overview?.pendingPayments ? (overview.pendingPayments + ' transações') : '0 transações'} note={pendingNote} negative onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /></div>
   <Section title="Relatório do dia" note="Bloco de notas da operação" action={<button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado!' : 'Copiar'}</button>}>
     <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
   </Section>
@@ -399,7 +392,7 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
     reader.readAsText(file);
     e.target.value = '';
   };
-  return <><PageHeader eyebrow="Receita · Relação" title="Clientes" subtitle="Registos únicos e contexto completo de cada conta." action={<div className="page-actions" style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => ovg.refreshNow()} disabled={ovg.updating || ovg.checking} style={{ display: 'inline-flex', alignItems: 'center', gap: '.3rem' }}><RefreshCw size={14} className={ovg.updating ? 'animate-spin' : ''} /> {ovg.updating ? 'A atualizar OVG...' : 'Atualizar OVG'}</button><label className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.3rem' }}><Upload size={14} /> Importar CSV<input type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} /></label><button className="btn-primary" onClick={() => setNewOpen(true)}><Plus size={14} /> Novo cliente</button></div>} />{importMsg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{importMsg}</span><button className="btn-quiet" onClick={() => setImportMsg('')}><X size={14} /></button></div>}{ovg.msg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{ovg.msg}</span><button className="btn-quiet" onClick={() => ovg.clearMsg()}><X size={14} /></button></div>}<div className="card" style={{ padding: '.7rem', marginBottom: '.8rem', display: 'flex', gap: '.5rem' }}><div style={{ position: 'relative', maxWidth: 380, width: '100%' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-customers" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar cliente ou empresa" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-customer-state" className="select" value={status} onChange={e => setStatus(e.target.value)} style={{ maxWidth: 160 }}><option>Todos</option><option>Activo</option><option>Inactivo</option><option>Bloqueado</option><option>Em atraso</option><option>Esgotadas</option></select></div><Section title="Directório de clientes" note={loading ? 'A carregar...' : `${filtered.length} contas com registo consolidado${ovgAge === null ? (ovg.updating ? ' · OVG a atualizar…' : '') : ` · OVG há ${ovgAge} min`}`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Estado</th><th>Género</th><th>Entrada</th><th>Aulas</th><th>Contacto</th><th /></tr></thead><tbody>{loading ? <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}><div style={{ display: 'inline-block', width: 28, height: 28, border: '3px solid hsl(var(--border))', borderTopColor: 'hsl(var(--accent))', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /><div style={{ marginTop: '.6rem', color: 'hsl(var(--muted-foreground))', fontSize: '.75rem' }}>A carregar clientes...</div></td></tr> : filtered.map(c => <tr key={c.id}><td><Link href={`/admin/clientes/${c.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '.6rem' }} data-testid={`link-customer-${c.id}`}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{c.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{c.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{c.company} · {c.id}</div></div></Link></td><td>{c.plan || '—'}</td><td><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></td><td style={{ fontSize: '.72rem' }}>{c.gender || '—'}</td><td>{c.joined}</td><td style={{ fontWeight: 600, color: c.lessonsLimit !== -1 && (c.lessonsLeft ?? 1) === 0 ? 'hsl(0 70% 50%)' : undefined }}>{c.lessonsLimit === -1 ? '∞' : `${c.lessonsLeft ?? '—'} / ${c.lessonsLimit ?? '—'}`}</td><td><div style={{ fontSize: '.72rem' }}>{c.email}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.phone}</div></td><td><ChevronRight size={15} color="hsl(var(--muted-foreground))" /></td></tr>)}</tbody></table></div></Section>
+  return <><PageHeader eyebrow="Receita · Relação" title="Clientes" subtitle="Registos únicos e contexto completo de cada conta." action={<div className="page-actions" style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => ovg.refreshNow()} disabled={ovg.updating || ovg.checking} style={{ display: 'inline-flex', alignItems: 'center', gap: '.3rem' }}><RefreshCw size={14} className={ovg.updating ? 'animate-spin' : ''} /> {ovg.updating ? 'A atualizar OVG...' : 'Atualizar OVG'}</button></div>} />{importMsg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{importMsg}</span><button className="btn-quiet" onClick={() => setImportMsg('')}><X size={14} /></button></div>}{ovg.msg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{ovg.msg}</span><button className="btn-quiet" onClick={() => ovg.clearMsg()}><X size={14} /></button></div>}<div className="card" style={{ padding: '.7rem', marginBottom: '.8rem', display: 'flex', gap: '.5rem' }}><div style={{ position: 'relative', maxWidth: 380, width: '100%' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-customers" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar cliente ou empresa" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-customer-state" className="select" value={status} onChange={e => setStatus(e.target.value)} style={{ maxWidth: 160 }}><option>Todos</option><option>Activo</option><option>Inactivo</option><option>Bloqueado</option><option>Em atraso</option><option>Esgotadas</option></select></div><Section title="Directório de clientes" note={loading ? 'A carregar...' : `${filtered.length} contas com registo consolidado${ovgAge === null ? (ovg.updating ? ' · OVG a atualizar…' : '') : ` · OVG há ${ovgAge} min`}`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Estado</th><th>Género</th><th>Entrada</th><th>Aulas</th><th>Contacto</th><th /></tr></thead><tbody>{loading ? <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}><div style={{ display: 'inline-block', width: 28, height: 28, border: '3px solid hsl(var(--border))', borderTopColor: 'hsl(var(--accent))', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /><div style={{ marginTop: '.6rem', color: 'hsl(var(--muted-foreground))', fontSize: '.75rem' }}>A carregar clientes...</div></td></tr> : filtered.map(c => <tr key={c.id}><td><Link href={`/admin/clientes/${c.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '.6rem' }} data-testid={`link-customer-${c.id}`}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{c.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{c.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{c.company} · {c.id}</div></div></Link></td><td>{c.plan || '—'}</td><td><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></td><td style={{ fontSize: '.72rem' }}>{c.gender || '—'}</td><td>{c.joined}</td><td style={{ fontWeight: 600, color: c.lessonsLimit !== -1 && (c.lessonsLeft ?? 1) === 0 ? 'hsl(0 70% 50%)' : undefined }}>{c.lessonsLimit === -1 ? '∞' : `${c.lessonsLeft ?? '—'} / ${c.lessonsLimit ?? '—'}`}</td><td><div style={{ fontSize: '.72rem' }}>{c.email}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.phone}</div></td><td><ChevronRight size={15} color="hsl(var(--muted-foreground))" /></td></tr>)}</tbody></table></div></Section>
   {newOpen && <div className="modal-backdrop" onClick={() => setNewOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Novo cliente</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista como lead de Balcão para acompanhamento comercial.</div>
@@ -991,14 +984,15 @@ function IntegrationsPage() {
     if (apiIntegrations.length > 0) {
       const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, Cademi: KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
       return applyCademi(apiIntegrations.map(ig => {
-        const isOVG = ig.name === 'OVG';
+        const igName = String(ig.name ?? '');
+        const isOVG = igName.toLowerCase() === 'ovg';
         const syncInfo = isOVG && ovgSyncData ? ovgSyncData : null;
         const healthInfo = isOVG && ovgHealthData ? ovgHealthData : null;
-        
+
         return {
-          name: ig.name ?? '',
-          desc: isOVG ? 'Virtual Gym · Sóciros e acessos' : ig.name ?? '',
-          icon: iconMap[ig.name ?? ''] ?? Link2,
+          name: isOVG ? 'OVG' : igName,
+          desc: isOVG ? 'Virtual Gym · Sócios e acessos' : igName,
+          icon: iconMap[isOVG ? 'OVG' : igName] ?? iconMap[Object.keys(iconMap).find(k => k.toLowerCase() === igName.toLowerCase()) ?? ''] ?? Link2,
           state: healthInfo ? (healthInfo.connected ? 'Operacional' : 'Erro') : (ig.status === 'operacional' ? 'Operacional' : ig.status === 'atencao' ? 'Atenção' : ig.status === 'erro' ? 'Erro' : 'Inativo'),
           sync: syncInfo ? (syncInfo.isSyncing ? 'A sincronizar...' : (syncInfo.lastSync ? `há ${Math.round((Date.now() - new Date(syncInfo.lastSync.timestamp).getTime()) / 60000)} min` : 'Nunca')) : (ig.lastSyncAt ?? 'Nunca'),
           volume: syncInfo ? (syncInfo.lastSync ? `${syncInfo.lastSync.created} criados, ${syncInfo.lastSync.updated} actualizados` : 'Aguardando primeira sincronização') : (ig.errorCount ? `${ig.errorCount} erros` : 'Operacional'),
@@ -1147,7 +1141,7 @@ function AcademiaPage() {
   </Section>
   {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados da Cademi...</div> : <>
     <Section title="Cursos" note={`${products.length} produtos`}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '.8rem' }}>
+      <div className="auto-grid">
         {products.map(p => <div className="card" key={p.id} style={{ padding: '1rem' }}>
           <div className="eyebrow">ID {p.id}</div>
           <h2 style={{ fontSize: '1rem', marginTop: '.3rem' }}>{p.nome}</h2>
@@ -1164,11 +1158,11 @@ function AcademiaPage() {
       <button className={cademiView === 'alunos' ? 'btn-primary' : 'btn-secondary'} onClick={() => setCademiView('alunos')} style={{ flex: 1 }}>Ver alunos</button>
     </div>
     {cademiView === 'pagamentos' && <Section title="Controlo de pagamentos" note={`${cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).length} alunos`} action={<select className="select" value={cobFilter} onChange={e => setCobFilter(e.target.value)}><option>Todos</option><option>Pendente</option><option>Em dia</option><option>Sem registo</option></select>}>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>Aluno</th><th>Pagos</th><th>Total pago</th><th>Pendentes</th><th>Último</th><th>Estado</th></tr></thead>
+      <div className="table-wrap sticky-first"><table className="data-table"><thead><tr><th>Aluno</th><th>Pagos</th><th>Total pago</th><th>Pendentes</th><th>Último</th><th>Estado</th></tr></thead>
       <tbody>{cobr.filter(s => cobFilter === 'Todos' || (cobFilter === 'Pendente' ? s.estado === 'pendente' : cobFilter === 'Em dia' ? s.estado === 'em_dia' : s.estado === 'sem_registo')).map(s => <tr key={s.cademi_id}><td style={{ fontWeight: 700 }}>{s.nome}<div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{s.email}</div></td><td>{s.pagos}</td><td className="mono">{money(s.total_pago)}</td><td>{s.pendentes}</td><td style={{ fontSize: '.68rem' }}>{s.ultimo ? `${s.ultimo.status} · ${money(s.ultimo.valor)}` : '—'}</td><td><Status tone={s.estado === 'em_dia' ? 'good' : s.estado === 'pendente' ? 'pending' : 'warn'}>{s.estado === 'em_dia' ? 'Em dia' : s.estado === 'pendente' ? 'Pendente' : 'Sem registo'}</Status></td><td><button className="btn-quiet" onClick={() => { const f = students.find((x: any) => x.id === s.cademi_id) || { id: s.cademi_id, nome: s.nome, email: s.email }; openStudent(f); }} title="Ver detalhes do aluno"><Eye size={14} /></button></td></tr>)}</tbody></table></div>
     </Section>}
     {cademiView === 'alunos' && <Section title="Alunos" note={`${visible.length} de ${students.length}`}>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>Aluno</th><th>Email</th><th>Telemóvel</th><th>Último acesso</th><th /></tr></thead>
+      <div className="table-wrap sticky-first"><table className="data-table"><thead><tr><th>Aluno</th><th>Email</th><th>Telemóvel</th><th>Último acesso</th><th /></tr></thead>
       <tbody>{visible.map(s => <tr key={s.id}><td style={{ fontWeight: 700 }}>{s.nome}</td><td>{s.email}</td><td>{s.celular || '—'}</td><td>{s.ultimo_acesso_em ? fmtD(s.ultimo_acesso_em) : 'Nunca'}</td><td><button className="btn-quiet" onClick={() => openStudent(s)} title="Ver acessos e progresso"><ChevronRight size={14} /></button></td></tr>)}</tbody></table></div>
     </Section>}
   </>}
@@ -1435,7 +1429,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   useEffect(() => {
     if (!isAuthenticated) {
-      setLocation('/login');
+      setLocation('/');
     }
   }, [isAuthenticated, setLocation]);
   if (!isAuthenticated) return null;
@@ -1601,14 +1595,6 @@ function CRM() {
 
   return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
-function LandingPage() {
-  return (
-    <LandingLayout>
-      <Landing />
-    </LandingLayout>
-  );
-}
-
 function LandingLoginPage() {
   return (
     <LandingLayout>
@@ -1632,14 +1618,9 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <ErrorBoundary>
             <Switch>
-              {/* Landing pages */}
+              {/* Login (raiz) → CRM */}
               <Route path="/login" component={LandingLoginPage} />
-              <Route path="/" component={LandingPage} />
-              <Route path="/fit-motivacao" component={() => <LandingSubPage><FitMotivacao /></LandingSubPage>} />
-              <Route path="/formacao" component={() => <LandingSubPage><Formacao /></LandingSubPage>} />
-              <Route path="/store" component={() => <LandingSubPage><Store /></LandingSubPage>} />
-              <Route path="/store/:id" component={() => <LandingSubPage><ProductDetail /></LandingSubPage>} />
-              <Route path="/fit-workout" component={() => <LandingSubPage><FitWorkout /></LandingSubPage>} />
+              <Route path="/" component={LandingLoginPage} />
               <Route path="/fit-studio" component={() => <LandingSubPage><FitStudio /></LandingSubPage>} />
               {/* Portal do Cliente (OTP, sessão portal_token) */}
               <Route path="/conta/login" component={ContaLogin} />

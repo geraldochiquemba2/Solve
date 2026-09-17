@@ -77,14 +77,14 @@ export default function Store() {
       {/* ── BANNER MANUTENÇÃO ── */}
       <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-zinc-950/97 backdrop-blur-sm">
         <div className="text-center px-6 max-w-lg">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[#D71920]/10 border border-[#D71920]/30 mb-8 mx-auto">
-            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D71920" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[#042251]/10 border border-[#042251]/30 mb-8 mx-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#042251" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/>
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
           </div>
-          <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#D71920] mb-3">Em Breve</p>
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#042251] mb-3">Em Breve</p>
           <h1 className="font-heading font-black text-4xl md:text-5xl text-white mb-4 tracking-tight">Store</h1>
           <p className="text-zinc-400 text-base leading-relaxed mb-8">
             A nossa loja está a ser preparada com os melhores produtos de alta performance.<br/>
@@ -409,7 +409,7 @@ export default function Store() {
 
                 <button 
                   onClick={confirmAddToCart}
-                  className="w-full bg-[#D71920] hover:bg-[#FF3038] text-white font-bold h-14 shadow-[0_4px_20px_rgba(215,25,32,0.3)] transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-[#042251] hover:bg-[#0A3A75] text-white font-bold h-14 shadow-[0_4px_20px_rgba(4,34,81,0.3)] transition-colors flex items-center justify-center gap-2"
                 >
                   <ShoppingBag size={20} />
                   Adicionar ao Carrinho

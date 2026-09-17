@@ -26,7 +26,7 @@ export default function Admin() {
   const textPrimary = isDark ? '#ffffff' : '#050505'
   const textMuted = isDark ? '#888888' : '#666666'
   const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
-  const accentColor = '#D71920'
+  const accentColor = '#042251'
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
@@ -50,10 +50,10 @@ export default function Admin() {
               Acesso Restrito
             </p>
             <h1 className="font-heading font-black text-4xl md:text-6xl tracking-tight" style={{ color: textPrimary }}>
-              Painel de Admin
+              Painel Bruno
             </h1>
             <p className="mt-4 text-sm font-medium" style={{ color: textMuted }}>
-              Gestão central do ecossistema Bruno Samora.
+              Gestão central Solve Access.
             </p>
           </div>
           
@@ -266,7 +266,7 @@ function BannersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, a
     <div key={key}>
       <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>{label}</label>
       <input type={type} value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} placeholder={placeholder}
-        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
     </div>
   )
 
@@ -274,7 +274,7 @@ function BannersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, a
     <div key={key}>
       <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>{label}</label>
       <select value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -309,7 +309,7 @@ function BannersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, a
               <div className="mt-6">
                 <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Descrição (Subtítulo)</label>
                 <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} placeholder="Breve descrição persuasiva..."
-                  className="w-full px-4 py-3 text-sm font-medium rounded-[7px] outline-none resize-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                  className="w-full px-4 py-3 text-sm font-medium rounded-[7px] outline-none resize-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
               </div>
               <div className="flex justify-end gap-3 mt-8">
                 <button onClick={() => setShowForm(false)} className="px-6 py-3 text-sm font-bold rounded-[7px] transition-colors" style={{ backgroundColor: isDark ? '#1a1a1f' : '#f0f0f2', color: textPrimary }}>
@@ -396,7 +396,7 @@ function ProgramsManager({ cardBg, textPrimary, textMuted, borderColor, isDark, 
     <div key={key}>
       <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>{label}</label>
       <input type={type} value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} placeholder={placeholder}
-        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
     </div>
   )
 
@@ -404,7 +404,7 @@ function ProgramsManager({ cardBg, textPrimary, textMuted, borderColor, isDark, 
     <div key={key}>
       <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>{label}</label>
       <select value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+        className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
         {options.map(o => <option key={o}>{o}</option>)}
       </select>
     </div>
@@ -444,7 +444,7 @@ function ProgramsManager({ cardBg, textPrimary, textMuted, borderColor, isDark, 
               <div className="mt-6">
                 <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Descrição Longa</label>
                 <textarea value={form.longDesc} onChange={e => setForm(p => ({ ...p, longDesc: e.target.value }))} rows={4} placeholder="Descrição completa do programa..."
-                  className="w-full px-4 py-3 text-sm font-medium rounded-[7px] outline-none resize-none focus:border-red-500 transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                  className="w-full px-4 py-3 text-sm font-medium rounded-[7px] outline-none resize-none focus:border-[#042251] transition-colors" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
               </div>
               <div className="flex justify-end gap-3 mt-8">
                 <button onClick={() => setShowForm(false)} className="px-6 py-3 text-sm font-bold rounded-[7px] transition-colors" style={{ backgroundColor: isDark ? '#1a1a1f' : '#f0f0f2', color: textPrimary }}>
@@ -557,29 +557,29 @@ function PlansManager({ cardBg, textPrimary, textMuted, borderColor, isDark, acc
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Programa</label>
                   <select value={form.programId} onChange={e => setForm(p => ({ ...p, programId: e.target.value }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
                     {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Nome do Plano</label>
                   <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Ex: Pro" type="text"
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Preço Mensal</label>
                   <input type="number" value={form.priceMonthly} onChange={e => setForm(p => ({ ...p, priceMonthly: +e.target.value }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Preço Anual</label>
                   <input type="number" value={form.priceAnnual} onChange={e => setForm(p => ({ ...p, priceAnnual: +e.target.value }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Moeda</label>
                   <select value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value as 'AOA' | 'EUR' }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
                     <option value="AOA">AOA (Kz)</option>
                     <option value="EUR">EUR (€)</option>
                   </select>
@@ -587,7 +587,7 @@ function PlansManager({ cardBg, textPrimary, textMuted, borderColor, isDark, acc
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Estado</label>
                   <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as 'Ativo' | 'Inativo' }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
                     <option>Ativo</option>
                     <option>Inativo</option>
                   </select>
@@ -606,7 +606,7 @@ function PlansManager({ cardBg, textPrimary, textMuted, borderColor, isDark, acc
                 <div className="flex gap-2 mb-3">
                   <input value={featureInput} onChange={e => setFeatureInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addFeature())}
                     placeholder="Adiciona uma feature e prime Enter" type="text"
-                    className="flex-1 h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="flex-1 h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                   <button onClick={addFeature} className="px-5 font-bold text-white rounded-[7px]" style={{ backgroundColor: textPrimary, color: cardBg }}>Adicionar</button>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -869,22 +869,22 @@ function UsersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, acc
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Nome Completo</label>
                   <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} type="text"
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Email</label>
                   <input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} type="email"
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Password (Provisória)</label>
                   <input value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} type="text" placeholder="Ex: changeme123"
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: textMuted }}>Permissão</label>
                   <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
-                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-red-500" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
+                    className="w-full h-11 px-4 text-sm font-medium rounded-[7px] outline-none focus:border-[#042251]" style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}>
                     <option value="client">Cliente</option>
                     <option value="admin">Administrador</option>
                   </select>
@@ -917,7 +917,7 @@ function UsersManager({ cardBg, textPrimary, textMuted, borderColor, isDark, acc
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
                   <span className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{
-                    backgroundColor: u.role === 'admin' ? 'rgba(215,25,32,0.1)' : (isDark ? '#222' : '#eee'),
+                    backgroundColor: u.role === 'admin' ? 'rgba(4,34,81,0.1)' : (isDark ? '#222' : '#eee'),
                     color: u.role === 'admin' ? accentColor : textPrimary,
                   }}>
                     {u.role === 'admin' ? 'Acesso Total' : 'Cliente'}

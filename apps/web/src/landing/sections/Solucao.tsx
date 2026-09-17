@@ -67,7 +67,7 @@ export default function Solucao() {
         {/* Vertical timeline */}
         <div className="relative max-w-3xl mx-auto">
           {/* Vertical line */}
-          <div className="absolute left-[26px] md:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-[#D71920] via-[#D71920]/30 to-transparent md:-translate-x-px hidden sm:block" />
+          <div className="absolute left-[26px] md:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-[#042251] via-[#042251]/30 to-transparent md:-translate-x-px hidden sm:block" />
 
           <div className="flex flex-col gap-0">
             {steps.map((step, i) => {
@@ -87,12 +87,12 @@ export default function Solucao() {
                 >
                   {/* Card */}
                   <div className={`w-full sm:w-[calc(50%-40px)] ${isLeft ? 'md:pr-8' : 'md:pl-8'}`}>
-                    <div className="card group hover:border-[#D71920]/30">
+                    <div className="card group hover:border-[#042251]/30">
                       <div className="flex items-center gap-4 mb-4">
-                        <div className="w-10 h-10 bg-[#D71920]/10 border border-[#D71920]/20 flex items-center justify-center group-hover:bg-[#D71920]/20 transition-all">
-                          <Icon size={18} className="text-[#D71920]" />
+                        <div className="w-10 h-10 bg-[#042251]/10 border border-[#042251]/20 flex items-center justify-center group-hover:bg-[#042251]/20 transition-all">
+                          <Icon size={18} className="text-[#042251]" />
                         </div>
-                        <span className="font-heading font-black text-[#D71920]/40 text-3xl leading-none">{step.number}</span>
+                        <span className="font-heading font-black text-[#042251]/40 text-3xl leading-none">{step.number}</span>
                       </div>
                       <h3 className="font-heading font-bold text-zinc-900 dark:text-white text-xl mb-3">{step.title}</h3>
                       <p className="font-body text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">{step.description}</p>
@@ -101,7 +101,7 @@ export default function Solucao() {
 
                   {/* Center dot */}
                   <div className="absolute hidden sm:flex left-0 md:left-1/2 top-8 md:-translate-x-1/2 -translate-x-1/2">
-                    <div className="w-[18px] h-[18px] bg-[#D71920] border-4 border-white shadow-[0_0_20px_rgba(215,25,32,0.5)]" />
+                    <div className="w-[18px] h-[18px] bg-[#042251] border-4 border-white shadow-[0_0_20px_rgba(4,34,81,0.5)]" />
                   </div>
                 </motion.div>
               )

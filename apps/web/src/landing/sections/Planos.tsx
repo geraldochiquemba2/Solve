@@ -119,7 +119,7 @@ export default function Planos() {
               {/* Badge */}
               {plan.badge && (
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="bg-[#D71920] text-white text-xs font-body font-bold px-3 py-1 tracking-wide uppercase flex items-center gap-1.5">
+                  <span className="bg-[#042251] text-white text-xs font-body font-bold px-3 py-1 tracking-wide uppercase flex items-center gap-1.5">
                     <Star size={10} fill="white" />
                     {plan.badge}
                   </span>
@@ -140,8 +140,8 @@ export default function Planos() {
               <ul className="space-y-3 mb-8">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-3">
-                    <div className="w-5 h-5 bg-[#D71920]/15 border border-[#D71920]/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Check size={10} className="text-[#D71920]" strokeWidth={3} />
+                    <div className="w-5 h-5 bg-[#042251]/15 border border-[#042251]/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check size={10} className="text-[#042251]" strokeWidth={3} />
                     </div>
                     <span className="font-body text-zinc-600 dark:text-zinc-300 text-sm">{feature}</span>
                   </li>
@@ -185,7 +185,7 @@ export default function Planos() {
                 {(['executive', 'corporate', 'enterprise'] as const).map((key) => (
                   <div key={`${i}-${key}`} className="p-4 border-b border-zinc-100 dark:border-zinc-800 last:border-0 flex items-center justify-center">
                     {row[key]
-                      ? <Check size={16} className="text-[#D71920]" strokeWidth={3} />
+                      ? <Check size={16} className="text-[#042251]" strokeWidth={3} />
                       : <span className="text-zinc-300 dark:text-zinc-600 text-lg">—</span>
                     }
                   </div>

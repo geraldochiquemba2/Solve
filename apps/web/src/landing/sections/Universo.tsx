@@ -1,104 +1,25 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
 import { motion } from 'framer-motion'
-import { 
-  Mic, 
-  GraduationCap, 
-  ShoppingBag, 
-  Dumbbell, 
-  Building2, 
+import {
+  Building2,
   ArrowRight,
-  TrendingUp,
   Users,
-  Briefcase,
-  Award,
-  BookOpen,
-  Shirt,
-  Laptop,
-  Target,
   Heart,
   Activity
 } from 'lucide-react'
 
-// Dados dos Pilares (Ecossistema)
+// CRM: só FitStudio permanece no frontend (INÍCIO/FITMOTIVAÇÃO/FORMAÇÃO/STORE/FITWORKOUT removidos)
 const universoData = [
-  {
-    id: 'fitmotivacao',
-    path: '/fit-motivacao',
-    title: 'FitMotivação',
-    description: 'Desenvolvimento humano e motivacional para pessoas e empresas.',
-    icon: Mic,
-    color: 'from-orange-500/20 to-red-600/20',
-    borderColor: 'group-hover:border-red-500/50',
-    iconColor: 'text-red-500',
-    span: 'md:col-span-2 lg:col-span-2 xl:col-span-2',
-    services: [
-      { name: 'Palestras', icon: Mic },
-      { name: 'Eventos', icon: Users },
-      { name: 'Corporate Wellness', icon: Briefcase },
-      { name: 'Liderança', icon: TrendingUp },
-    ]
-  },
-  {
-    id: 'formacao',
-    path: '/formacao',
-    title: 'Formação',
-    description: 'Academia de desenvolvimento e capacitação profissional.',
-    icon: GraduationCap,
-    color: 'from-blue-500/20 to-indigo-600/20',
-    borderColor: 'group-hover:border-blue-500/50',
-    iconColor: 'text-blue-500',
-    span: 'md:col-span-1 lg:col-span-1 xl:col-span-1',
-    services: [
-      { name: 'Cursos Online', icon: Laptop },
-      { name: 'Certificações', icon: Award },
-      { name: 'Mentorias', icon: Users },
-      { name: 'Workshops', icon: BookOpen },
-    ]
-  },
-  {
-    id: 'store',
-    path: '/store',
-    title: 'Samora Store',
-    description: 'Loja oficial da marca com produtos exclusivos.',
-    icon: ShoppingBag,
-    color: 'from-emerald-500/20 to-teal-600/20',
-    borderColor: 'group-hover:border-teal-500/50',
-    iconColor: 'text-teal-500',
-    span: 'md:col-span-1 lg:col-span-1 xl:col-span-1',
-    services: [
-      { name: 'Produtos Físicos', icon: ShoppingBag },
-      { name: 'Merchandising', icon: Shirt },
-      { name: 'E-books', icon: BookOpen },
-      { name: 'Acessórios', icon: Target },
-    ]
-  },
-  {
-    id: 'fitworkout',
-    path: '/fit-workout',
-    title: 'FitWorkout',
-    description: 'Plataforma digital de treino e acompanhamento.',
-    icon: Dumbbell,
-    color: 'from-zinc-500/20 to-gray-600/20',
-    borderColor: 'group-hover:border-gray-400/50',
-    iconColor: 'text-gray-300',
-    span: 'md:col-span-2 lg:col-span-1 xl:col-span-2',
-    services: [
-      { name: 'Programas de Treino', icon: Dumbbell },
-      { name: 'Desafios', icon: Target },
-      { name: 'Treinos Online', icon: Laptop },
-      { name: 'Comunidade', icon: Users },
-    ]
-  },
   {
     id: 'fitstudio',
     path: '/fit-studio',
     title: 'FitStudio',
     description: 'O nosso ginásio oficial de alta performance e bem-estar.',
     icon: Building2,
-    color: 'from-[#D71920]/20 to-[#800000]/20',
-    borderColor: 'group-hover:border-[#D71920]/50',
-    iconColor: 'text-[#D71920]',
+    color: 'from-[#042251]/20 to-[#800000]/20',
+    borderColor: 'group-hover:border-[#042251]/50',
+    iconColor: 'text-[#042251]',
     span: 'md:col-span-3 lg:col-span-2 xl:col-span-2',
     services: [
       { name: 'Ginásio Premium', icon: Building2 },
@@ -125,7 +46,7 @@ export default function Universo() {
   return (
     <section id="universo" className="section-py bg-[#f5f5f7] dark:bg-zinc-900 relative overflow-hidden">
       {/* Background Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#D71920]/5 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#042251]/5 blur-[120px] pointer-events-none" />
 
       <div className="container-custom relative z-10">
         
@@ -138,7 +59,7 @@ export default function Universo() {
             transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-200/50 border border-black/5 mb-6 rounded-[7px]"
           >
-            <span className="w-2 h-2 bg-[#D71920] animate-pulse" />
+            <span className="w-2 h-2 bg-[#042251] animate-pulse" />
             <span className="text-xs font-body font-medium tracking-wider uppercase text-zinc-600 dark:text-zinc-300">O Ecossistema</span>
           </motion.div>
           
@@ -149,7 +70,7 @@ export default function Universo() {
             viewport={{ once: true }}
             transition={{ delay: 0.1, duration: 0.6 }}
           >
-            Universo <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#D71920] to-[#ff4d4d]">Bruno Samora</span>
+            Universo <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#042251] to-[#ff4d4d]">Bruno Samora</span>
           </motion.h2>
           
           <motion.p

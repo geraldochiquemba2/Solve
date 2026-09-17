@@ -52,7 +52,7 @@ export default function FormModal({ isOpen, onClose, context }: FormModalProps) 
               {/* Close Button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 bg-[#1a1a1a] border border-[#2A2A2A] flex items-center justify-center text-white/50 hover:text-white hover:bg-[#D71920] hover:border-[#D71920] transition-all"
+                className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 bg-[#1a1a1a] border border-[#2A2A2A] flex items-center justify-center text-white/50 hover:text-white hover:bg-[#042251] hover:border-[#042251] transition-all"
                 aria-label="Fechar Modal"
               >
                 <X size={20} />

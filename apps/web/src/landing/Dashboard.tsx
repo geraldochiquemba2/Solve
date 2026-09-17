@@ -32,7 +32,7 @@ export default function Dashboard() {
   const textPrimary = isDark ? '#ffffff' : '#050505'
   const textMuted = isDark ? '#888888' : '#666666'
   const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
-  const accentColor = '#D71920'
+  const accentColor = '#042251'
 
   const handleLogout = () => { logout(); navigate('/') }
 
@@ -198,8 +198,8 @@ export default function Dashboard() {
                       <div className="relative z-10 max-w-sm">
                         <h3 className="font-heading font-black text-2xl mb-2">Desbloqueia o teu potencial máximo.</h3>
                         <p className="text-sm opacity-80 mb-6">Descobre novos serviços e formações exclusivas para a tua evolução contínua.</p>
-                        <button onClick={() => navigate('/fit-motivacao')} className="bg-white text-black dark:bg-black dark:text-white px-6 py-3 font-bold text-sm rounded-[7px] transition-transform hover:scale-105">
-                          Explorar Catálogo
+                        <button onClick={() => navigate('/fit-studio')} className="bg-white text-black dark:bg-black dark:text-white px-6 py-3 font-bold text-sm rounded-[7px] transition-transform hover:scale-105">
+                          Explorar FitStudio
                         </button>
                       </div>
                     </div>
@@ -525,7 +525,7 @@ function ProfileTab({ user, updateProfile, cardBg, borderColor, textPrimary, tex
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: user.name, phone: user.phone || '', address: user.address || '' })
   const inputBg = isDark ? '#1a1a1f' : '#f4f4f5'
-  const accentColor = '#D71920'
+  const accentColor = '#042251'
 
   const handleSave = () => {
     updateProfile(form)
@@ -554,7 +554,7 @@ function ProfileTab({ user, updateProfile, cardBg, borderColor, textPrimary, tex
           <div>
             <p className="font-heading font-bold text-2xl mb-1" style={{ color: textPrimary }}>{user.name}</p>
             <p className="text-sm font-medium mb-3" style={{ color: textMuted }}>{user.email}</p>
-            <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full" style={{ backgroundColor: user.role === 'admin' ? 'rgba(215,25,32,0.1)' : (isDark ? '#222' : '#eee'), color: user.role === 'admin' ? accentColor : textPrimary }}>
+            <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full" style={{ backgroundColor: user.role === 'admin' ? 'rgba(4,34,81,0.1)' : (isDark ? '#222' : '#eee'), color: user.role === 'admin' ? accentColor : textPrimary }}>
               {user.role === 'admin' ? 'Acesso Administrativo' : 'Membro Padrão'}
             </span>
           </div>
@@ -574,7 +574,7 @@ function ProfileTab({ user, updateProfile, cardBg, borderColor, textPrimary, tex
                   type={f.type}
                   value={(form as any)[f.key]}
                   onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="w-full h-12 px-4 text-sm font-medium rounded-[7px] outline-none transition-colors focus:border-red-500"
+                  className="w-full h-12 px-4 text-sm font-medium rounded-[7px] outline-none transition-colors focus:border-[#042251]"
                   style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}
                 />
               ) : (

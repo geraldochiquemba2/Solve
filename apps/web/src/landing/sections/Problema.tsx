@@ -90,8 +90,8 @@ export default function Problema() {
                 variants={cardVariants}
                 className="card group cursor-default"
               >
-                <div className="w-12 h-12 bg-[#D71920]/10 border border-[#D71920]/20 flex items-center justify-center mb-5 group-hover:bg-[#D71920]/20 group-hover:border-[#D71920]/40 transition-all duration-300">
-                  <Icon size={22} className="text-[#D71920]" />
+                <div className="w-12 h-12 bg-[#042251]/10 border border-[#042251]/20 flex items-center justify-center mb-5 group-hover:bg-[#042251]/20 group-hover:border-[#042251]/40 transition-all duration-300">
+                  <Icon size={22} className="text-[#042251]" />
                 </div>
                 <h3 className="font-heading font-bold text-zinc-900 dark:text-white text-lg mb-3">
                   {problem.title}

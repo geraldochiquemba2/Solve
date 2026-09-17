@@ -17,7 +17,7 @@ export default function Numeros() {
       <div className="absolute inset-0">
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] opacity-8"
-          style={{ background: 'radial-gradient(ellipse, #D71920 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse, #042251 0%, transparent 70%)' }}
         />
       </div>
 
@@ -52,9 +52,9 @@ export default function Numeros() {
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1, duration: 0.6 }}
               >
-                <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-6 hover:border-[#D71920]/30 transition-all duration-400 group-hover:shadow-[0_20px_60px_rgba(0,0,0,0.1)]">
-                  <div className="w-10 h-10 bg-[#D71920]/10 flex items-center justify-center mx-auto mb-4 group-hover:bg-[#D71920]/20 transition-all">
-                    <Icon size={18} className="text-[#D71920]" />
+                <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-6 hover:border-[#042251]/30 transition-all duration-400 group-hover:shadow-[0_20px_60px_rgba(0,0,0,0.1)]">
+                  <div className="w-10 h-10 bg-[#042251]/10 flex items-center justify-center mx-auto mb-4 group-hover:bg-[#042251]/20 transition-all">
+                    <Icon size={18} className="text-[#042251]" />
                   </div>
                   <div className="font-heading font-black text-4xl md:text-5xl text-zinc-900 dark:text-white mb-2 leading-none">
                     <Counter

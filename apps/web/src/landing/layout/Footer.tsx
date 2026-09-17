@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Instagram, Linkedin, Youtube, Mail, Phone, MapPin, ArrowRight } from 'lucide-react'
-import logoWhite from '../logo/Logo Bruno Samora Top Performance White.png'
+import solveAccessLogo from '../logo/Solve-Access.jpeg'
 
 const footerLinks = {
   Serviços: [
@@ -115,9 +115,10 @@ export default function Footer() {
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
               <img 
-                src={logoWhite} 
-                alt="Bruno Samora Logo" 
-                className="h-16 w-auto object-contain dark:brightness-0 dark:invert invert-0"
+                src={solveAccessLogo} 
+                alt="Solve Access Logo" 
+                className="h-12 w-auto object-contain"
+                style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }}
               />
             </div>
 
@@ -128,15 +129,15 @@ export default function Footer() {
             {/* Contact info */}
             <div className="flex flex-col gap-3 mb-8">
               <a href="tel:+244000000000" className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm transition-colors group">
-                <Phone size={15} className="text-[#D71920] group-hover:scale-110 transition-transform" />
+                <Phone size={15} className="text-[#042251] group-hover:scale-110 transition-transform" />
                 +244 000 000 000
               </a>
               <a href="mailto:geral@brunosamora.com" className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm transition-colors group">
-                <Mail size={15} className="text-[#D71920] group-hover:scale-110 transition-transform" />
+                <Mail size={15} className="text-[#042251] group-hover:scale-110 transition-transform" />
                 geral@brunosamora.com
               </a>
               <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 text-sm">
-                <MapPin size={15} className="text-[#D71920]" />
+                <MapPin size={15} className="text-[#042251]" />
                 Talatona, Angola
               </div>
             </div>
@@ -150,7 +151,7 @@ export default function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={label}
-                  className="w-10 h-10 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-white hover:bg-[#D71920] hover:border-[#D71920] transition-all duration-300"
+                  className="w-10 h-10 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-white hover:bg-[#042251] hover:border-[#042251] transition-all duration-300"
                 >
                   <Icon size={16} />
                 </a>
@@ -175,7 +176,7 @@ export default function Footer() {
                       }}
                       className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm font-body transition-colors group"
                     >
-                      <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 text-[#D71920] transition-all -translate-x-2 group-hover:translate-x-0" />
+                      <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 text-[#042251] transition-all -translate-x-2 group-hover:translate-x-0" />
                       {link.label}
                     </a>
                   </li>
@@ -194,7 +195,7 @@ export default function Footer() {
           </p>
           <div className="flex items-center gap-1">
             <span className="text-zinc-400 text-xs font-body">Desenvolvido com</span>
-            <span className="text-[#D71920] text-xs"></span>
+            <span className="text-[#042251] text-xs"></span>
             <span className="text-zinc-400 text-xs font-body">em Angola</span>
           </div>
         </div>

@@ -18,14 +18,14 @@ export default function VideoManifesto() {
             className="absolute inset-0 opacity-[0.04]"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(215,25,32,1) 1px, transparent 1px), linear-gradient(90deg, rgba(215,25,32,1) 1px, transparent 1px)',
+                'linear-gradient(rgba(4,34,81,1) 1px, transparent 1px), linear-gradient(90deg, rgba(4,34,81,1) 1px, transparent 1px)',
               backgroundSize: '80px 80px',
             }}
           />
           {/* Center glow */}
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-15"
-            style={{ background: 'radial-gradient(circle, #D71920 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, #042251 0%, transparent 70%)' }}
           />
         </div>
 
@@ -57,8 +57,8 @@ export default function VideoManifesto() {
           {/* Play button */}
           <motion.button
             onClick={() => setIsOpen(true)}
-            className="group relative w-24 h-24 md:w-28 md:h-28 bg-[#D71920] flex items-center justify-center mx-auto"
-            style={{ boxShadow: '0 0 60px rgba(215,25,32,0.4), 0 0 0 0px rgba(215,25,32,0.2)' }}
+            className="group relative w-24 h-24 md:w-28 md:h-28 bg-[#042251] flex items-center justify-center mx-auto"
+            style={{ boxShadow: '0 0 60px rgba(4,34,81,0.4), 0 0 0 0px rgba(4,34,81,0.2)' }}
             initial={{ opacity: 0, scale: 0.8 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
@@ -70,12 +70,12 @@ export default function VideoManifesto() {
           >
             {/* Animated rings */}
             <motion.div
-              className="absolute inset-0 border-2 border-[#D71920]/40"
+              className="absolute inset-0 border-2 border-[#042251]/40"
               animate={{ scale: [1, 1.4], opacity: [0.4, 0] }}
               transition={{ repeat: Infinity, duration: 2, ease: 'easeOut' }}
             />
             <motion.div
-              className="absolute inset-0 border-2 border-[#D71920]/30"
+              className="absolute inset-0 border-2 border-[#042251]/30"
               animate={{ scale: [1, 1.7], opacity: [0.3, 0] }}
               transition={{ repeat: Infinity, duration: 2, delay: 0.4, ease: 'easeOut' }}
             />

@@ -56,7 +56,7 @@ export default function Hero() {
             transition={{ duration: 0.7 }}
             className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-md border border-white/20 mb-5"
           >
-            <span className="w-1.5 h-1.5 bg-[#D71920] animate-pulse" />
+            <span className="w-1.5 h-1.5 bg-[#042251] animate-pulse" />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/90">Bruno Samora</span>
           </motion.div>
 
@@ -68,7 +68,7 @@ export default function Hero() {
             transition={{ duration: 0.9, delay: 0.2, ease: [0.16, 1, 0.3, 1] as const }}
           >
             O Teu Próximo Nível de{' '}
-            <span className="text-[#D71920]">Performance.</span>
+            <span className="text-[#042251]">Performance.</span>
           </motion.h1>
 
           {/* Subtext */}
@@ -91,7 +91,7 @@ export default function Hero() {
           >
             <button
               onClick={() => window.dispatchEvent(new Event('openFormModal'))}
-              className="w-full sm:w-auto px-7 py-3.5 bg-[#D71920] hover:bg-red-700 text-white font-body font-semibold tracking-wide text-sm transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
+              className="w-full sm:w-auto px-7 py-3.5 bg-[#042251] hover:bg-[#0A3A75] text-white font-body font-semibold tracking-wide text-sm transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
             >
               Agendar Diagnóstico
               <ArrowRight size={16} />
@@ -143,7 +143,7 @@ export default function Hero() {
             <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/10">
               {stats.map((stat) => (
                 <div key={stat.label} className="py-5 px-4 flex flex-col items-center justify-center text-center group">
-                  <stat.icon size={20} className="text-[#D71920] mb-2 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300" />
+                  <stat.icon size={20} className="text-[#042251] mb-2 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300" />
                   <span className="font-heading font-black text-2xl text-white mb-0.5">{stat.value}</span>
                   <span className="text-zinc-400 text-[10px] font-body uppercase tracking-widest">{stat.label}</span>
                 </div>

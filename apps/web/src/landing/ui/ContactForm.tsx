@@ -89,8 +89,8 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
         animate={{ opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 200 }}
       >
-        <div className="w-20 h-20 bg-[#D71920]/15 border border-[#D71920]/30 flex items-center justify-center mx-auto mb-6">
-          <CheckCircle size={36} className="text-[#D71920]" />
+        <div className="w-20 h-20 bg-[#042251]/15 border border-[#042251]/30 flex items-center justify-center mx-auto mb-6">
+          <CheckCircle size={36} className="text-[#042251]" />
         </div>
         <h3 className="font-heading font-black text-zinc-900 dark:text-white text-2xl mb-3">Pedido Enviado!</h3>
         <p className="font-body text-zinc-500 dark:text-zinc-400 text-base leading-relaxed mb-6">
@@ -173,14 +173,14 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
             <input
               {...register('rgpd')}
               type="checkbox"
-              className="mt-0.5 w-4 h-4 accent-[#D71920] cursor-pointer"
+              className="mt-0.5 w-4 h-4 accent-[#042251] cursor-pointer"
               id="form-rgpd"
             />
             <span className="font-body text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed group-hover:text-zinc-600 dark:text-zinc-300 transition-colors">
               Aceito a{' '}
               <a 
                 href="#privacy" 
-                className="text-[#D71920] underline hover:no-underline"
+                className="text-[#042251] underline hover:no-underline"
                 onClick={(e) => {
                   e.preventDefault();
                   window.dispatchEvent(new Event('openPrivacyModal'));

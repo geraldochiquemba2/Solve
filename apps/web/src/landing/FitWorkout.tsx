@@ -70,7 +70,7 @@ export default function FitWorkout() {
           >
             {/* "Netflix Original" Style Badge */}
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex items-center justify-center w-5 h-5 bg-[#D71920] text-white font-black text-xs leading-none">
+              <div className="flex items-center justify-center w-5 h-5 bg-[#042251] text-white font-black text-xs leading-none">
                 B
               </div>
               <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400">
@@ -80,12 +80,12 @@ export default function FitWorkout() {
             
             {/* Movie-style Title */}
             <h1 className="font-heading font-black text-6xl md:text-8xl lg:text-[7rem] text-zinc-900 dark:text-white mb-2 tracking-tighter leading-none uppercase" style={{ textShadow: '0 10px 30px rgba(255,255,255,0.8)' }}>
-              Fit<span className="text-[#D71920]">Workout</span>
+              Fit<span className="text-[#042251]">Workout</span>
             </h1>
             
             {/* Top 10 Badge */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#D71920] text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-wider">
+              <div className="bg-[#042251] text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-wider">
                 Top 10
               </div>
               <span className="font-heading font-bold text-zinc-900 dark:text-white text-sm md:text-base tracking-wide">

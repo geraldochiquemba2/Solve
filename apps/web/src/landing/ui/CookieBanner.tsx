@@ -64,7 +64,7 @@ export default function CookieBanner() {
               </button>
               <button
                 onClick={handleAccept}
-                className="flex-1 py-2 bg-[#D71920] rounded-[7px] text-white text-xs font-bold hover:bg-[#FF3038] shadow-[0_4px_14px_rgba(215,25,32,0.3)] transition-all whitespace-nowrap"
+                className="flex-1 py-2 bg-[#042251] rounded-[7px] text-white text-xs font-bold hover:bg-[#0A3A75] shadow-[0_4px_14px_rgba(4,34,81,0.3)] transition-all whitespace-nowrap"
               >
                 Aceitar Todos
               </button>

@@ -92,7 +92,7 @@ export default function Formacao() {
 
             <h1 className="font-heading font-normal text-5xl md:text-6xl lg:text-[5rem] text-zinc-900 dark:text-white mb-6 tracking-tight leading-[1.05]">
               Eleva o teu<br/>
-              <span className="font-bold text-[#D71920]">Conhecimento.</span>
+              <span className="font-bold text-[#042251]">Conhecimento.</span>
             </h1>
 
             <p className="font-body text-zinc-500 dark:text-zinc-400 text-lg leading-relaxed mb-10 font-light max-w-md">
@@ -114,7 +114,7 @@ export default function Formacao() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-10 py-4 bg-zinc-900 hover:bg-[#D71920] text-white font-body font-medium tracking-wide text-sm transition-colors duration-500 flex items-center justify-center gap-4 group">
+              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-10 py-4 bg-zinc-900 hover:bg-[#042251] text-white font-body font-medium tracking-wide text-sm transition-colors duration-500 flex items-center justify-center gap-4 group">
                 Ver Catálogo Completo
                 <GraduationCap size={16} className="text-zinc-400 group-hover:text-white transition-colors" />
               </button>

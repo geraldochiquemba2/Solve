@@ -43,7 +43,7 @@ export default function Resultados() {
           {results.map((result, i) => (
             <motion.div
               key={result.label}
-              className="relative bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 text-center overflow-hidden group hover:border-[#D71920]/30 transition-all duration-500"
+              className="relative bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 text-center overflow-hidden group hover:border-[#042251]/30 transition-all duration-500"
               initial={{ opacity: 0, y: 40 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -51,7 +51,7 @@ export default function Resultados() {
               whileHover={{ y: -8 }}
             >
               {/* Background glow */}
-              <div className="absolute inset-0 bg-gradient-to-b from-[#D71920]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-b from-[#042251]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
               <div className="relative z-10">
                 <div className="font-heading font-black text-5xl md:text-6xl text-zinc-900 dark:text-white mb-2 leading-none">
@@ -67,7 +67,7 @@ export default function Resultados() {
               </div>
 
               {/* Bottom accent line */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-[#D71920] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-[#042251] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             </motion.div>
           ))}
         </div>

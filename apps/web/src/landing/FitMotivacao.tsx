@@ -70,14 +70,14 @@ export default function FitMotivacao() {
           >
             {/* Badge */}
             <div className="inline-flex items-center gap-3 mb-5">
-              <div className="w-8 h-px bg-[#D71920]" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#D71920]">Manifesto</span>
-              <div className="w-8 h-px bg-[#D71920]" />
+              <div className="w-8 h-px bg-[#042251]" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#042251]">Manifesto</span>
+              <div className="w-8 h-px bg-[#042251]" />
             </div>
 
             {/* Main Headline */}
             <h1 className="font-heading font-black text-3xl md:text-4xl lg:text-5xl text-white mb-5 tracking-tighter leading-tight uppercase">
-              Desperta o <span className="text-[#D71920]">Potencial</span> Oculto.
+              Desperta o <span className="text-[#042251]">Potencial</span> Oculto.
             </h1>
 
             <p className="font-body text-zinc-400 text-base leading-relaxed mb-7 max-w-lg mx-auto font-light">
@@ -87,7 +87,7 @@ export default function FitMotivacao() {
             {/* Play Button */}
             <motion.button
               onClick={openForm}
-              className="w-16 h-16 bg-[#D71920] flex items-center justify-center text-white mx-auto hover:bg-red-700 transition-colors duration-300 shadow-[0_0_40px_rgba(215,25,32,0.4)]"
+              className="w-16 h-16 bg-[#042251] flex items-center justify-center text-white mx-auto hover:bg-[#0A3A75] transition-colors duration-300 shadow-[0_0_40px_rgba(4,34,81,0.4)]"
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.96 }}
             >
@@ -112,7 +112,7 @@ export default function FitMotivacao() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-8 py-3 bg-[#D71920] hover:bg-red-700 text-white font-body font-medium tracking-wide text-sm transition-colors duration-300 flex items-center justify-center gap-3">
+              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="w-full sm:w-auto px-8 py-3 bg-[#042251] hover:bg-[#0A3A75] text-white font-body font-medium tracking-wide text-sm transition-colors duration-300 flex items-center justify-center gap-3">
                 Agendar Palestra <ArrowRight size={16} />
               </button>
             </div>
@@ -175,14 +175,14 @@ export default function FitMotivacao() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="p-10 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:border-red-500/30 transition-all duration-500 group shadow-sm hover:shadow-md"
+              className="p-10 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:border-[#042251]/30 transition-all duration-500 group shadow-sm hover:shadow-md"
             >
-              <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform group-hover:bg-red-50 group-hover:text-red-600 text-zinc-500 dark:text-zinc-400">
+              <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform group-hover:bg-[#042251]/10 group-hover:text-[#042251] text-zinc-500 dark:text-zinc-400">
                 <svc.icon size={28} />
               </div>
               <h3 className="font-heading font-bold text-2xl text-zinc-900 dark:text-white mb-4">{svc.title}</h3>
               <p className="font-body text-zinc-500 dark:text-zinc-400 leading-relaxed mb-8">{svc.description}</p>
-              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="text-sm font-bold text-red-600 hover:text-red-500 flex items-center gap-2">
+              <button onClick={() => { setInitialPlanId(undefined); setCheckoutOpen(true); }} className="text-sm font-bold text-[#042251] hover:text-[#0A3A75] flex items-center gap-2">
                 Saber Mais e Orçamentar <ArrowRight size={16} />
               </button>
             </motion.div>
@@ -192,12 +192,12 @@ export default function FitMotivacao() {
 
       {/* ── TESTIMONIALS ── */}
       <section className="container-custom mb-32">
-        <div className="max-w-5xl mx-auto p-12 md:p-16 bg-gradient-to-br from-red-50 to-white border border-red-100 relative overflow-hidden shadow-sm">
-          <div className="absolute -right-10 -top-10 text-9xl text-red-500/10 font-heading font-black rotate-12 select-none">"</div>
+        <div className="max-w-5xl mx-auto p-12 md:p-16 bg-gradient-to-br from-[#042251]/10 to-white border border-[#042251]/20 relative overflow-hidden shadow-sm">
+          <div className="absolute -right-10 -top-10 text-9xl text-[#042251]/10 font-heading font-black rotate-12 select-none">"</div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
             <div>
-              <div className="flex gap-1 mb-6 text-red-500">
+              <div className="flex gap-1 mb-6 text-[#042251]">
                 {[...Array(5)].map((_, i) => <Star key={i} size={20} fill="currentColor" />)}
               </div>
               <p className="font-heading font-bold text-2xl md:text-3xl text-zinc-900 dark:text-white leading-snug mb-8">

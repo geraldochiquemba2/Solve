@@ -100,24 +100,24 @@ export default function Servicos() {
                 variants={cardVariants}
                 className={`group relative border p-6 flex flex-col transition-all duration-400 cursor-default ${
                   isFeatured
-                    ? 'bg-gradient-to-b from-[#1a0305] to-[#111111] border-[#D71920]/40 md:col-span-2 lg:col-span-1 xl:col-span-1 shadow-[0_0_40px_rgba(215,25,32,0.15)]'
-                    : 'bg-[#111111] border-[#2A2A2A] hover:border-[#D71920]/30'
+                    ? 'bg-gradient-to-b from-[#021838] to-[#111111] border-[#042251]/40 md:col-span-2 lg:col-span-1 xl:col-span-1 shadow-[0_0_40px_rgba(4,34,81,0.15)]'
+                    : 'bg-[#111111] border-[#2A2A2A] hover:border-[#042251]/30'
                 }`}
                 whileHover={{ y: -6 }}
               >
                 {/* Tag */}
                 {service.tag && (
-                  <span className="absolute top-4 right-4 bg-[#D71920] text-white text-[10px] font-body font-bold px-3 py-1 tracking-wide uppercase">
+                  <span className="absolute top-4 right-4 bg-[#042251] text-white text-[10px] font-body font-bold px-3 py-1 tracking-wide uppercase">
                     {service.tag}
                   </span>
                 )}
 
                 <div className={`w-12 h-12 flex items-center justify-center mb-5 transition-all ${
                   isFeatured
-                    ? 'bg-[#D71920] shadow-[0_8px_20px_rgba(215,25,32,0.35)]'
-                    : 'bg-[#D71920]/10 border border-[#D71920]/20 group-hover:bg-[#D71920]/20'
+                    ? 'bg-[#042251] shadow-[0_8px_20px_rgba(4,34,81,0.35)]'
+                    : 'bg-[#042251]/10 border border-[#042251]/20 group-hover:bg-[#042251]/20'
                 }`}>
-                  <Icon size={22} className={isFeatured ? 'text-white' : 'text-[#D71920]'} />
+                  <Icon size={22} className={isFeatured ? 'text-white' : 'text-[#042251]'} />
                 </div>
 
                 <h3 className="font-heading font-bold text-white text-lg mb-3">{service.title}</h3>
@@ -125,7 +125,7 @@ export default function Servicos() {
 
                 <button
                   onClick={() => window.dispatchEvent(new Event('openFormModal'))}
-                  className="mt-5 mt-auto flex items-center gap-2 text-[#D71920] text-sm font-body font-semibold hover:gap-3 transition-all group/btn"
+                  className="mt-5 mt-auto flex items-center gap-2 text-[#042251] text-sm font-body font-semibold hover:gap-3 transition-all group/btn"
                   id={`servico-${service.title.toLowerCase().replace(/\s+/g, '-')}-btn`}
                 >
                   Saber mais
