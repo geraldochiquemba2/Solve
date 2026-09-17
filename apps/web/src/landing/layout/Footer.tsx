@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Instagram, Linkedin, Youtube, Mail, Phone, MapPin, ArrowRight } from 'lucide-react'
 import solveAccessLogo from '../logo/Solve-Access.jpeg'
@@ -51,62 +49,8 @@ const handleNavClick = (href: string) => {
 }
 
 export default function Footer() {
-  const [nlEmail, setNlEmail] = useState('');
-  const [nlMsg, setNlMsg] = useState('');
-  const subscribe = (e: FormEvent) => {
-    e.preventDefault();
-    if (!nlEmail.includes('@')) { setNlMsg('Email inválido'); return; }
-    try {
-      const raw = localStorage.getItem('samora_leads');
-      const leads = raw ? JSON.parse(raw) : [];
-      leads.push({ id: 'LD-' + Date.now().toString(36).toUpperCase(), name: nlEmail.split('@')[0], email: nlEmail, source: 'Newsletter', status: 'Novo Lead', createdAt: new Date().toISOString() });
-      localStorage.setItem('samora_leads', JSON.stringify(leads));
-      setNlMsg('Subscrição confirmada! Bem-vindo.');
-      setNlEmail('');
-    } catch { setNlMsg('Erro ao subscrever'); }
-  };
   return (
     <footer className="bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
-      {/* Newsletter strip */}
-      <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="container-custom py-12">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div>
-              <h3 className="font-heading text-xl font-bold text-zinc-900 dark:text-white mb-1">
-                Receba Conteúdos de Alta Performance
-              </h3>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm font-body">
-                Estratégias semanais aplicadas pelos melhores líderes do mundo.
-              </p>
-            </div>
-            <form
-              onSubmit={subscribe}
-              className="flex gap-3 w-full md:w-auto"
-              aria-label="Formulário de newsletter"
-            >
-              <input
-                type="email"
-                placeholder="O seu email"
-                className="input-field md:w-72 text-sm"
-                required
-                aria-label="Email para newsletter"
-                id="footer-newsletter-email"
-                value={nlEmail}
-                onChange={e => { setNlEmail(e.target.value); setNlMsg(''); }}
-              />
-              <button
-                type="submit"
-                className="btn btn-primary py-3 px-5 text-xs flex-shrink-0"
-                id="footer-newsletter-submit"
-              >
-                Subscrever
-              </button>
-            </form>
-            {nlMsg && <p className="text-xs mt-2 font-semibold" style={{ color: nlMsg.includes('confirmada') ? '#10b981' : '#ef4444' }}>{nlMsg}</p>}
-          </div>
-        </div>
-      </div>
-
       {/* Main footer grid */}
       <div className="container-custom py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">

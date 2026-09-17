@@ -139,8 +139,7 @@ const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
-  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/automacoes', label: 'Automações', icon: Zap }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
-  { label: 'Governação', items: [{ href: '/admin/utilizadores', label: 'Utilizadores', icon: UserRound }] },
+  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
