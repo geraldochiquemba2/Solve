@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { customersTable } from "@workspace/db/schema";
+import { isNotNull, sql } from "drizzle-orm";
+import { getSyncStatus, syncOVGMembers } from "../lib/ovg-sync";
 
 const router = Router();
 
@@ -167,6 +169,28 @@ function stopPolling() {
     pollTimer = null;
   }
 }
+
+// Aliases de paridade com produção (standalone-server):
+// o frontend chama /access/ovg-status e /access/ovg-reseed.
+router.get("/access/ovg-status", authenticate, async (req, res, next) => {
+  try {
+    const total = await db.$count(customersTable, isNotNull(customersTable.ovgId));
+    const st = getSyncStatus();
+    res.json({ total, lastSync: st.lastSync ? st.lastSync.timestamp : null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/access/ovg-reseed", authenticate, async (req, res, next) => {
+  try {
+    const result = await syncOVGMembers();
+    const upserted = result.created + result.updated;
+    res.json({ ok: true, upserted, total: upserted + result.skipped, errors: result.errors });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/access/stream", async (req, res) => {
   res.writeHead(200, {

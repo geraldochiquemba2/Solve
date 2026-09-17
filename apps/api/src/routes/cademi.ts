@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { customersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { AppError } from "../middlewares/error";
 import { logger } from "../lib/logger";
@@ -92,6 +92,56 @@ router.get("/cademi/products", authenticate, async (req, res, next) => {
     }
     const products = result.data?.produto || [];
     res.json({ data: products, total: products.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Controlo de pagamentos por aluno: cruza Cademi × pagamentos do CRM.
+// Devolve por email: total pago, nº pagos/pendentes e último pagamento.
+// (paridade com standalone-server de produção)
+router.get("/cademi/alunos-cobranca", authenticate, async (req, res, next) => {
+  try {
+    const configured = await cademi.isConfigured();
+    if (!configured) {
+      res.json({ data: [], total: 0, message: "Cademi não configurado" });
+      return;
+    }
+    const r = await cademi.getUsers();
+    if (!r.success) {
+      res.status(502).json({ error: r.error });
+      return;
+    }
+    const users = r.data?.usuario || [];
+    const agg = await db.execute(sql`
+      SELECT LOWER(COALESCE(p.metadata->>'email','')) AS email,
+        COUNT(*) FILTER (WHERE p.status = 'confirmado') AS pagos,
+        COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'confirmado'), 0) AS total_pago,
+        COUNT(*) FILTER (WHERE p.status = 'pendente') AS pendentes
+      FROM payments p
+      WHERE COALESCE(p.metadata->>'email','') <> ''
+      GROUP BY 1`);
+    const last = await db.execute(sql`
+      SELECT DISTINCT ON (LOWER(COALESCE(p.metadata->>'email',''))) LOWER(COALESCE(p.metadata->>'email','')) AS email,
+        p.status AS ultimo_status, p.amount AS ultimo_valor, p.created_at AS ultima_data, p.code AS ultimo_code
+      FROM payments p
+      WHERE COALESCE(p.metadata->>'email','') <> ''
+      ORDER BY 1, p.created_at DESC`);
+    const byEmail: Record<string, any> = {};
+    for (const a of agg.rows as any[]) {
+      byEmail[a.email] = { pagos: Number(a.pagos), total_pago: Number(a.total_pago), pendentes: Number(a.pendentes) };
+    }
+    for (const l of last.rows as any[]) {
+      (byEmail[l.email] = byEmail[l.email] || { pagos: 0, total_pago: 0, pendentes: 0 }).ultimo =
+        { status: l.ultimo_status, valor: Number(l.ultimo_valor), data: l.ultima_data, code: l.ultimo_code };
+    }
+    const data = users.map((u: any) => {
+      const em = String(u.email || "").toLowerCase();
+      const c = byEmail[em] || { pagos: 0, total_pago: 0, pendentes: 0 };
+      const estado = c.pendentes > 0 ? "pendente" : (c.pagos > 0 ? "em_dia" : "sem_registo");
+      return { cademi_id: u.id, nome: u.nome, email: u.email, celular: u.celular || null, ...c, estado };
+    });
+    res.json({ data, total: data.length });
   } catch (err) {
     next(err);
   }

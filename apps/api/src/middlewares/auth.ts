@@ -3,6 +3,10 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
 
+// Paridade com produção (standalone-server/index.js :: requireAuth):
+// sem Bearer/cookie, aceita X-API-Key (frontend/turnstile).
+const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
+
 export interface AuthPayload {
   userId: string;
   role: string;
@@ -30,6 +34,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   if (!token) {
+    const key = req.headers["x-api-key"] || req.query.api_key;
+    if (typeof key === "string" && key === API_KEY) {
+      req.user = { userId: "api-key", role: "administrador", email: "" };
+      next();
+      return;
+    }
     res.status(401).json({ error: "Token de autenticação necessário" });
     return;
   }
