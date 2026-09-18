@@ -37,6 +37,7 @@ export const leadsTable = pgTable("leads", {
   estimatedValue: integer("estimated_value"),
   notes: text("notes"),
   ovgId: varchar("ovg_id", { length: 100 }),
+  externalId: varchar("external_id", { length: 100 }),
   convertedAt: timestamp("converted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -8,6 +8,13 @@
       "when": 1788848224471,
       "tag": "0000_empty_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1797408000000,
+      "tag": "0001_bruno_samora",
+      "breakpoints": true
     }
   ]
 }

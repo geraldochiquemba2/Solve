@@ -55,3 +55,7 @@ Thumbs.db
 # Test files with potential credentials
 test-ekwanza.py
 
+
+# Supabase CLI local / binaries
+supabase/.temp/
+tools/

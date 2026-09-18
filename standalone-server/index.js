@@ -213,6 +213,9 @@ pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).c
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`).catch(() => {});
 // Webhook-created payments may arrive without a known customer
 pool.query(`ALTER TABLE payments ALTER COLUMN customer_id DROP NOT NULL`).catch(() => {});
+// Integração externa (ex.: Supabase/Fit 90): idempotência por external_id
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS external_id varchar(100)`).catch(() => {});
+pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS leads_external_id_idx ON leads (external_id) WHERE external_id IS NOT NULL`).catch(() => {});
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -2394,7 +2397,7 @@ const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negoci
 const mapLead = (r) => ({
   id: r.id, code: r.code, name: r.name, email: r.email, phone: r.phone,
   company: r.company, source: r.source, status: r.status, ownerId: r.owner_id,
-  estimatedValue: r.estimated_value ?? 0, notes: r.notes,
+  estimatedValue: r.estimated_value ?? 0, notes: r.notes, externalId: r.external_id || null,
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -2408,6 +2411,7 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
       const q = "%" + req.query.search.toLowerCase() + "%";
       params.push(q, q, q);
     }
+    if (req.query.source) { where.push("source = $" + (params.length + 1)); params.push(req.query.source); }
     const wc = where.length ? "WHERE " + where.join(" AND ") : "";
     const r = await pool.query(`SELECT * FROM leads ${wc} ORDER BY updated_at DESC LIMIT 500`, params);
     res.json({ data: r.rows.map(mapLead), total: r.rows.length });
@@ -2418,14 +2422,28 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
 
 app.post("/api/v1/leads", requireAuth, async (req, res) => {
   try {
-    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes } = req.body;
+    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes, externalId } = req.body;
     if (!name || name.trim().length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
     const st = LEAD_STATUS.includes(status) ? status : "novo_lead";
+    const extId = externalId ? String(externalId).trim() : null;
+    // Idempotência: o Supabase/Fit 90 reenvia o mesmo external_id → atualiza sem duplicar.
+    if (extId) {
+      const existing = await pool.query("SELECT * FROM leads WHERE external_id = $1", [extId]);
+      if (existing.rows[0]) {
+        const r = await pool.query(
+          `UPDATE leads SET name = $1, email = $2, phone = $3, company = $4, source = $5,
+           estimated_value = $6, notes = $7, updated_at = NOW() WHERE id = $8 RETURNING *`,
+          [name.trim(), email || null, phone || null, company || null, source || null,
+           estimatedValue || 0, notes || null, existing.rows[0].id]
+        );
+        return res.json({ data: mapLead(r.rows[0]) });
+      }
+    }
     const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
     const r = await pool.query(
-      `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null]
+      `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes, external_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null, extId]
     );
     res.status(201).json({ data: mapLead(r.rows[0]) });
   } catch (err) {

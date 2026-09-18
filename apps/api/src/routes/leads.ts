@@ -20,6 +20,7 @@ const leadSchema = z.object({
   estimatedValue: z.number().int().optional(),
   notes: z.string().optional(),
   ovgId: z.string().optional(),
+  externalId: z.string().optional(),
 });
 
 const leadUpdateSchema = leadSchema.partial();
@@ -89,6 +90,27 @@ router.get("/leads/:id", authenticate, async (req, res, next) => {
 // Create lead
 router.post("/leads", authenticate, authorize("administrador", "gestor", "comercial"), validate(leadSchema), async (req, res, next) => {
   try {
+    // Idempotência: integrações externas (ex.: Supabase/Fit 90) reenviam o mesmo external_id.
+    const externalId = req.body.externalId ? String(req.body.externalId).trim() : undefined;
+    if (externalId) {
+      const existing = await db.query.leadsTable.findFirst({
+        where: eq(leadsTable.externalId, externalId),
+      });
+      if (existing) {
+        const updateData: Record<string, unknown> = { updatedAt: new Date() };
+        for (const field of ["name", "email", "phone", "company", "source", "estimatedValue", "notes"] as const) {
+          if (req.body[field] !== undefined) updateData[field] = req.body[field];
+        }
+        const [lead] = await db
+          .update(leadsTable)
+          .set(updateData)
+          .where(eq(leadsTable.id, existing.id))
+          .returning();
+        res.json({ data: lead });
+        return;
+      }
+    }
+
     const count = await db.$count(leadsTable);
     const code = `LED-${String(1000 + count + 1).padStart(4, "0")}`;
 
@@ -97,6 +119,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
       .values({
         ...req.body,
         code,
+        externalId,
       })
       .returning();
 

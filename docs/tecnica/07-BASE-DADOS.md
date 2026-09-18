@@ -9,6 +9,9 @@
   description/dueDate/cancelled_by_user+at/cademi_delivery/ekwanza_error).
 - **`customers`**: `code (CL-...)`, nome/email/phone, `state`, `ovg_id`,
   `cademi_id`, `lead_id`.
+- **`leads`**: `code (LD-...)`, nome/email/phone, `source`, `status`
+  (`novo_lead` default), `estimated_value`, `external_id` (id idempotente
+  para push da Supabase/Fit 90; índice único parcial `leads_external_id_idx`).
 - **`users`**: nome/email único/senha bcrypt/`role`
   (administrador/gestor/comercial/financeiro/operacional)/`active`.
 - **`settings`**: chave→valor (incl. `cademi_*`, `ekwanza_*`, `ovg_*`,
