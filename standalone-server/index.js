@@ -216,6 +216,22 @@ pool.query(`ALTER TABLE payments ALTER COLUMN customer_id DROP NOT NULL`).catch(
 // Integração externa (ex.: Supabase/Fit 90): idempotência por external_id
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS external_id varchar(100)`).catch(() => {});
 pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS leads_external_id_idx ON leads (external_id) WHERE external_id IS NOT NULL`).catch(() => {});
+// Regra Fit90: leads da landing são descartáveis — duração máxima de 72h após a criação.
+const FIT90_LEAD_TTL = 72 * 60 * 60 * 1000;
+async function cleanupExpiredFit90Leads({ silent = false } = {}) {
+  try {
+    const r = await pool.query(
+      `DELETE FROM leads WHERE source = 'fit90_landing' AND created_at < NOW() - INTERVAL '72 hours' RETURNING id`
+    );
+    if (r.rows.length && !silent) console.log(`[fit90 cleanup] ${r.rows.length} lead(s) Fit90 expirado(s) (72h) removido(s)`);
+    return r.rows.length;
+  } catch (e) {
+    if (!silent) console.error('[fit90 cleanup] erro ao limpar leads expirados:', e.message);
+    return 0;
+  }
+}
+cleanupExpiredFit90Leads({ silent: true });
+setInterval(() => cleanupExpiredFit90Leads(), 30 * 60 * 1000);
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -2402,6 +2418,7 @@ const mapLead = (r) => ({
 });
 
 app.get("/api/v1/leads", requireAuth, async (req, res) => {
+  cleanupExpiredFit90Leads({ silent: true });
   try {
     const where = [];
     const params = [];
