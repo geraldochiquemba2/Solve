@@ -599,8 +599,8 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
   .page-actions > * { flex:1 1 auto; }
   .data-table { font-size:.72rem; }
   .data-table th, .data-table td { padding:.55rem .6rem; }
-  /* Cademi em telemóvel: cartões compactos, filtro ocupa a linha toda */
-  .auto-grid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)) !important; gap:.6rem; }
+  /* Cademi em telemóvel: cartões de curso em 1 coluna, filtro ocupa a linha toda */
+  .auto-grid { grid-template-columns:1fr !important; gap:.6rem; }
   .section-header .select { flex:1 1 100%; }
   .metric-value { font-size:1.2rem; }
   .metric { min-height:0; }
