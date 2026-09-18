@@ -1150,7 +1150,7 @@ function AcademiaPage() {
       </div>
     </Section>
     <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', marginTop: '.8rem' }}>
-      <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+      <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
     </div>
     <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem' }}>
       <button className={cademiView === 'pagamentos' ? 'btn-primary' : 'btn-secondary'} onClick={() => setCademiView('pagamentos')} style={{ flex: 1 }}>Ver pagamentos</button>

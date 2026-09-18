@@ -508,7 +508,9 @@
 }
 
 html { background: hsl(var(--background)); }
+html, body { overflow-x: clip; }
 body { min-width: 320px; font-family: 'Inter', sans-serif; }
+img, svg, video { max-width: 100%; }
 h1, h2, h3, h4, h5, h6 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
 button, a, input, select { transition: background-color .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, transform .18s ease; }
 /* iOS: garante que o toque dispara o clique sem delay de double-tap */
