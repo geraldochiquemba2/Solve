@@ -309,6 +309,18 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
+  // Servidor bloqueado pelo OVG (ex.: Render): não insistir no auto-sync a cada visita.
+  // Guardado por origem — o flag do site não afeta o localhost e vice-versa.
+  const [blocked, setBlocked] = useState(() => {
+    try { return localStorage.getItem('ovg-server-blocked') === '1'; } catch { return false; }
+  });
+  const markBlocked = (on: boolean) => {
+    setBlocked(on);
+    try {
+      if (on) localStorage.setItem('ovg-server-blocked', '1');
+      else localStorage.removeItem('ovg-server-blocked');
+    } catch {}
+  };
 
   const refreshNow = async () => {
     setUpdating(true); setMsg('');
@@ -318,13 +330,17 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
       setLastSync(new Date().toISOString());
       setTotal(r.total ?? r.upserted ?? null);
       setMsg(`${r.upserted ?? r.total ?? 0} sócios atualizados do OVG`);
+      markBlocked(false);
       onRefreshed?.();
     } catch (e: any) {
       const raw = e.message || 'erro';
       // O OVG recusa login fora de Angola (success:0) — o sync tem de correr no PC local.
-      setMsg(raw.includes('no token')
-        ? 'OVG bloqueia este servidor. Corre o sync no PC local (sincronizar-ovg.cmd).'
-        : 'OVG indisponível: ' + raw);
+      if (raw.includes('no token')) {
+        markBlocked(true);
+        setMsg('OVG bloqueia este servidor. Corre o sync no PC local (sincronizar-ovg.cmd).');
+      } else {
+        setMsg('OVG indisponível: ' + raw);
+      }
     } finally { setUpdating(false); }
   };
 
@@ -337,6 +353,9 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
         setLastSync(st.lastSync);
         setTotal(st.total ?? null);
         setChecking(false);
+        let isBlocked = false;
+        try { isBlocked = localStorage.getItem('ovg-server-blocked') === '1'; } catch {}
+        if (isBlocked) return; // servidor bloqueado: só manual, sem martelar o OVG
         const age = st.lastSync ? Date.now() - new Date(st.lastSync).getTime() : Infinity;
         if (age > OVG_REFRESH_MIN_MS) await refreshNow();
       } catch { if (!cancelled) setChecking(false); }
