@@ -193,82 +193,60 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   const [, setLocation] = useLocation();
   const statsQuery = useGetDashboardStats({ query: { refetchInterval: 300000 } });
   const chartsQuery = useGetDashboardCharts({ query: { refetchInterval: 300000 } });
-  const accessStats = useAccessStats();
   const overview = statsQuery.data?.data?.overview;
+  const ov: any = overview as any;
   const integrations = statsQuery.data?.data?.integrations ?? [];
-  const revenueData = chartsQuery.data?.data?.revenueByMonth ?? [];
-  const access = accessStats.data?.data;
+  const chartsData: any = chartsQuery.data?.data as any;
+  const revenueData = ((chartsData?.revenueByMonth ?? []) as any[]).map((d: any) => ({ month: d.month ?? '', value: d.total ?? d.value ?? 0 }));
   const firstName = (userName || 'Utilizador').split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
   const metricTitle = greeting + ', ' + firstName + '.';
-  const leadsNote = (overview?.totalLeads ?? 0) + ' oportunidades';
-  const pendingNote = (overview?.latePayments ?? 0) + ' transações em atenção';
-  const activeNote = (overview?.totalCustomers ?? 0) + ' total';
-  const exhaustedLessons = customers.filter(c => c.lessonsLimit !== undefined && c.lessonsLimit !== null && c.lessonsLimit !== -1 && (c.lessonsLeft ?? 1) === 0).length;
-  const blockedCount = customers.filter(c => c.state === 'Bloqueado').length;
-  const deniedToday = (access as any)?.accesses?.deniedToday ?? 0;
-  const onlineNow = (access as any)?.clients?.online ?? 0;
-  const todayCount = (access as any)?.accesses?.today ?? 0;
-  const authorizedToday = (access as any)?.accesses?.authorizedToday ?? 0;
+  const totalLeads = overview?.totalLeads ?? leads.length;
+  const pendCount = ov?.pendingPaymentsCount ?? overview?.pendingPayments ?? 0;
+  const pendTotal = ov?.pendingPaymentsTotal ?? 0;
+  const lateCount = ov?.latePaymentsCount ?? overview?.latePayments ?? 0;
+  const lateTotal = ov?.latePaymentsTotal ?? 0;
+  const convRate = Number(chartsData?.conversionRate ?? 0) || (leads.length > 0 ? Math.round((leads.filter(l => l.status === 'Convertido').length / leads.length) * 100) : 0);
+  const newLeads7 = leads.filter(l => { try { return Date.now() - new Date(l.createdAt).getTime() < 7 * 86400000; } catch { return false; } }).length;
+  // Funil por etapa: API devolve mapa {novo_lead: n, ...}; fallback calcula das leads carregadas.
+  const funnelStages = ['novo_lead', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido'];
+  const funnelRaw: any = (statsQuery.data?.data as any)?.leadsByStatus;
+  let funnel: Array<{ key: string; label: string; count: number }> = [];
+  if (Array.isArray(funnelRaw)) {
+    funnel = funnelStages.map(k => { const f = funnelRaw.find((r: any) => r.status === k); return { key: k, label: LEAD_API_TO_PT[k] ?? k, count: Number(f?.count ?? 0) }; });
+  } else if (funnelRaw && typeof funnelRaw === 'object') {
+    funnel = funnelStages.map(k => ({ key: k, label: LEAD_API_TO_PT[k] ?? k, count: Number(funnelRaw[k] ?? 0) + (k === 'novo_lead' ? Number(funnelRaw['contacto'] ?? 0) : 0) }));
+  }
+  if (funnel.every(f => !f.count) && leads.length > 0) {
+    const byStatus: Record<string, number> = {};
+    leads.forEach(l => { byStatus[l.status] = (byStatus[l.status] ?? 0) + 1; });
+    funnel = ['Novo Lead', 'Qualificação', 'Proposta', 'Negociação', 'Convertido', 'Perdido'].map(label => ({ key: label, label, count: byStatus[label] ?? 0 }));
+  }
+  const sources: Array<{ source: string; count: number }> = ((chartsData?.leadsBySource ?? []) as any[]).map((s: any) => ({ source: String(s.source ?? '—'), count: Number(s.count ?? 0) })).slice(0, 6);
+  const payMethods: Array<{ method: string; count: number; total: number }> = ((chartsData?.paymentMethods ?? []) as any[]).map((m: any) => ({ method: String(m.method ?? '—'), count: Number(m.count ?? 0), total: Number(m.total ?? 0) })).slice(0, 5);
+  const monthLabel = (m?: string) => { try { const parts = (m || '').split('-'); if (parts.length < 2) return m ?? ''; return new Date(Number(parts[0]), Number(parts[1]) - 1, 1).toLocaleDateString('pt-AO', { month: 'short' }).replace('.', ''); } catch { return m ?? ''; } };
   const todayStr = new Date().toLocaleDateString('pt-AO', { day: 'numeric', month: 'short', year: 'numeric' });
   const [copiedReport, setCopiedReport] = useState(false);
   const reportLines = [
-    `Acessos hoje: ${todayCount} (${authorizedToday} autorizados, ${deniedToday} negados)`,
-    `No ginásio agora: ${onlineNow}`,
     `Clientes activos: ${overview?.activeCustomers ?? 0} de ${overview?.totalCustomers ?? 0}`,
     `Receita 30 dias: ${overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'}`,
-    `Cobranças pendentes: ${overview?.pendingPayments ?? 0}`,
-    `Aulas esgotadas: ${exhaustedLessons} · Bloqueados: ${blockedCount}`,
+    `A receber: ${money(pendTotal)} (${pendCount} transações)`,
+    `Em atraso: ${money(lateTotal)} (${lateCount} em atenção)`,
+    `Leads: ${totalLeads} · conversão ${convRate}% · ${newLeads7} novos em 7 dias`,
   ];
   const reportText = `RELATÓRIO SOLVE — ${todayStr}\n` + reportLines.map(l => `• ${l}`).join('\n');
   const copyReport = () => { navigator.clipboard?.writeText(reportText); setCopiedReport(true); setTimeout(() => setCopiedReport(false), 2000); };
-  const [cmdOpen, setCmdOpen] = useState(false);
-  const [cmdQ, setCmdQ] = useState('');
   const [chartRange, setChartRange] = useState<'mes' | 'tudo'>('mes');
   const revenueShown = chartRange === 'mes' ? revenueData.slice(-4) : revenueData;
-  const commands = [
-    { label: 'Dashboard', href: '/admin' }, { label: 'Leads', href: '/admin/leads' },
-    { label: 'Pipeline', href: '/admin/pipeline' }, { label: 'Clientes', href: '/admin/clientes' },
-    { label: 'Planos', href: '/admin/planos' }, { label: 'Pagamentos', href: '/admin/pagamentos' },
-    { label: 'Solve Access', href: '/admin/acesso-fisico' }, { label: 'Cademi', href: '/admin/academia' },
-    { label: 'Integrações', href: '/admin/integracoes' }, { label: 'Automações', href: '/admin/automacoes' },
-    { label: 'API & Webhooks', href: '/admin/api-webhooks' }, { label: 'Utilizadores', href: '/admin/utilizadores' },
-    { label: 'Auditoria', href: '/admin/auditoria' }, { label: 'Definições', href: '/admin/definicoes' },
-  ].filter(c => c.label.toLowerCase().includes(cmdQ.toLowerCase()));
-  return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="A operação está estável. Eis o que merece a sua atenção." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita recorrente" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="últimos 30 dias" onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="Cobranças pendentes" value={overview?.pendingPayments ? (overview.pendingPayments + ' transações') : '0 transações'} note={pendingNote} negative onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /></div>
+  return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita 30 dias" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="pagamentos confirmados" onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="A receber" value={money(pendTotal)} note={`${pendCount} transações pendentes`} onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /><Metric label="Em atraso" value={money(lateTotal)} note={`${lateCount} em atenção`} negative onClick={() => setLocation('/admin/pagamentos')} /><Metric label="Leads" value={String(totalLeads)} note={`${convRate}% conversão · ${newLeads7} novos 7d`} onClick={() => setLocation('/admin/pipeline')} /></div>
   <Section title="Relatório do dia" note="Bloco de notas da operação" action={<button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado!' : 'Copiar'}</button>}>
     <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
   </Section>
-  {cmdOpen && <div className="modal-backdrop" onClick={() => setCmdOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
-    <input className="input" autoFocus placeholder="Ir para..." value={cmdQ} onChange={e => setCmdQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && commands.length > 0) { setCmdOpen(false); setLocation(commands[0].href); } }} style={{ width: '100%' }} />
-    <div style={{ display: 'grid', gap: '.25rem', marginTop: '.7rem', maxHeight: 300, overflowY: 'auto' }}>
-      {commands.map(c => <button key={c.href} className="btn-quiet" style={{ justifyContent: 'flex-start', padding: '.6rem' }} onClick={() => { setCmdOpen(false); setLocation(c.href); }}><Command size={13} style={{ marginRight: '.5rem' }} />{c.label}</button>)}
-      {commands.length === 0 && <div style={{ padding: '.7rem', fontSize: '.75rem', color: 'hsl(var(--muted-foreground))' }}>Sem resultados</div>}
-    </div>
-  </div></div>}
-  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: '.8rem', marginBottom: '.8rem' }}><Section title="Ritmo comercial" note="Valor criado por semana" action={<button className="btn-quiet" onClick={() => setChartRange(chartRange === 'mes' ? 'tudo' : 'mes')}>{chartRange === 'mes' ? 'Este mês' : 'Período total'} <ChevronDown size={13} /></button>}><div style={{ height: 165, display: 'flex', alignItems: 'end', gap: 'clamp(.4rem, 2.4vw, 1rem)', padding: '1rem .2rem .2rem', borderBottom: '1px solid hsl(var(--border))' }}>{(revenueShown.length > 0 ? revenueShown : []).map((d, i, arr) => { const max = Math.max(...arr.map(x => x.value ?? 0), 1); const pct = ((d.value ?? 0) / max) * 100; return <div key={i} style={{ flex: 1, height: `${Math.max(pct, 5)}%`, position: 'relative', minWidth: 7, background: i === arr.length - 1 ? 'hsl(var(--accent))' : 'hsl(var(--chart-2) / .72)', borderRadius: '3px 3px 0 0' }} title={`${d.value ?? 0} Kz`} />; })}</div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'hsl(var(--muted-foreground))', fontSize: '.65rem', paddingTop: '.45rem' }}><span>01 Jun</span><span>08 Jun</span><span>15 Jun</span><span>Hoje</span></div></Section><Section title="Saúde do ecossistema" note="Última verificação há 4 min"><div style={{ display: 'grid', gap: '.72rem' }}>{integrations.length > 0 ? integrations.map((ig, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.72rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}><div style={{ width: 7, height: 7, borderRadius: '50%', background: ig.status === 'operacional' ? 'hsl(155 41% 43%)' : 'hsl(38 80% 50%)' }} />{ig.name}</div><Status tone={ig.status === 'operacional' ? 'good' : 'warn'}>{ig.status === 'operacional' ? 'Operacional' : ig.status}</Status></div>) : [['OVG', 'Operacional', 'good'], ['Pay4All', 'Operacional', 'good'], ['Cademi', 'Atenção', 'warn'], ['WhatsApp', 'Operacional', 'good'], ['Website', 'Operacional', 'good']].map(([name, state, tone]) => <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.72rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}><div style={{ width: 7, height: 7, borderRadius: '50%', background: tone === 'good' ? 'hsl(155 41% 43%)' : 'hsl(38 80% 50%)' }} />{name}</div><Status tone={tone as 'good' | 'warn'}>{state}</Status></div>)}</div></Section></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}><Section title="Leads recentes" note="Últimas captações"><div style={{ display: 'grid', gap: '.5rem' }}>{(leads.length > 0 ? leads.slice(0, 5) : []).map(l => <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div><Status tone={l.status === 'Convertido' ? 'good' : l.status === 'Perdido' ? 'danger' : 'neutral'}>{l.status}</Status></div>)}</div></Section><Section title="Clientes activos" note="Estado das contas"><div style={{ display: 'grid', gap: '.5rem' }}>{(customers.length > 0 ? customers.slice(0, 5) : []).map(c => <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{c.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{c.company}</div></div><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></div>)}</div></Section></div><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem', marginBottom: '.8rem' }}>
-<Section title="Solve Access" note="Controlo de acesso físico em tempo real" action={<span className="mono" style={{ fontSize: '.65rem', color: access?.clients.online ? 'hsl(155 41% 43%)' : 'hsl(var(--muted-foreground))' }}>{access?.clients.online ?? 0} online agora</span>}>
-<div className="grid-3" style={{ marginBottom: '.8rem' }}>
-<div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}><div className="eyebrow">Acessos hoje</div><div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '.3rem' }}>{access?.accesses.today ?? '—'}</div></div>
-<div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}><div className="eyebrow">Autorizados</div><div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '.3rem', color: 'hsl(155 41% 43%)' }}>{access?.accesses.authorizedToday ?? '—'}</div></div>
-<div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}><div className="eyebrow">Negados</div><div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '.3rem', color: 'hsl(0 84% 60%)' }}>{access?.accesses.deniedToday ?? '—'}</div></div>
-</div>
-<div className="grid-2" style={{ gap: '.6rem' }}>
-<div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}><div className="eyebrow">Clientes activos</div><div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '.3rem' }}>{access?.clients.active ?? '—'}</div></div>
-<div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}><div className="eyebrow">Bloqueados</div><div className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '.3rem', color: access?.clients.blocked ? 'hsl(0 84% 60%)' : undefined }}>{access?.clients.blocked ?? '—'}</div></div>
-</div>
-</Section>
-<Section title="Últimos acessos" note="Registos de entrada/saída do ginásio">
-<div style={{ display: 'grid', gap: '.55rem' }}>
-{(access?.recentAccesses ?? []).slice(0, 6).map((a) => <div key={a.id_acesso} style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.55rem .65rem', background: 'hsl(var(--secondary) / .5)', borderRadius: '.45rem' }}>
-<div style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center', background: a.tipo_acesso === 'entrada' ? 'hsl(155 41% 43% / .15)' : 'hsl(var(--accent) / .15)', color: a.tipo_acesso === 'entrada' ? 'hsl(155 41% 43%)' : 'hsl(var(--accent))', fontSize: '.6rem' }}>{a.tipo_acesso === 'entrada' ? <ArrowDownRight size={13} /> : <ArrowUpRight size={13} />}</div>
-<div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: '.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.cliente_nome || `Cliente #${a.cliente_id}`}</div><div style={{ fontSize: '.63rem', color: 'hsl(var(--muted-foreground))' }}>{a.tipo_acesso === 'entrada' ? 'Entrada' : 'Saída'} · {a.hora_acesso?.slice(0, 5)}</div></div>
-<Status tone={a.resultado === 'autorizado' ? 'good' : 'warn'}>{a.resultado}</Status>
-</div>)}
-{(!access?.recentAccesses || access.recentAccesses.length === 0) && <div style={{ textAlign: 'center', padding: '1rem', color: 'hsl(var(--muted-foreground))', fontSize: '.75rem' }}>Sem dados de acesso disponíveis</div>}
-</div>
-</Section>
+  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: '.8rem', marginBottom: '.8rem' }}><Section title="Ritmo comercial" note="Receita confirmada por mês" action={<button className="btn-quiet" onClick={() => setChartRange(chartRange === 'mes' ? 'tudo' : 'mes')}>{chartRange === 'mes' ? 'Este mês' : 'Período total'} <ChevronDown size={13} /></button>}><div style={{ height: 165, display: 'flex', alignItems: 'end', gap: 'clamp(.4rem, 2.4vw, 1rem)', padding: '1rem .2rem .2rem', borderBottom: '1px solid hsl(var(--border))' }}>{(revenueShown.length > 0 ? revenueShown : []).map((d, i, arr) => { const max = Math.max(...arr.map(x => x.value ?? 0), 1); const pct = ((d.value ?? 0) / max) * 100; return <div key={i} style={{ flex: 1, height: `${Math.max(pct, 5)}%`, position: 'relative', minWidth: 7, background: i === arr.length - 1 ? 'hsl(var(--accent))' : 'hsl(var(--chart-2) / .72)', borderRadius: '3px 3px 0 0' }} title={`${d.value ?? 0} Kz`} />; })}</div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'hsl(var(--muted-foreground))', fontSize: '.65rem', paddingTop: '.45rem' }}>{revenueShown.length > 0 ? revenueShown.map((d, i) => <span key={i}>{monthLabel(d.month) || `M${i + 1}`}</span>) : <span>Sem dados</span>}</div></Section><Section title="Saúde do ecossistema" note={integrations.length > 0 ? `${integrations.length} canais` : 'Sem dados'}><div style={{ display: 'grid', gap: '.72rem' }}>{integrations.length > 0 ? integrations.map((ig, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.72rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}><div style={{ width: 7, height: 7, borderRadius: '50%', background: ig.status === 'operacional' ? 'hsl(155 41% 43%)' : 'hsl(38 80% 50%)' }} />{ig.name}</div><Status tone={ig.status === 'operacional' ? 'good' : 'warn'}>{ig.status === 'operacional' ? 'Operacional' : ig.status}</Status></div>) : <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem dados de integração</div>}</div></Section></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}><Section title="Leads recentes" note="Últimas captações"><div style={{ display: 'grid', gap: '.5rem' }}>{(leads.length > 0 ? leads.slice(0, 5) : []).map(l => <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div><Status tone={l.status === 'Convertido' ? 'good' : l.status === 'Perdido' ? 'danger' : 'neutral'}>{l.status}</Status></div>)}</div></Section><Section title="Clientes activos" note="Estado das contas"><div style={{ display: 'grid', gap: '.5rem' }}>{(customers.length > 0 ? customers.slice(0, 5) : []).map(c => <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{c.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{c.company}</div></div><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></div>)}</div></Section></div><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}>
+<Section title="Funil de leads" note={`${totalLeads} oportunidades · ${convRate}% conversão`}><div style={{ display: 'grid', gap: '.55rem' }}>{funnel.map(f => { const max = Math.max(...funnel.map(x => x.count), 1); const isConv = f.label === 'Convertido'; const isLost = f.label === 'Perdido'; return <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600 }}>{f.label}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${f.count > 0 ? Math.max((f.count / max) * 100, 5) : 0}%`, background: isConv ? 'hsl(155 41% 43%)' : isLost ? 'hsl(0 84% 60%)' : 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{f.count}</span></div>; })}</div></Section>
+<Section title="Origens de leads" note="De onde vêm as oportunidades"><div style={{ display: 'grid', gap: '.55rem' }}>{sources.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem dados</div>}{sources.map(s => { const max = Math.max(...sources.map(x => x.count), 1); return <div key={s.source} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.source}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${s.count > 0 ? Math.max((s.count / max) * 100, 5) : 0}%`, background: 'hsl(var(--chart-2) / .8)', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{s.count}</span></div>; })}</div></Section>
+<Section title="Métodos de pagamento" note="Transações por método"><div style={{ display: 'grid', gap: '.2rem' }}>{payMethods.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem dados</div>}{payMethods.map(m => <div key={m.method} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{m.method}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{m.count} transações</div></div><span className="mono" style={{ fontWeight: 700 }}>{money(m.total)}</span></div>)}</div></Section>
 </div></>;
 }
 
