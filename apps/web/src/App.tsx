@@ -4,7 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Boxes,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BookOpen, Boxes,
   BriefcaseBusiness, Building2, Check, CheckCircle2, ChevronDown, ChevronRight,
   CircleDollarSign, Clock3, Code2, Command, CreditCard, Database, Edit3, Eye,
   FileClock, FileKey2, Filter, HeartPulse, History, KeyRound, LayoutDashboard,
@@ -186,35 +186,7 @@ function Topbar({ onMenu, userName }: { onMenu: () => void; userName?: string })
   const today = new Date().toLocaleDateString('pt-AO', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
   const displayName = userName || 'Utilizador';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-  const [, setLocation] = useLocation();
-  const [bellOpen, setBellOpen] = useState(false);
-  const [alerts, setAlerts] = useState<Array<{ label: string; value: string; href: string; tone: string }>>([]);
-  const openBell = async () => {
-    const next = !bellOpen;
-    setBellOpen(next);
-    if (!next) return;
-    try {
-      const token = localStorage.getItem('token');
-      const base = import.meta.env.VITE_API_URL || '';
-      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-      const [a, d] = await Promise.all([
-        fetch(`${base}/api/v1/access/stats`, { headers }).then(r => r.json()).catch(() => null),
-        fetch(`${base}/api/v1/dashboard/stats`, { headers }).then(r => r.json()).catch(() => null),
-      ]);
-      const items: Array<{ label: string; value: string; href: string; tone: string }> = [];
-      const denied = a?.data?.accesses?.deniedToday;
-      if (denied) items.push({ label: 'Acessos negados hoje', value: String(denied), href: '/admin/acesso-fisico?resultado=negado&data=hoje', tone: 'danger' });
-      const online = a?.data?.clients?.online;
-      if (online) items.push({ label: 'Pessoas no ginásio', value: String(online), href: '/admin/acesso-fisico', tone: 'good' });
-      const pending = d?.data?.overview?.pendingPayments;
-      if (pending) items.push({ label: 'Cobranças pendentes', value: String(pending), href: '/admin/pagamentos?filtro=Pendente', tone: 'warn' });
-      setAlerts(items);
-    } catch {}
-  };
-  return <header className="topbar" style={{ height: 65, borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--card) / .84)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', gap: '1rem', padding: '0 1.7rem', position: 'sticky', top: 0, zIndex: 20 }}><button className="mobile-only btn-quiet" onClick={onMenu} data-testid="button-open-menu"><Menu size={19} /></button><div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.35rem' }}><span className="desktop-only" style={{ color: 'hsl(var(--muted-foreground))', fontSize: '.7rem', marginRight: '.45rem' }}>{today}</span><div style={{ position: 'relative' }}><IconButton label="central de notificações" onClick={openBell}><Bell size={16} /></IconButton>{bellOpen && <div className="card" style={{ position: 'absolute', right: 0, top: '110%', zIndex: 50, minWidth: 250, padding: '.5rem' }}>
-  {alerts.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem alertas de momento</div>}
-  {alerts.map(al => <button key={al.label} className="btn-quiet" style={{ width: '100%', justifyContent: 'flex-start', padding: '.55rem .6rem' }} onClick={() => { setBellOpen(false); setLocation(al.href); }}><Status tone={al.tone as any}>{al.value}</Status><span style={{ fontSize: '.72rem', marginLeft: '.5rem' }}>{al.label}</span></button>)}
-</div>}</div><div className="desktop-only" style={{ height: 22, width: 1, background: 'hsl(var(--border))', margin: '0 .25rem' }} /><div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '.45rem', fontSize: '.75rem', fontWeight: 600 }}><div style={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', background: 'hsl(var(--primary))', color: 'white', fontSize: '.62rem' }}>{initials}</div>{displayName}</div></div></header>;
+  return <header className="topbar" style={{ height: 65, borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--card) / .84)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', gap: '1rem', padding: '0 1.7rem', position: 'sticky', top: 0, zIndex: 20 }}><button className="mobile-only btn-quiet" onClick={onMenu} data-testid="button-open-menu"><Menu size={19} /></button><div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.35rem' }}><span className="desktop-only" style={{ color: 'hsl(var(--muted-foreground))', fontSize: '.7rem', marginRight: '.45rem' }}>{today}</span><div className="desktop-only" style={{ height: 22, width: 1, background: 'hsl(var(--border))', margin: '0 .25rem' }} /><div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '.45rem', fontSize: '.75rem', fontWeight: 600 }}><div style={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', background: 'hsl(var(--primary))', color: 'white', fontSize: '.62rem' }}>{initials}</div>{displayName}</div></div></header>;
 }
 
 function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: Customer[]; userName?: string }) {
@@ -1051,19 +1023,16 @@ function AcademiaPage() {
   const [cobr, setCobr] = useState<any[]>([]);
   const [cobFilter, setCobFilter] = useState('Todos');
   const [cademiView, setCademiView] = useState<'pagamentos' | 'alunos'>('pagamentos');
-  const [produtoId, setProdutoId] = useState('');
+  // Entrega Cademi fixa (não editável): produto sempre 'samorafit-workout', envio sempre ligado.
+  const FIXO_PRODUTO_ID = 'samorafit-workout';
   const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
-  const [autoDelivery, setAutoDelivery] = useState(false);
   const [cfgMsg, setCfgMsg] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
 
   const fetchCfg = async () => {
     try {
-      const r: any = await fetch(`${apiBase}/api/v1/settings`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
-      const d = r.data || {};
-      if (d.cademi_produto_id) setProdutoId(String(d.cademi_produto_id));
-      setAutoDelivery(String(d.cademi_auto_delivery) === '1');
       // Entregas reais (do endpoint): cada uma com o seu campo de preço.
+      // (produto de entrega e envio automático são fixos — ver FIXO_PRODUTO_ID.)
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
         const list = Array.isArray(e.data) ? e.data : [];
@@ -1078,7 +1047,7 @@ function AcademiaPage() {
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({ settings: { cademi_produto_id: produtoId.trim(), cademi_auto_delivery: autoDelivery ? '1' : '0', cademi_entregas: JSON.stringify(entregasArr) } }),
+        body: JSON.stringify({ settings: { cademi_produto_id: FIXO_PRODUTO_ID, cademi_auto_delivery: '1', cademi_entregas: JSON.stringify(entregasArr) } }),
       });
       if (!res.ok) throw new Error('Falha a guardar');
       setCfgMsg('Configuração guardada. Pagamentos confirmados passam a libertar acesso.');
@@ -1145,9 +1114,9 @@ function AcademiaPage() {
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
     <div className="grid-2">
       <div><label className="label">Entrega padrão *</label>
-      <input className="input" value={produtoId} onChange={e => setProdutoId(e.target.value)} placeholder="Ex: samorafit-workout" style={{ width: '100%' }} /></div>
+      <div className="mono" style={{ fontSize: '.8rem', fontWeight: 700, padding: '.55rem .7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.45rem' }}>{FIXO_PRODUTO_ID}</div></div>
       <div><label className="label">Envio automático</label>
-      <select className="select" value={autoDelivery ? '1' : '0'} onChange={e => setAutoDelivery(e.target.value === '1')} style={{ width: '100%' }}><option value="1">Ligado</option><option value="0">Desligado</option></select></div>
+      <div style={{ padding: '.55rem .7rem' }}><Status tone="good">Ligado</Status></div></div>
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
     <div style={{ display: 'grid', gap: '.45rem' }}>
@@ -1161,16 +1130,7 @@ function AcademiaPage() {
     <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
   </Section>
   {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados da Cademi...</div> : <>
-    <Section title="Cursos" note={`${products.length} produtos`}>
-      <div className="auto-grid">
-        {products.map(p => <div className="card" key={p.id} style={{ padding: '1rem' }}>
-          <div className="eyebrow">ID {p.id}</div>
-          <h2 style={{ fontSize: '1rem', marginTop: '.3rem' }}>{p.nome}</h2>
-          {p.vitrine && <div className="section-note" style={{ marginTop: '.3rem' }}>Vitrine: {p.vitrine.nome}</div>}
-        </div>)}
-        {products.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>Nenhum curso encontrado</div>}
-      </div>
-    </Section>
+    {/* Secção "Cursos" oculta por decisão de operação (produtos geridos na Cademi). */}
     <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', marginTop: '.8rem' }}>
       <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
     </div>
