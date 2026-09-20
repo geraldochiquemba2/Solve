@@ -320,7 +320,11 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
       setMsg(`${r.upserted ?? r.total ?? 0} sócios atualizados do OVG`);
       onRefreshed?.();
     } catch (e: any) {
-      setMsg('OVG indisponível: ' + (e.message || 'erro'));
+      const raw = e.message || 'erro';
+      // O OVG recusa login fora de Angola (success:0) — o sync tem de correr no PC local.
+      setMsg(raw.includes('no token')
+        ? 'OVG bloqueia este servidor. Corre o sync no PC local (sincronizar-ovg.cmd).'
+        : 'OVG indisponível: ' + raw);
     } finally { setUpdating(false); }
   };
 
