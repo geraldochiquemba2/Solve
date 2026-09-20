@@ -313,7 +313,8 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
   const refreshNow = async () => {
     setUpdating(true); setMsg('');
     try {
-      const r = await accessPost<{ ok: boolean; upserted: number; total: number }>('/api/v1/access/ovg-reseed', {});
+      // Backend local (mesmo API_BASE do login): o Render está bloqueado pelo OVG (success:0).
+      const r = await apiPost<{ ok: boolean; upserted: number; total: number }>('/api/v1/access/ovg-reseed', {});
       setLastSync(new Date().toISOString());
       setTotal(r.total ?? r.upserted ?? null);
       setMsg(`${r.upserted ?? r.total ?? 0} sócios atualizados do OVG`);
@@ -327,7 +328,7 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
     let cancelled = false;
     (async () => {
       try {
-        const st = await accessGet<{ total: number; lastSync: string | null }>('/api/v1/access/ovg-status');
+        const st = await apiGet<{ total: number; lastSync: string | null }>('/api/v1/access/ovg-status');
         if (cancelled) return;
         setLastSync(st.lastSync);
         setTotal(st.total ?? null);
