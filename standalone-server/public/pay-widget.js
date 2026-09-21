@@ -562,19 +562,36 @@
     loadHist(m);
   }
 
-  // Só mostra o botão a aluno com sessão: esconde na tela de login e
-  // em páginas sem indício de login (sem link sair/perfil e com form login).
+  // Só mostra o botão a aluno com sessão: esconde nas telas de login/cadastro
+  // e em qualquer página sem indício positivo de sessão (nega por defeito).
   function isLoggedIn() {
     try {
+      // 1) Sinais positivos de sessão: link sair/perfil ou área do aluno.
       if (document.querySelector('a[href*="logout" i], a[href*="sair" i], a[href*="sign-out" i]')) return true;
-      var loginForm = document.querySelector('#AcessoEmail, form[action*="/auth/login"], form[action*="/login"]');
-      if (loginForm) return false;
-      var tela = document.documentElement.getAttribute("data-tela") || "";
-      if (/login|cadastro|esqueci/i.test(tela)) return false;
-      if (document.querySelector("header .user-name, header .username, .user-info, .profile-name, [class*='user-name']")) return true;
-      // Sem sinais: mostra (área do aluno autenticada por defeito).
-      return true;
-    } catch (e) { return true; }
+      if (document.querySelector("header .user-name, header .username, .user-info, .profile-name, [class*='user-name'], [class*='username'], .avatar-logged, [class*='logged-user']")) return true;
+      var path = "";
+      try { path = String((window.location && window.location.pathname) || "").toLowerCase(); } catch (eP) {}
+      // URL típica da área do aluno: sessão quase certa.
+      if (/^\/(aluno|painel|dashboard|curso|cursos|aula|aulas|trilha|biblioteca|minha|conta|perfil|assinatura|pagamento|checkout)/.test(path)) return true;
+      // 2) Telas públicas de autenticação: nunca mostra.
+      if (path.indexOf("/auth/") >= 0) return false;
+      if (/\/(login|signin|signup|register|cadastro|cadastrar|esqueci|recuperar|nova-conta)/i.test(path)) return false;
+      var tela = "";
+      try { tela = document.documentElement.getAttribute("data-tela") || ""; } catch (eT) {}
+      if (/login|cadastro|cadastrar|register|signup|signin|esqueci|recuperar/i.test(tela)) return false;
+      // Form de acesso/cadastro presente (login tem #AcessoEmail; cadastro tem
+      // "Criar minha conta") sem sinal de sessão = página pública.
+      if (document.querySelector('#AcessoEmail, form[action*="/auth/"], form[action*="/login"], form[action*="/cadastrar"], form[action*="/cadastro"], form[action*="/register"], form[action*="/signup"]')) return false;
+      // 3) Deteção por texto (Cademi renderiza "Acessar sua conta" / "Crie sua conta").
+      var bodyTxt = "";
+      try { bodyTxt = String(document.body ? (document.body.innerText || "") : ""); } catch (eB) {}
+      if (/acessar sua conta|crie sua conta|criar minha conta|esqueceu sua senha|esqueci minha senha/i.test(bodyTxt)) {
+        // Página de login/cadastro estática sem marcador positivo de sessão.
+        return false;
+      }
+      // 4) Sem sinais: nega por defeito (antes mostrava e o botão aparecia no cadastro).
+      return false;
+    } catch (e) { return false; }
   }
 
   async function boot() {
