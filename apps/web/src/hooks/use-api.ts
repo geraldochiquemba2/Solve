@@ -334,10 +334,10 @@ export function useOVGClientsRefresh(onRefreshed?: () => void) {
       onRefreshed?.();
     } catch (e: any) {
       const raw = e.message || 'erro';
-      // O OVG recusa login fora de Angola (success:0) — o sync tem de correr no PC local.
+      // OVG pode recusar login fora da rede autorizada — sync corre no PC local, sem mostrar aviso.
       if (raw.includes('no token')) {
         markBlocked(true);
-        setMsg('OVG bloqueia este servidor. Corre o sync no PC local (sincronizar-ovg.cmd).');
+        setMsg('');
       } else {
         setMsg('OVG indisponível: ' + raw);
       }
