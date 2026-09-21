@@ -618,18 +618,6 @@
     if (!isLoggedIn()) return;
     var b = el("button", "spw-btn", "💳 Pagar mensalidade");
     document.body.appendChild(b);
-    // O botão é flutuante: esconde-o enquanto o rodapé (Termos, Política de
-    // privacidade, Suporte) estiver visível para nunca tapar esses links.
-    try {
-      var footerEl = document.querySelector("footer");
-      if (footerEl && typeof IntersectionObserver !== "undefined") {
-        var footObs = new IntersectionObserver(function (entries) {
-          var vis = entries && entries[0] && entries[0].isIntersecting;
-          b.style.display = vis ? "none" : "";
-        }, { threshold: 0 });
-        footObs.observe(footerEl);
-      }
-    } catch (eFoot) {}
     var entregas = [{ id: "samorafit-workout", nome: "SamoraFit Workout" }];
     try {
       var r = await h(API + "/api/v1/cademi/entregas");
