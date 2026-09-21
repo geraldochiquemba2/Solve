@@ -2111,7 +2111,7 @@ app.get("/api/v1/dashboard/charts", requireAuth, async (req, res) => {
     } catch {}
     let paymentMethods = [];
     try {
-      const r = await pool.query("SELECT method, COUNT(*) as count FROM payments GROUP BY method");
+      const r = await pool.query("SELECT method, COUNT(*) as count, COALESCE(SUM(amount),0) as total FROM payments GROUP BY method");
       paymentMethods = r.rows;
     } catch {}
     const [confirmed, total] = await Promise.all([
