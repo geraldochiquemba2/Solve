@@ -39,7 +39,7 @@
       ".spw-methods button.on{background:#111;color:#fff;border-color:#111}" +
       ".spw-ref{background:#f4f4f5;border-radius:8px;padding:.7rem;margin-top:.7rem;font-size:.82rem}" +
       ".spw-ref b{font-size:1rem;letter-spacing:.03em}" +
-      "@media (max-width:480px){.spw-modal{padding:.9rem}.spw-note{margin-bottom:.6rem}.spw-label{margin:.45rem 0 .25rem}.spw-actions{margin-top:.7rem}.spw-btn{bottom:11px;left:12px;padding:9px 12px;font-size:12px}}";
+      "@media (max-width:480px){.spw-modal{padding:.9rem}.spw-note{margin-bottom:.6rem}.spw-label{margin:.45rem 0 .25rem}.spw-actions{margin-top:.7rem}.spw-btn{bottom:11px;left:auto;right:12px;padding:9px 12px;font-size:12px}}";
     document.head.appendChild(s);
   }
 
