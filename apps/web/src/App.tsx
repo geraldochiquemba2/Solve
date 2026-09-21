@@ -143,7 +143,7 @@ const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }, { href: '/admin/fit90-leads', label: 'Leads Fit90', icon: Smartphone }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
-  { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'Cademi', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
+   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
@@ -660,12 +660,12 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
           {checking ? 'Verificando...' : 'Verificar Estado no É-kwanza'}
         </button>
         <button className="btn-primary" onClick={sendCademi} disabled={sending} style={{ flex: 1 }}>
-          {sending ? 'A enviar...' : 'Enviar Cademi'}
+          {sending ? 'A enviar...' : 'Enviar SamoraFit Workout'}
         </button>
       </div>
       {sendResult && (
         <div style={{ marginTop: '.4rem', padding: '.5rem .65rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.4rem', fontSize: '.72rem' }}>
-          <strong>Cademi:</strong> {sendResult}
+          <strong>SamoraFit Workout:</strong> {sendResult}
         </div>
       )}
       {checkResult && (
@@ -899,12 +899,12 @@ function PaymentsPage() {
     <div style={{ marginTop: '.6rem' }}><label className="label">Telefone {cMethod === 'mcx_express' ? '*' : '(opcional)'}</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Nome (p/ Cademi)</label>
+      <div style={{ flex: 1 }}><label className="label">Nome (p/ SamoraFit Workout)</label>
       <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="Nome do aluno" style={{ width: '100%' }} /></div>
-      <div style={{ flex: 1 }}><label className="label">Email (p/ Cademi)</label>
+      <div style={{ flex: 1 }}><label className="label">Email (p/ SamoraFit Workout)</label>
       <input className="input" type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="aluno@email.com" style={{ width: '100%' }} /></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (Cademi) *</label>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (SamoraFit Workout) *</label>
     <select className="select" value={cProduto} onChange={e => pickProduto(e.target.value)} style={{ width: '100%' }}>
       {cEntregas.length === 0 && <option value="">A carregar...</option>}
       {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}{o.preco ? ` — ${o.preco} Kz` : ''}</option>)}
@@ -922,7 +922,7 @@ function PaymentsPage() {
 const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof BriefcaseBusiness }[] = [
   { name: 'OVG', desc: 'Virtual Gym · Sócios e acessos', icon: BriefcaseBusiness },
   { name: 'Pay4All', desc: 'Pagamentos e reconciliação', icon: CreditCard },
-  { name: 'Cademi', desc: 'Acessos e área de membros', icon: KeyRound },
+  { name: 'SamoraFit Workout', desc: 'Acessos e área de membros', icon: KeyRound },
   { name: 'WhatsApp', desc: 'SamoraFit · Conversas comerciais', icon: LifeBuoy },
   { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2 },
 ];
@@ -941,10 +941,11 @@ function IntegrationsPage() {
   
   const items = useMemo(() => {
     const applyCademi = (list: any[]) => list.map(item => {
-      if (item.name !== 'Cademi') return item;
-      if (!cademiHealthData) return item;
+      if (!['cademi', 'samorafit workout'].includes(String(item.name ?? '').toLowerCase())) return item;
+      if (!cademiHealthData) return { ...item, name: 'SamoraFit Workout' };
       return {
         ...item,
+        name: 'SamoraFit Workout',
         state: cademiHealthData.connected ? 'Operacional' : 'Erro',
         sync: cademiHealthData.connected ? 'Ligado' : 'Falha',
         volume: cademiHealthData.connected ? `${cademiHealthData.products ?? 0} produtos` : (cademiHealthData.message || 'Não configurado'),
@@ -953,7 +954,7 @@ function IntegrationsPage() {
       };
     });
     if (apiIntegrations.length > 0) {
-      const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, Cademi: KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
+      const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, 'SamoraFit Workout': KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
       return applyCademi(apiIntegrations.map(ig => {
         const igName = String(ig.name ?? '');
         const isOVG = igName.toLowerCase() === 'ovg';
@@ -983,7 +984,7 @@ function IntegrationsPage() {
     })));
   }, [apiIntegrations, ovgSyncData, ovgHealthData, cademiHealthData]);
   
-  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `Cademi OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{(isOVG || isCademi) && <button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : cademiSyncMut.mutate()} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar')}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'Cademi · 2 acessos pendentes · há 17 min']} /></Section></>;
+  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar...' : 'Sincronizar tudo'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar...'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `SamoraFit Workout OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar...'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{(isOVG || isCademi) && <button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : cademiSyncMut.mutate()} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar...' : 'Sincronizar') : (cademiSyncMut.isPending ? 'A sincronizar...' : 'Sincronizar')}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'SamoraFit Workout · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
 function AcademiaPage() {
@@ -1079,7 +1080,7 @@ function AcademiaPage() {
     setSyncMsg('');
     try {
       const r: any = await fetch(`${apiBase}/api/v1/cademi/sync`, { method: 'POST', headers: { 'X-API-Key': apiKey } }).then(r => r.json());
-      setSyncMsg(`${r.matched ?? 0} alunos ligados de ${r.cademiUsers ?? 0} na Cademi`);
+      setSyncMsg(`${r.matched ?? 0} alunos ligados de ${r.cademiUsers ?? 0} no SamoraFit Workout`);
     } catch (e: any) { setSyncMsg('Erro: ' + e.message); }
     setSyncing(false);
   };
@@ -1087,9 +1088,9 @@ function AcademiaPage() {
   const visible = students.filter(s => !search || (s.nome || '').toLowerCase().includes(search.toLowerCase()) || (s.email || '').toLowerCase().includes(search.toLowerCase()));
   const fmtD = (d: string | null) => { if (!d) return '—'; try { return new Date(d).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } };
 
-  return <><PageHeader eyebrow="Ecossistema · Formação" title="Cademi" subtitle="Cursos e alunos da plataforma Cademi." action={<div className="page-actions" style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
+  return <><PageHeader eyebrow="Ecossistema · Formação" title="SamoraFit Workout" subtitle="Cursos e alunos da plataforma SamoraFit Workout." action={<div className="page-actions" style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={fetchAll}><RefreshCw size={14} /> Atualizar</button><button className="btn-primary" onClick={sync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar...' : 'Sincronizar'}</button></div>} />
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
-  <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso na Cademi">
+  <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso no SamoraFit Workout">
     <div className="grid-2">
       <div><label className="label">Entrega padrão *</label>
       <div className="mono" style={{ fontSize: '.8rem', fontWeight: 700, padding: '.55rem .7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.45rem' }}>{FIXO_PRODUTO_ID}</div></div>
@@ -1107,7 +1108,7 @@ function AcademiaPage() {
     {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
     <div style={{ display: 'flex', marginTop: '.8rem' }}><button className="btn-primary" onClick={saveCfg} disabled={savingCfg} style={{ flex: 1 }}><Check size={14} /> {savingCfg ? 'A guardar...' : 'Guardar'}</button></div>
   </Section>
-  {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados da Cademi...</div> : <>
+  {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar dados do SamoraFit Workout...</div> : <>
     {/* Secção "Cursos" oculta por decisão de operação (produtos geridos na Cademi). */}
     <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', marginTop: '.8rem' }}>
       <input className="input" placeholder="Pesquisar aluno por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
@@ -1149,7 +1150,7 @@ const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: stri
     { key: 'ovg_password', label: 'Password', type: 'password' },
     { key: 'ovg_club_code', label: 'Código do clube', placeholder: 'LUA' },
   ],
-  Cademi: [
+  'SamoraFit Workout': [
     { key: 'cademi_api_url', label: 'URL da API', placeholder: 'https://...' },
     { key: 'cademi_api_key', label: 'Chave de API', type: 'password' },
   ],
@@ -1162,7 +1163,7 @@ const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: stri
 
 const INTEGRATION_HEALTH_URL: Record<string, string> = {
   OVG: '/api/v1/ovg/health',
-  Cademi: '/api/v1/cademi/health',
+  'SamoraFit Workout': '/api/v1/cademi/health',
   Pay4All: '/api/v1/pay4all/health',
 };
 
