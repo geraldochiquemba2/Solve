@@ -1853,12 +1853,15 @@ async function sendCademiDelivery(paymentCode) {
     // Entrega do pagamento (seletor) ou padrão da Academia.
     const produtoId = String(meta.cademi_produto || defProduto).trim();
     if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto por configurar (Academia)" };
-    // Nome + email: metadata (formulário) → customers via customer_id → OVG pelo telefone
+    // Nome + email: a metadata (formulário desta compra) tem PRIORIDADE — o
+    // customer_id vem do telefone (pode ser de outra pessoa, ex. familiar que
+    // pagou no Express) e nunca pode substituir o aluno desta compra.
+    // customers/OVG só como recurso quando a metadata não traz email/nome.
     let nome = meta.name || null, email = meta.email || null, phone = meta.phone || null;
-    if (payment.customer_id) {
+    if ((!email || !nome) && payment.customer_id) {
       try {
         const cr = await pool.query("SELECT name, email, phone FROM customers WHERE id = $1", [payment.customer_id]);
-        if (cr.rows[0]) { nome = cr.rows[0].name; email = cr.rows[0].email; phone = cr.rows[0].phone || phone; }
+        if (cr.rows[0]) { email = email || cr.rows[0].email; nome = nome || cr.rows[0].name; phone = phone || cr.rows[0].phone; }
       } catch {}
     }
     if (!email && phone) {
