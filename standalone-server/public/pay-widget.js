@@ -52,6 +52,12 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+  // Milhares separados por espaço: 50000 -> "50 000".
+  function fmtKz(n) {
+    var v = Math.round(Number(n) || 0);
+    return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
   async function checkStatus(code) {
     try {
       var r = await h(API + "/api/v1/payments/ekwanza/check-status/" + encodeURIComponent(code));
@@ -86,7 +92,7 @@
       op.value = o.id;
       // Sem preço no CRM = "disponível em breve", não selecionável.
       if (o.preco) {
-        op.textContent = o.nome + " — " + o.preco + " Kz";
+        op.textContent = o.nome + " — " + fmtKz(o.preco) + " Kz";
       } else {
         op.textContent = o.nome + " — disponível em breve";
         op.disabled = true;
@@ -281,7 +287,7 @@
           if (slug === op.value || pn === base.toLowerCase().trim()) {
             var hasPrice = false;
             var priceTxt = "";
-            entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + o.preco + " Kz"; } });
+            entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + fmtKz(o.preco) + " Kz"; } });
             var active = !ac.encerrado;
             // Expirado mostra o preço NOVO (renovação); ativo mostra o tempo.
             var tag = ac.encerrado
@@ -375,7 +381,7 @@
         if (!prodNome) prodNome = p.cademi_produto;
       }
       html += "<div style='display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem'>"
-        + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + p.amount + " Kz</span>"
+        + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + fmtKz(p.amount) + " Kz</span>"
         + "<span style='color:#666'>" + statusLabel(p.status) + ref + pendingRef + "</span>"
         + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
         + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
@@ -532,7 +538,7 @@
           box.innerHTML = "<div class='spw-ref'>"
             + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Entidade: <b>" + (ref.entity || "—") + "</b></span></div>"
             + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Referência: <b>" + ref.referenceNumber + "</b></span><button id='spw-copyref' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.3rem .6rem;font-size:.72rem;cursor:pointer'>Copiar referência</button></div>"
-            + "<div style='margin-bottom:.3rem'>Valor: <b>" + amt + " Kz</b></div>"
+            + "<div style='margin-bottom:.3rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
             + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Paga no ATM/MCX. O curso liberta após pagamento. Se a aula não aparecer, termina sessão e entra de novo.</div>"
             + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
             + "</div>";
