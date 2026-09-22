@@ -125,7 +125,7 @@
       var tempoEl = m.querySelector("#spw-tempo");
       if (tempoEl) {
         tempoEl.textContent = isExp
-          ? "Express: o pedido chega ao telemóvel em segundos. Aprova no Multicaixa Express para concluir."
+          ? "Express: o pedido chega ao telemóvel em segundos. Tens ~2 min para aprovar no Multicaixa Express."
           : "Referência: o número pode demorar ~1 min a ser gerado. Depois de pagares, pode demorar até ~5 min a refletir.";
       }
     }
