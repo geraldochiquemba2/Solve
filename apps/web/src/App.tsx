@@ -4,7 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BookOpen, Boxes,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Boxes,
   BriefcaseBusiness, Building2, Check, CheckCircle2, ChevronDown, ChevronRight,
   CircleDollarSign, Clock3, Code2, Command, CreditCard, Database, Edit3, Eye,
   FileClock, FileKey2, Filter, HeartPulse, History, KeyRound, LayoutDashboard,
@@ -143,7 +143,7 @@ const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/clientes', label: 'Clientes', icon: Building2 }, { href: '/admin/fit90-leads', label: 'Leads Fit90', icon: Smartphone }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
-   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
+   { label: 'Ecossistema', items: [{ href: '/admin/integracoes', label: 'Integrações', icon: Link2 }, { href: '/admin/api-webhooks', label: 'API & Webhooks', icon: Code2 }] },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
