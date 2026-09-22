@@ -1462,6 +1462,19 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
         if (found.rows[0]) linkedId = found.rows[0].id;
       } catch {}
     }
+    // Alerta: email do formulário difere do cliente ligado pelo telefone
+    // (ex. familiar pagou no Express). A entrega Cademi usa sempre o email
+    // do formulário — este log permite detetar casos semelhantes no futuro.
+    try {
+      const formEm = String(customer_email || "").toLowerCase().trim();
+      if (linkedId && formEm) {
+        const lr = await pool.query("SELECT email FROM customers WHERE id = $1", [linkedId]);
+        const linkEm = String(lr.rows[0]?.email || "").toLowerCase().trim();
+        if (linkEm && linkEm !== formEm) {
+          console.log(`[PAYMENTS] ${code}: email formulário (${customer_email}) != cliente ligado (${lr.rows[0].email}) — entrega vai para o formulário`);
+        }
+      }
+    } catch {}
     // Regra: 1 pagamento pendente de cada vez por aluno (email ou telefone).
     if (customer_email || customer_phone) {
       const em = String(customer_email || "").toLowerCase().trim();
