@@ -2840,11 +2840,12 @@ setInterval(async () => {
   }
 }, EXPIRY_INTERVAL_MS);
 
-// Auto-sync É-kwanza (pendentes Cademi): 15min (cota Neon mensal; era 5min) — override via AUTOSYNC_INTERVAL_MS.
+// Auto-sync É-kwanza (pendentes Cademi): 5min — override via AUTOSYNC_INTERVAL_MS.
 // O webhook /webhooks/ekwanza continua a atualizar em tempo real; isto é só rede de segurança.
 // (o webhook nem sempre dispara; sem isto o estado fica preso em "pendente").
+// NOTA: 5min acorda o Neon com frequência — vigiar a cota de 100 CU-h/mês.
 let _autoSyncRunning = false;
-const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 15 * 60 * 1000);
+const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 5 * 60 * 1000);
 setInterval(async () => {
   if (_autoSyncRunning) return;
   _autoSyncRunning = true;
