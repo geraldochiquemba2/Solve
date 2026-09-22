@@ -75,7 +75,7 @@
       "<div class='spw-note'>SamoraFit · pagamento</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
-      "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='number' min='1' readonly style='background:#f4f4f5'></div>" +
+      "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
       "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
@@ -103,7 +103,7 @@
     function syncAmt() {
       var f = null;
       entregas.forEach(function (o) { if (o.id === sel.value) f = o; });
-      if (f && f.preco) m.querySelector("#spw-amt").value = f.preco;
+      if (f && f.preco) m.querySelector("#spw-amt").value = fmtKz(f.preco);
     }
     sel.addEventListener("change", syncAmt);
     syncAmt();
@@ -440,7 +440,7 @@
     var chosen = null;
     (entregas || []).forEach(function (o) { if (o.id === prod) chosen = o; });
     if (!chosen || !chosen.preco) { msg(m, "Conteúdo ainda sem preço (disponível em breve).", true); return; }
-    var amt = parseFloat(m.querySelector("#spw-amt").value);
+    var amt = parseFloat(String(m.querySelector("#spw-amt").value).replace(/\s/g, ""));
     var phone = m.querySelector("#spw-phone").value.trim();
     var name = m.querySelector("#spw-name").value.trim();
     var email = m.querySelector("#spw-email").value.trim();
