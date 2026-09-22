@@ -18,7 +18,7 @@ export default function PortalShell({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
+    <div className="portal" style={{ minHeight: '100dvh', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'hsl(var(--card) / .92)', backdropFilter: 'blur(10px)', borderBottom: '1px solid hsl(var(--border))' }}>
         <div style={{ maxWidth: 680, margin: '0 auto', padding: '.7rem 1rem', display: 'flex', alignItems: 'center', gap: '.6rem' }}>
           <div style={{ height: 30, borderRadius: 8, background: '#fff', padding: '4px 8px', display: 'grid', placeItems: 'center' }}><img src="/samorafit-logo.png" alt="SamoraFit" style={{ height: 20, width: 'auto', display: 'block' }} /></div>
@@ -46,7 +46,7 @@ export default function PortalShell({ children }: { children: ReactNode }) {
                 href={t.href}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.4rem',
-                  padding: '.65rem', borderRadius: '.55rem', fontSize: '.8rem', fontWeight: 700,
+                  padding: '.65rem', borderRadius: '.55rem', fontSize: '.8rem', fontWeight: 600,
                   background: t.active ? 'hsl(var(--primary))' : 'transparent',
                   color: t.active ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
                 }}

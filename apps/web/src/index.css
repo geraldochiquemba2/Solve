@@ -568,6 +568,22 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid hsl(var(--border)); }
 .modal-body { padding:1.2rem; }
 .form-label { display:block; font-size:.72rem; font-weight:700; color:hsl(var(--foreground)); margin-bottom:.35rem; }
+/* ── Sistema tipográfico Inter — CRM admin (.shell) e portal (/conta) ──
+   Títulos 700 · Botões/menus importantes 600 · Labels/informações 500 · Texto normal 400.
+   A landing pública mantém Space Grotesk (regras base intactas). */
+.shell, .portal { font-family:'Inter', sans-serif; font-weight:400; }
+.shell h1, .shell h2, .shell h3, .shell h4, .shell h5, .shell h6,
+.portal h1, .portal h2, .portal h3, .portal h4, .portal h5, .portal h6,
+.shell .page-title, .shell .section-title, .shell .metric-value { font-family:'Inter', sans-serif; font-weight:700; letter-spacing:0; }
+.shell .page-title { letter-spacing:-.01em; }
+.shell .btn-primary, .portal .btn-primary,
+.shell .btn-secondary, .portal .btn-secondary,
+.shell .btn-quiet, .portal .btn-quiet,
+.shell .sidebar-link { font-family:'Inter', sans-serif; font-weight:600; }
+.shell .eyebrow, .portal .eyebrow,
+.shell .form-label, .portal .form-label,
+.shell .data-table th, .portal .data-table th,
+.shell .status, .portal .status { font-weight:500; }
 .form-grid { display:grid; gap:.8rem; }
 .activity-dot { width:8px; height:8px; flex:none; border-radius:50%; background:hsl(var(--accent)); box-shadow:0 0 0 4px hsl(var(--accent) / .14); }
 .progress-track { height:5px; background:hsl(var(--muted)); border-radius:99px; overflow:hidden; }
