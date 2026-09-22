@@ -489,6 +489,10 @@
       if (!r.ok) throw new Error(j.error || r.statusText);
       var code = (j.data && j.data.code) || "";
       try { localStorage.setItem("spw_profile", JSON.stringify({ name: name, email: email, phone: phone })); } catch (e9) {}
+      // Pagamento criado: o botão volta ao normal de imediato; a verificação
+      // corre em fundo só a atualizar a mensagem (evita botão preso em "A gerar...").
+      btn.disabled = false;
+      btn.textContent = "Pagar";
       if (method === "express") {
         msg(m, "Pedido enviado para " + phone + " (" + code + "). Aprova no Multicaixa...");
         for (var i = 0; i < 24; i++) {
