@@ -77,6 +77,7 @@
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
+      "<div id='spw-tempo' style='font-size:.72rem;color:#666;margin-top:.35rem'></div>" +
       "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
@@ -120,9 +121,17 @@
       phoneInput.style.display = isExp ? "" : "none";
       phoneLabel.style.display = isExp ? "" : "none";
       phoneLabel.textContent = "Telefone *";
+      // Aviso do tempo de cada método.
+      var tempoEl = m.querySelector("#spw-tempo");
+      if (tempoEl) {
+        tempoEl.textContent = isExp
+          ? "Express: o pedido chega ao telemóvel em segundos. Aprova no Multicaixa Express para concluir."
+          : "Referência: o número pode demorar ~1 min a ser gerado. Depois de pagares, pode demorar até ~15 min a refletir.";
+      }
     }
     bExp.addEventListener("click", function () { setMethod("express"); });
     bRef.addEventListener("click", function () { setMethod("referencia"); });
+    setMethod("express");
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
     autodetect(m);
