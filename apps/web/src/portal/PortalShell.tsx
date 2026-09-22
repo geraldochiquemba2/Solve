@@ -21,7 +21,7 @@ export default function PortalShell({ children }: { children: ReactNode }) {
     <div style={{ minHeight: '100dvh', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'hsl(var(--card) / .92)', backdropFilter: 'blur(10px)', borderBottom: '1px solid hsl(var(--border))' }}>
         <div style={{ maxWidth: 680, margin: '0 auto', padding: '.7rem 1rem', display: 'flex', alignItems: 'center', gap: '.6rem' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'hsl(var(--primary))', color: 'white', fontWeight: 800, fontSize: '.75rem' }}>SC</div>
+          <div style={{ height: 30, borderRadius: 8, background: '#fff', padding: '4px 8px', display: 'grid', placeItems: 'center' }}><img src="/samorafit-logo.png" alt="SamoraFit" style={{ height: 20, width: 'auto', display: 'block' }} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {customer?.name || 'A minha conta'}

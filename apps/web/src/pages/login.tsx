@@ -42,8 +42,8 @@ export function LoginPage() {
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'hsl(var(--background))' }}>
       <div className="card" style={{ width: 'min(400px, calc(100vw - 2rem))', padding: '2rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'hsl(var(--primary))', color: 'white', fontWeight: 800, fontSize: '1.1rem', margin: '0 auto .75rem', letterSpacing: '-.08em' }}>SC</div>
-          <h1 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Solve Corporate</h1>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '.5rem .9rem', margin: '0 auto .75rem', display: 'inline-block' }}><img src="/samorafit-logo.png" alt="SamoraFit" style={{ height: 40, width: 'auto', display: 'block' }} /></div>
+          <h1 style={{ fontSize: '1.15rem', fontWeight: 700 }}>SamoraFit</h1>
           <p style={{ fontSize: '.78rem', color: 'hsl(var(--muted-foreground))', marginTop: '.3rem' }}>Acesse o command center</p>
         </div>
 
