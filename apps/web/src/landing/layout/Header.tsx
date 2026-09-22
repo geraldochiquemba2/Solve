@@ -6,7 +6,7 @@ import { useScrollProgress } from '../hooks/useScrollProgress'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import ThemeToggle from '../ui/ThemeToggle'
-import solveAccessLogo from '../logo/Solve-Access.jpeg'
+
 
 // CRM: header sem navegação pública (sem INÍCIO/FITMOTIVAÇÃO/FORMAÇÃO/STORE/FITWORKOUT)
 
@@ -58,11 +58,11 @@ export default function Header() {
               to="/"
               onClick={handleNavClick}
               className="flex items-center group flex-shrink-0 mr-4"
-              aria-label="Solve Access"
+              aria-label="SamoraFit"
             >
               <img
-                src={solveAccessLogo}
-                alt="Solve Access Logo"
+                src="/samorafit-logo.png"
+                alt="SamoraFit Logo"
                 className="h-10 w-auto object-contain group-hover:opacity-80 transition-opacity"
                 style={{ backgroundColor: '#fff', borderRadius: 6, padding: '2px 8px' }}
               />
@@ -182,8 +182,8 @@ export default function Header() {
             >
               {/* Brand in drawer */}
               <div className="flex items-center gap-2.5 px-3 mb-6 pb-5" style={{ borderBottom: `1px solid ${dividerColor}` }}>
-                <img src={solveAccessLogo} alt="Solve Access" className="h-8 w-auto object-contain" style={{ backgroundColor: '#fff', borderRadius: 6, padding: '2px 6px' }} />
-                <span className="font-heading font-bold text-sm" style={{ color: textPrimary }}>Solve Access</span>
+                <img src="/samorafit-logo.png" alt="SamoraFit" className="h-8 w-auto object-contain" style={{ backgroundColor: '#fff', borderRadius: 6, padding: '2px 6px' }} />
+                <span className="font-heading font-bold text-sm" style={{ color: textPrimary }}>SamoraFit</span>
               </div>
 
               <div className="mt-auto flex flex-col gap-2.5 pt-5" style={{ borderTop: `1px solid ${dividerColor}` }}>
