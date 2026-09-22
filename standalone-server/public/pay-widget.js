@@ -514,7 +514,7 @@
           await sleep(5000);
           var st = await checkStatus(code);
           var s = st && (st.newStatus || st.currentStatus);
-          if (s === "confirmado") { msg(m, "Pagamento confirmado. O curso liberta sozinho. Se a aula não aparecer, termina sessão e entra de novo."); break; }
+          if (s === "confirmado") { msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas."); break; }
           if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
         }
       } else {
@@ -548,7 +548,7 @@
             + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Entidade: <b>" + (ref.entity || "—") + "</b></span></div>"
             + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Referência: <b>" + ref.referenceNumber + "</b></span><button id='spw-copyref' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.3rem .6rem;font-size:.72rem;cursor:pointer'>Copiar referência</button></div>"
             + "<div style='margin-bottom:.3rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
-            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Paga no ATM/MCX. O curso liberta após pagamento. Se a aula não aparecer, termina sessão e entra de novo.</div>"
+            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Paga no ATM/MCX. Após confirmação, faz logout e entra de novo (login) para teres acesso às aulas.</div>"
             + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
             + "</div>";
           msg(m, "Referência gerada.");
