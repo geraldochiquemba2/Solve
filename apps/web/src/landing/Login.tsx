@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, ArrowRight, X } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 import { useLocation } from 'wouter'
-import solveAccessLogo from './logo/Solve-Access.jpeg'
 import { useTheme } from './context/ThemeContext'
 
 export default function Login() {
@@ -48,7 +47,7 @@ export default function Login() {
 
           {/* Header */}
           <div className="px-8 pt-8 pb-0 text-center">
-            <img src={solveAccessLogo} alt="Solve Access" className="h-12 mx-auto mb-6 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
+            <img src="/samorafit-logo.png" alt="SamoraFit" className="h-12 mx-auto mb-6 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
             <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: textPrimary }}>
               Bem-vindo de volta
             </h1>
