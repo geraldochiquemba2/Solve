@@ -626,7 +626,7 @@
       }
     } catch (eLogin) {}
     if (!isLoggedIn()) return;
-    var b = el("button", "spw-btn", "💳 Pagar mensalidade");
+    var b = el("button", "spw-btn", "Pagar mensalidade");
     document.body.appendChild(b);
     var entregas = [{ id: "samorafit-workout", nome: "SamoraFit Workout" }];
     try {
@@ -634,7 +634,19 @@
       var j = await r.json().catch(function () { return {}; });
       if (j && Array.isArray(j.data) && j.data.length) entregas = j.data;
     } catch (e) {}
-    b.addEventListener("click", function () { openModal(entregas); });
+    // Aviso imediato ao clicar: o modal pode demorar 2–4s (rede Render/Cademi).
+    b.addEventListener("click", function () {
+      if (b.disabled) return;
+      b.disabled = true;
+      var old = b.innerHTML;
+      b.textContent = "A abrir…";
+      setTimeout(function () {
+        try { openModal(entregas); } finally {
+          b.disabled = false;
+          b.innerHTML = old;
+        }
+      }, 30);
+    });
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
