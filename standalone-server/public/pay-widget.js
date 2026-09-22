@@ -73,6 +73,7 @@
     m.innerHTML =
       "<h3>Pagar mensalidade</h3>" +
       "<div class='spw-note'>SamoraFit · pagamento</div>" +
+      "<div style='font-size:.72rem;color:#666;background:#f4f4f5;border-radius:6px;padding:.45rem .6rem;margin-bottom:.2rem'>Após o pagamento, faz logout e entra de novo (login) para teres acesso às aulas.</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
