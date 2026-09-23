@@ -15,6 +15,13 @@
       "when": 1797408000000,
       "tag": "0001_bruno_samora",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790419200000,
+      "tag": "0002_lead_tracking",
+      "breakpoints": true
     }
   ]
 }

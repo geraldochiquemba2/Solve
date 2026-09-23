@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
@@ -39,8 +39,25 @@ export const leadsTable = pgTable("leads", {
   ovgId: varchar("ovg_id", { length: 100 }),
   externalId: varchar("external_id", { length: 100 }),
   convertedAt: timestamp("converted_at"),
+  whatsapp: varchar("whatsapp", { length: 50 }),
+  produtoInteresse: varchar("produto_interesse", { length: 255 }),
+  proximoContato: date("proximo_contato"),
+  motivoPerda: varchar("motivo_perda", { length: 255 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const leadContactsTable = pgTable("lead_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => leadsTable.id, { onDelete: "cascade" }),
+  staffId: uuid("staff_id").references(() => usersTable.id, { onDelete: "set null" }),
+  staffName: varchar("staff_name", { length: 255 }),
+  canal: varchar("canal", { length: 20 }).notNull(),
+  resultado: varchar("resultado", { length: 50 }).notNull(),
+  proximoPasso: varchar("proximo_passo", { length: 50 }),
+  proximoContato: date("proximo_contato"),
+  observacao: text("observacao"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const customersTable = pgTable("customers", {

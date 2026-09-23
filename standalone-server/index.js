@@ -216,6 +216,18 @@ pool.query(`ALTER TABLE payments ALTER COLUMN customer_id DROP NOT NULL`).catch(
 // Integração externa (ex.: Supabase/Fit 90): idempotência por external_id
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS external_id varchar(100)`).catch(() => {});
 pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS leads_external_id_idx ON leads (external_id) WHERE external_id IS NOT NULL`).catch(() => {});
+// Seguimento de leads: histórico de contactos + campos da ficha
+pool.query(`CREATE TABLE IF NOT EXISTS lead_contacts (
+  id UUID PRIMARY KEY, lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  staff_id UUID REFERENCES users(id) ON DELETE SET NULL, staff_name VARCHAR(255),
+  canal VARCHAR(20) NOT NULL, resultado VARCHAR(50) NOT NULL,
+  proximo_passo VARCHAR(50), proximo_contato DATE, observacao TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS lead_contacts_lead_idx ON lead_contacts (lead_id)`).catch(() => {});
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`).catch(() => {});
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS produto_interesse VARCHAR(255)`).catch(() => {});
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).catch(() => {});
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
 // Regra Fit90: leads da landing são descartáveis — duração máxima de 72h após a criação.
 const FIT90_LEAD_TTL = 72 * 60 * 60 * 1000;
 async function cleanupExpiredFit90Leads({ silent = false } = {}) {
@@ -2430,8 +2442,23 @@ const mapLead = (r) => ({
   id: r.id, code: r.code, name: r.name, email: r.email, phone: r.phone,
   company: r.company, source: r.source, status: r.status, ownerId: r.owner_id,
   estimatedValue: r.estimated_value ?? 0, notes: r.notes, externalId: r.external_id || null,
+  whatsapp: r.whatsapp || null, produtoInteresse: r.produto_interesse || null,
+  proximoContato: r.proximo_contato || null, motivoPerda: r.motivo_perda || null,
+  contactosTotal: r.contactos_total != null ? Number(r.contactos_total) : null,
+  ultimoContactoAt: r.ultimo_contacto_at || null, ultimoResultado: r.ultimo_resultado || null,
+  ultimoStaff: r.ultimo_staff || null,
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
+
+// Enriquecimento da lista/detalhe com resumo de contactos (calculado, sem colunas extra).
+const LEAD_WITH_STATS = `l.*,
+  (SELECT COUNT(*) FROM lead_contacts c WHERE c.lead_id = l.id) AS contactos_total,
+  lc.ult AS ultimo_contacto_at, lc.res AS ultimo_resultado, lc.stf AS ultimo_staff
+  FROM leads l LEFT JOIN LATERAL (
+    SELECT c.created_at AS ult, c.resultado AS res, COALESCE(u.name, c.staff_name) AS stf
+    FROM lead_contacts c LEFT JOIN users u ON u.id = c.staff_id
+    WHERE c.lead_id = l.id ORDER BY c.created_at DESC LIMIT 1
+  ) lc ON true`;
 
 app.get("/api/v1/leads", requireAuth, async (req, res) => {
   cleanupExpiredFit90Leads({ silent: true });
@@ -2446,7 +2473,7 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
     }
     if (req.query.source) { where.push("source = $" + (params.length + 1)); params.push(req.query.source); }
     const wc = where.length ? "WHERE " + where.join(" AND ") : "";
-    const r = await pool.query(`SELECT * FROM leads ${wc} ORDER BY updated_at DESC LIMIT 500`, params);
+    const r = await pool.query(`SELECT ${LEAD_WITH_STATS} ${wc} ORDER BY l.updated_at DESC LIMIT 500`, params);
     res.json({ data: r.rows.map(mapLead), total: r.rows.length });
   } catch (err) {
     res.json({ data: [], total: 0 });
@@ -2455,7 +2482,7 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
 
 app.post("/api/v1/leads", requireAuth, async (req, res) => {
   try {
-    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes, externalId } = req.body;
+    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes, externalId, whatsapp, produtoInteresse, motivoPerda } = req.body;
     if (!name || name.trim().length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
     const st = LEAD_STATUS.includes(status) ? status : "novo_lead";
     const extId = externalId ? String(externalId).trim() : null;
@@ -2474,9 +2501,10 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
     }
     const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
     const r = await pool.query(
-      `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes, external_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null, extId]
+      `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes, external_id, whatsapp, produto_interesse, motivo_perda)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null, extId,
+       whatsapp || null, produtoInteresse || null, motivoPerda || null]
     );
     res.status(201).json({ data: mapLead(r.rows[0]) });
   } catch (err) {
@@ -2484,9 +2512,121 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
   }
 });
 
+// ─── Seguimento de leads: contadores, follow-ups e histórico de contactos ───
+
+app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE status = 'novo_lead') AS novas,
+      COUNT(*) FILTER (WHERE status = 'qualificado') AS em_acompanhamento,
+      COUNT(*) FILTER (WHERE status = 'convertido') AS convertidas,
+      COUNT(*) FILTER (WHERE status = 'perdido') AS perdidas,
+      COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS contactadas,
+      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS pendentes
+      FROM leads`);
+    const row = r.rows[0] || {};
+    const num = (v) => Number(v ?? 0);
+    res.json({ data: {
+      total: num(row.total), novas: num(row.novas), contactadas: num(row.contactadas),
+      pendentes: num(row.pendentes), emAcompanhamento: num(row.em_acompanhamento),
+      convertidas: num(row.convertidas), perdidas: num(row.perdidas),
+    } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/leads/followups/hoje", requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT ${LEAD_WITH_STATS}
+      WHERE l.proximo_contato = CURRENT_DATE AND l.status <> 'convertido'
+      ORDER BY l.updated_at DESC LIMIT 200`);
+    const owners = await pool.query("SELECT id, name FROM users").catch(() => ({ rows: [] }));
+    const byId = Object.fromEntries(owners.rows.map((u) => [u.id, u.name]));
+    res.json({ data: r.rows.map((x) => ({ ...mapLead(x), ownerNome: byId[x.owner_id] || null })), total: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
+  try {
+    const lead = await pool.query("SELECT id FROM leads WHERE id = $1", [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    const r = await pool.query(
+      `SELECT c.id, c.canal, c.resultado, c.proximo_passo, c.proximo_contato, c.observacao, c.created_at,
+              COALESCE(u.name, c.staff_name) AS staff_nome
+       FROM lead_contacts c LEFT JOIN users u ON u.id = c.staff_id
+       WHERE c.lead_id = $1 ORDER BY c.created_at ASC`, [req.params.id]);
+    res.json({ data: r.rows, total: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail"];
+const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido"];
+const LEAD_PASSOS = ["Contactar amanhã", "Contactar em 3 dias", "Contactar em 7 dias", "Sem próximo contacto", "Agendar visita"];
+function passoParaData(passo) {
+  const d = new Date();
+  if (passo === "Contactar amanhã") d.setDate(d.getDate() + 1);
+  else if (passo === "Contactar em 3 dias") d.setDate(d.getDate() + 3);
+  else if (passo === "Contactar em 7 dias") d.setDate(d.getDate() + 7);
+  else return null;
+  return d.toISOString().slice(0, 10);
+}
+const isDateStr = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+
+app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
+  try {
+    const lead = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    const { canal, resultado, proximo_passo, proximo_contato, observacao, staff_id } = req.body || {};
+    if (!LEAD_CANAIS.includes(canal)) return res.status(400).json({ error: "Canal inválido" });
+    if (!LEAD_RESULTADOS.includes(resultado)) return res.status(400).json({ error: "Resultado inválido" });
+    const passo = proximo_passo || null;
+    if (passo !== null && !LEAD_PASSOS.includes(passo)) return res.status(400).json({ error: "Próximo passo inválido" });
+    let proxData = isDateStr(proximo_contato) ? proximo_contato : null;
+    if (!proxData && passo && passo !== "Sem próximo contacto" && passo !== "Agendar visita") proxData = passoParaData(passo);
+    if (passo === "Agendar visita" && !proxData) return res.status(400).json({ error: "Agendar visita precisa de data" });
+    if (passo === "Sem próximo contacto") proxData = null;
+    // Quem contactou: utilizador autenticado (JWT) → staff_id explícito válido → senão nulo.
+    let staffId = null, staffName = null;
+    const tryIds = [req.user?.userId, staff_id].filter(Boolean);
+    for (const sid of tryIds) {
+      try {
+        const u = await pool.query("SELECT id, name FROM users WHERE id = $1", [sid]);
+        if (u.rows[0]) { staffId = u.rows[0].id; staffName = u.rows[0].name; break; }
+      } catch {}
+    }
+    const id = crypto.randomUUID();
+    const ins = await pool.query(
+      `INSERT INTO lead_contacts (id, lead_id, staff_id, staff_name, canal, resultado, proximo_passo, proximo_contato, observacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [id, req.params.id, staffId, staffName, canal, resultado, passo, proxData, observacao || null]
+    );
+    let upd = "UPDATE leads SET proximo_contato = $1, updated_at = NOW()";
+    const up = [proxData];
+    if (resultado === "Converteu" && lead.rows[0].status !== "convertido") {
+      upd += ", status = 'convertido', converted_at = NOW()";
+    }
+    upd += " WHERE id = $" + (up.length + 1) + " RETURNING *";
+    up.push(req.params.id);
+    const lr = await pool.query(upd, up);
+    const c = ins.rows[0];
+    res.status(201).json({ data: {
+      id: c.id, canal: c.canal, resultado: c.resultado, proximoPasso: c.proximo_passo,
+      proximoContato: c.proximo_contato, observacao: c.observacao,
+      staffNome: staffName, createdAt: c.created_at,
+    }, lead: mapLead(lr.rows[0]) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
   try {
-    const r = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
+    const r = await pool.query(`SELECT ${LEAD_WITH_STATS} WHERE l.id = $1`, [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
@@ -2500,6 +2640,10 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     const params = [];
     for (const k of ["name", "email", "phone", "company", "source", "notes"]) {
       if (req.body[k] !== undefined) { fields.push(`${k} = $${params.length + 1}`); params.push(req.body[k]); }
+    }
+    const camelMap = { whatsapp: "whatsapp", produtoInteresse: "produto_interesse", proximoContato: "proximo_contato", motivoPerda: "motivo_perda" };
+    for (const [ck, col] of Object.entries(camelMap)) {
+      if (req.body[ck] !== undefined) { fields.push(`${col} = $${params.length + 1}`); params.push(req.body[ck] || null); }
     }
     if (req.body.status !== undefined) {
       if (!LEAD_STATUS.includes(req.body.status)) return res.status(400).json({ error: "Status inválido" });
