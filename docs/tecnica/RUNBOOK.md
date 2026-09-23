@@ -11,6 +11,7 @@
 | JWT inválido | `JWT_SECRET` mudou | Novo login; confirmar env no Render | Técnico |
 | CORS bloqueado | origem não permitida | Confirmar `CORS_ORIGIN`/`FRONTEND_URL` no Render | Técnico |
 | OVG login 401 | password rodada/expirada | Atualizar `OVG_PASSWORD` no Render + `settings` | Responsável OVG |
+| É-kwanza 401 (`AADSTS7000215 invalid_client`) | client secret expirado/rodado — nada é gerado (Express e Referência) | Novo secret Pay4All/Azure (o Value) → `EKWANZA_CLIENT_SECRET` no Render + `.env` local; depois "Verificar Estado" regenera referências pendentes | Pay4All |
 | Deploy mau | build falhou | Render → rollback para deploy anterior; `git revert` | Técnico |
 | BD corrompida | — | Restore PITR Neon num branch, validar, promover | Dono Neon |
 
