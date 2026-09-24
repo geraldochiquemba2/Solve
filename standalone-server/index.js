@@ -70,10 +70,12 @@ if (!API_KEY || !JWT_SECRET) {
 // Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
 // por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
 const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
-// Diagnóstico de arranque: visível nos logs do Render.
+// Diagnóstico de arranque: visível nos logs do Render (só nomes/host, sem valores).
+const _DB_SRC = process.env.CRM_DATABASE_URL ? "CRM_DATABASE_URL" : (process.env.DATABASE_URL ? "DATABASE_URL" : "nenhuma");
+const _DB_HOST = ((_DB_SRC === "CRM_DATABASE_URL" ? process.env.CRM_DATABASE_URL : process.env.DATABASE_URL) || "").replace(/\?.*$/, "").split("@")[1]?.split(/[/:]/)[0] || "?";
 console.log(`[boot] NODE_ENV=${process.env.NODE_ENV || "?"}` +
   ` API_KEY=${API_KEY ? "ok" : "EM FALTA"} JWT_SECRET=${JWT_SECRET ? "ok" : "EM FALTA"}` +
-  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"}`);
+  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"} DB=${_DB_SRC}@${_DB_HOST}`);
 
 // Cademi (plataforma de cursos) — defaults; editável em Integrações > Configurar
 const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
@@ -845,7 +847,8 @@ app.get("/api/v1/customers", requireAuth, async (req, res) => {
       );
       res.json({ data: fb.rows, total: fb.rows.length });
     } catch (e2) {
-      res.json({ data: [], total: 0 });
+      console.error("[CUSTOMERS LIST] Error:", e2.message);
+      res.status(500).json({ error: "Erro a ler clientes. Ver logs do servidor." });
     }
   }
 });
@@ -1285,7 +1288,8 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
       byStatus: byStatus.rows
     });
   } catch (err) {
-    res.json({ data: [], total: 0, sum: 0, byStatus: [] });
+    console.error("[PAYMENTS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler pagamentos. Ver logs do servidor." });
   }
 });
 
@@ -1614,7 +1618,8 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
     const result = await pool.query("SELECT * FROM plans ORDER BY id DESC");
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[PLANS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler planos. Ver logs do servidor." });
   }
 });
 
@@ -2303,7 +2308,8 @@ app.get("/api/v1/automations", requireAuth, async (req, res) => {
     const r = await pool.query("SELECT * FROM automations ORDER BY created_at DESC");
     res.json({ data: r.rows.map(mapAutomation), total: r.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[AUTOMATIONS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler automações. Ver logs do servidor." });
   }
 });
 
@@ -2380,7 +2386,8 @@ app.get("/api/v1/users", requireAuth, async (req, res) => {
     }));
     res.json({ data, total: data.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[USERS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler utilizadores. Ver logs do servidor." });
   }
 });
 
@@ -2470,7 +2477,8 @@ app.get("/api/v1/ovg/members", requireAuth, async (req, res) => {
     const r = await pool.query("SELECT * FROM ovg_members ORDER BY name ASC LIMIT 500");
     res.json({ data: r.rows, total: r.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[OVG MEMBERS] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler membros OVG. Ver logs do servidor." });
   }
 });
 
@@ -2560,7 +2568,8 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS} ${wc} ORDER BY l.updated_at DESC LIMIT 500`, params);
     res.json({ data: r.rows.map(mapLead), total: r.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[LEADS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler leads. Ver logs do servidor." });
   }
 });
 
@@ -2842,7 +2851,8 @@ app.get("/api/v1/subscriptions", requireAuth, async (req, res) => {
     const result = await pool.query("SELECT * FROM subscriptions ORDER BY id DESC LIMIT 100");
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
-    res.json({ data: [], total: 0 });
+    console.error("[SUBSCRIPTIONS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler subscrições. Ver logs do servidor." });
   }
 });
 
