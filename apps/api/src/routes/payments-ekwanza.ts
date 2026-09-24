@@ -7,6 +7,7 @@ import { authenticate, authorize } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
 import { ekwanzaClient, EkwanzaError } from "../lib/ekwanza";
+import { processEkwanzaCallback } from "../lib/ekwanza-callback";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -329,75 +330,17 @@ router.get(
   },
 );
 
-// GPO payment callback webhook
+// GPO payment callback webhook (sempre via processador verificado)
 router.post(
   "/webhooks/ekwanza",
   async (req, res, next) => {
     try {
-      const body = req.body;
+      const outcome = await processEkwanzaCallback(req.body);
 
-      logger.info({ merchantTransactionId: body.merchantTransactionId }, "É-kwanza callback received");
-
-      // Verify signature if API key is configured
-      const apiKey = process.env.EKWANZA_API_KEY;
-      if (apiKey && body.meta?.signature) {
-        const isValid = ekwanzaClient.verifyCallback(body);
-        if (!isValid) {
-          logger.warn("É-kwanza callback signature verification failed");
-          throw new AppError(401, "Assinatura inválida");
-        }
-      }
-
-      const { merchantTransactionId, ekwanzaTransactionId, operationStatus, operationData } = body;
-
-      // Status mapping: 1=Success, 3=Cancelled/Expired, 4=Failed, 5=Error
-      const statusMap: Record<number, string> = {
-        1: "confirmado",
-        3: "rejeitado",
-        4: "rejeitado",
-        5: "rejeitado",
-      };
-
-      const mappedStatus = statusMap[operationStatus] || "pendente";
-
-      logger.info(
-        {
-          merchantTransactionId,
-          ekwanzaTransactionId,
-          operationStatus: mappedStatus,
-          amount: operationData?.amount,
-        },
-        "É-kwanza callback processed",
-      );
-
-      // Update payment record in database based on merchantTransactionId
-      const payment = await db.query.paymentsTable.findFirst({
-        where: eq(paymentsTable.code, merchantTransactionId),
-      });
-
-      if (payment) {
-        const updateData: Record<string, any> = {
-          status: mappedStatus as any,
-          updatedAt: new Date(),
-        };
-
-        if (ekwanzaTransactionId) {
-          updateData.ekwanzaOperationCode = ekwanzaTransactionId;
-        }
-
-        if (mappedStatus === "confirmado") {
-          updateData.paidAt = new Date();
-          updateData.reconciledAt = new Date();
-        }
-
-        await db
-          .update(paymentsTable)
-          .set(updateData)
-          .where(eq(paymentsTable.code, merchantTransactionId));
-
-        logger.info({ paymentId: payment.id, newStatus: mappedStatus }, "Payment updated from É-kwanza callback");
-      } else {
-        logger.warn({ merchantTransactionId }, "Payment not found for É-kwanza callback");
+      // Broadcast real-time update só quando o estado mudou de verdade.
+      if (outcome.verified && outcome.code && outcome.status) {
+        const { broadcastPaymentUpdate } = await import("../app");
+        broadcastPaymentUpdate({ type: "payment_updated", code: outcome.code, status: outcome.status });
       }
 
       res.json({ received: true });

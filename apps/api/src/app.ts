@@ -60,15 +60,19 @@ app.use(
   }),
 );
 
-// CORS
+// CORS: origens explícitas (lista separada por vírgula em APP_URL/CORS_ORIGIN).
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.APP_URL || "http://localhost:5173",
+  origin: ALLOWED_ORIGINS.length === 1 ? ALLOWED_ORIGINS[0] : ALLOWED_ORIGINS,
   credentials: true,
 }));
 
-// Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsing (limite anti-DoS)
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 app.use(cookieParser());
 
 // Global rate limiting
@@ -91,13 +95,12 @@ app.use("/api/v1/webhooks/pay4all", webhookRateLimit);
 // API routes (versioned)
 app.use("/api/v1", router);
 
-// SSE: Real-time payment updates
-app.get("/api/v1/payments/stream", (req, res) => {
+// SSE: Real-time payment updates (só staff logado; EventSource passa ?api_key=)
+app.get("/api/v1/payments/stream", authenticate, (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
   });
   res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
   paymentSSEClients.add(res);

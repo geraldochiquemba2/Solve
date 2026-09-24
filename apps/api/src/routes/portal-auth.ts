@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { customersTable, portalOtpsTable } from "@workspace/db/schema";
@@ -38,15 +39,26 @@ export function __clearPortalRateLimit() {
   requestHits.clear();
 }
 
+// Comparação timing-safe entre o código e o hash guardado.
+function hashMismatch(code: string, expectedHash: string): boolean {
+  const actual = hashOtp(code);
+  const a = Buffer.from(actual, "utf8");
+  const b = Buffer.from(expectedHash, "utf8");
+  if (a.length !== b.length) return true;
+  return !crypto.timingSafeEqual(a, b);
+}
+
 router.post("/portal/otp/request", validate(requestSchema), async (req, res, next) => {
   try {
     const { phone } = req.body as { phone: string };
     const normalized = normalizePhone(phone);
     checkRateLimit(normalized);
-    const { sentVia, devCode } = await requestOtp(phone);
+    await requestOtp(phone);
+    // SEGURANÇA: resposta sempre genérica — nunca devolve o código nem diz se
+    // o número existe (anti-enumeração). Em dev, o código sai no log do servidor.
     res.json({
-      sentVia,
-      ...(devCode && !process.env.WHATSAPP_TOKEN ? { devCode } : {}),
+      ok: true,
+      message: "Se o número estiver registado, receberá um código em 5 minutos",
     });
   } catch (err) {
     next(err);
@@ -73,7 +85,7 @@ router.post("/portal/otp/verify", validate(verifySchema), async (req, res, next)
       throw new AppError(429, "Demasiadas tentativas. Peça um novo código");
     }
 
-    if (hashOtp(code) !== otp.codeHash) {
+    if (hashMismatch(code, otp.codeHash)) {
       await db
         .update(portalOtpsTable)
         .set({ attempts: (otp.attempts ?? 0) + 1 })
@@ -110,10 +122,11 @@ router.post("/portal/otp/verify", validate(verifySchema), async (req, res, next)
     }
 
     if (!resolved) {
-      throw new AppError(404, "Número não registado como cliente");
+      // SEGURANÇA: mensagem genérica — não confirma se o número existe.
+      throw new AppError(400, "Código inválido ou expirado");
     }
     if (resolved.state !== "activo") {
-      throw new AppError(403, "Conta de cliente inactiva");
+      throw new AppError(400, "Código inválido ou expirado");
     }
 
     const token = generatePortalToken(resolved.id, phone);

@@ -61,13 +61,11 @@ export async function requestOtp(rawPhone: string): Promise<{ sentVia: SentVia; 
   const phone = normalizePhone(rawPhone);
   const customer = await findCustomerByPhone(phone);
 
-  // Resposta genérica para não enumerar clientes — mas spec exige validar
-  // existência: lançamos 404 com mensagem genérica.
-  if (!customer) {
-    throw new AppError(404, "Número não registado como cliente");
-  }
-  if (customer.state !== "activo") {
-    throw new AppError(403, "Conta de cliente inactiva");
+  // SEGURANÇA anti-enumeração: número desconhecido ou conta inactiva responde
+  // igual a sucesso, mas NÃO cria OTP. O atacante não distingue.
+  if (!customer || customer.state !== "activo") {
+    logger.warn({ phone }, "OTP pedido para número desconhecido/inactivo (resposta genérica)");
+    return { sentVia: "whatsapp" };
   }
 
   const code = generateOtp();
@@ -80,8 +78,13 @@ export async function requestOtp(rawPhone: string): Promise<{ sentVia: SentVia; 
   let sentVia: SentVia = "whatsapp";
   let devCode: string | undefined;
 
-  // Fallback DEV: sem WHATSAPP_TOKEN, não tenta enviar — loga e devolve devCode.
+  // Sem WHATSAPP_TOKEN: em dev, loga e devolve devCode para testes manuais;
+  // em produção NUNCA devolve o código (falha segura — configurar WhatsApp).
   if (!process.env.WHATSAPP_TOKEN) {
+    if (process.env.NODE_ENV === "production") {
+      logger.error({ phone }, "WHATSAPP_TOKEN em falta em produção — OTP não enviado");
+      return { sentVia, devCode };
+    }
     sentVia = "dev";
     devCode = code;
     logger.warn({ phone }, `[DEV] OTP ${code} (WhatsApp não configurado)`);

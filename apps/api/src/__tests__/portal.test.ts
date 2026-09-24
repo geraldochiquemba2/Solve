@@ -23,7 +23,9 @@ import { __clearPortalRateLimit } from "../routes/portal-auth";
 
 const mockDb = vi.mocked(db);
 
-const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
+// SEGURANÇA: segredo fixo só para testes (middlewares exigem JWT_SECRET).
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-only-secret";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function sha256(s: string): string {
   return crypto.createHash("sha256").update(s, "utf8").digest("hex");
@@ -82,7 +84,7 @@ beforeEach(() => {
 });
 
 describe("Portal OTP · POST /api/v1/portal/otp/request", () => {
-  it("request ok: 200, sem OTP em claro na DB (só hash sha256)", async () => {
+  it("request ok: 200 genérico, sem OTP em claro na DB (só hash sha256)", async () => {
     (mockDb.query.customersTable.findFirst as any).mockResolvedValue(activeCustomer);
 
     let stored: any = null;
@@ -98,40 +100,44 @@ describe("Portal OTP · POST /api/v1/portal/otp/request", () => {
       .send({ phone: "934000001" });
 
     expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // SEGURANÇA: o código nunca sai na resposta (só no log do servidor em dev).
+    expect(res.body.devCode).toBeUndefined();
     expect(stored).not.toBeNull();
     expect(stored.codeHash).toMatch(/^[a-f0-9]{64}$/);
-    // O hash guardado tem de corresponder ao devCode devolvido (prova de
-    // comparação por hash) e nunca igualar o código em claro.
-    if (res.body.devCode) {
-      expect(res.body.devCode).toMatch(/^\d{6}$/);
-      expect(stored.codeHash).toBe(sha256(res.body.devCode));
-      expect(stored.codeHash).not.toBe(res.body.devCode);
-    }
   });
 
-  it("número inexistente: 404 sem enumerar dados", async () => {
+  it("número inexistente: 200 genérico, sem criar OTP (anti-enumeração)", async () => {
     (mockDb.query.customersTable.findFirst as any).mockResolvedValue(undefined);
+    const insertSpy = vi.fn().mockReturnValue({ values: () => ({}) });
+    (mockDb.insert as any).mockImplementation(insertSpy);
 
     const res = await request(app)
       .post("/api/v1/portal/otp/request")
       .send({ phone: "934000099" });
 
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe("Número não registado como cliente");
+    // Resposta igual à de sucesso — o atacante não distingue.
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.devCode).toBeUndefined();
+    expect(insertSpy).not.toHaveBeenCalled();
   });
 
-  it("conta inactiva: 403", async () => {
+  it("conta inactiva: 200 genérico, sem criar OTP", async () => {
     (mockDb.query.customersTable.findFirst as any).mockResolvedValue({
       ...activeCustomer,
       state: "inactivo",
     });
+    const insertSpy = vi.fn().mockReturnValue({ values: () => ({}) });
+    (mockDb.insert as any).mockImplementation(insertSpy);
 
     const res = await request(app)
       .post("/api/v1/portal/otp/request")
       .send({ phone: "934000001" });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("Conta de cliente inactiva");
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(insertSpy).not.toHaveBeenCalled();
   });
 
   it("6º pedido na mesma hora para o mesmo número: 429", async () => {

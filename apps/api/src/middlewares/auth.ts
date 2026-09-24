@@ -1,11 +1,35 @@
 import { type Request, type Response, type NextFunction } from "express";
+import crypto from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
+// SEGURANÇA: sem fallbacks públicos. Em produção o servidor recusa arrancar
+// sem JWT_SECRET/API_KEY (ver getJwtSecret/getApiKey). Em dev usa valores
+// locais com aviso — nunca em produção.
+function getJwtSecret(): string {
+  const s = process.env.JWT_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET em falta — recusar arranque em produção");
+  }
+  console.warn("[segurança] JWT_SECRET em falta: a usar segredo local de dev");
+  return "dev-only-insecure-secret";
+}
 
-// Paridade com produção (standalone-server/index.js :: requireAuth):
-// sem Bearer/cookie, aceita X-API-Key (frontend/turnstile).
-const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
+function getApiKey(): string | undefined {
+  const k = process.env.API_KEY;
+  if (k) return k;
+  if (process.env.NODE_ENV === "production") return undefined; // fail-closed
+  console.warn("[segurança] API_KEY em falta: auth por chave desligada em dev");
+  return undefined;
+}
+
+// Comparação timing-safe para não vazar a chave por tempo de resposta.
+function apiKeyMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 
 export interface AuthPayload {
   userId: string;
@@ -35,7 +59,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 
   if (!token) {
     const key = req.headers["x-api-key"] || req.query.api_key;
-    if (typeof key === "string" && key === API_KEY) {
+    const expected = getApiKey();
+    if (expected && typeof key === "string" && apiKeyMatches(key, expected)) {
       req.user = { userId: "api-key", role: "administrador", email: "" };
       next();
       return;
@@ -45,7 +70,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    const decoded = jwt.verify(token, getJwtSecret()) as AuthPayload;
     // Isolamento portal-cliente: tokens com role=cliente só valem nas rotas
     // /portal/* (authenticatePortal). Todas as rotas staff usam este
     // middleware — sem isto um token portal lia GETs staff sem authorize.
@@ -81,5 +106,5 @@ export function generateToken(payload: AuthPayload): string {
   const options: SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN || "24h") as SignOptions["expiresIn"],
   };
-  return jwt.sign(payload, JWT_SECRET, options);
+  return jwt.sign(payload, getJwtSecret(), options);
 }

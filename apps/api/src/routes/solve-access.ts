@@ -1,9 +1,24 @@
 import { Router, Request, Response } from 'express';
+import { authenticate } from '../middlewares/auth';
 
 const router = Router();
 
+// SEGURANÇA: proxy só para staff logado (antes era público).
+router.use(authenticate);
+
 const RENDER_URL = process.env.RENDER_URL || 'https://solve-sqoh.onrender.com';
-const RENDER_API_KEY = process.env.RENDER_API_KEY || 'solve-crm-api-key-2024';
+// SEGURANÇA: sem fallback público — sem RENDER_API_KEY o proxy recusa.
+const RENDER_API_KEY = process.env.RENDER_API_KEY || '';
+
+function requireProxyKey(_req: Request, res: Response, next: () => void) {
+  if (!RENDER_API_KEY) {
+    res.status(503).json({ success: false, error: 'Proxy Solve Access não configurado' });
+    return;
+  }
+  next();
+}
+
+router.use(requireProxyKey);
 
 async function renderFetch(path: string, options: RequestInit = {}): Promise<unknown> {
   const res = await fetch(`${RENDER_URL}${path}`, {

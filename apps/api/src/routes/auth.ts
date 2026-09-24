@@ -25,7 +25,9 @@ const registerSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   email: z.string().email("Email inválido"),
   password: z.string().min(8, "Password deve ter pelo menos 8 caracteres"),
-  role: z.enum(["administrador", "gestor", "comercial", "financeiro", "operacional"]).default("comercial"),
+  // SEGURANÇA: auto-registo público nunca cria administrador/gestor.
+  // Contas elevadas criam-se pela seed inicial ou por um administrador logado.
+  role: z.enum(["comercial", "financeiro", "operacional"]).default("comercial"),
   phone: z.string().optional(),
 });
 
@@ -41,59 +43,15 @@ const resetPasswordSchema = z.object({
 router.post("/auth/login", validate(loginSchema), async (req, res, next) => {
   try {
     const { email, phone, password } = req.body;
-    const identifier = email || phone;
 
     let user;
-    try {
-      if (email) {
-        user = await db.query.usersTable.findFirst({
-          where: eq(usersTable.email, email),
-        });
-      } else if (phone) {
-        user = await db.query.usersTable.findFirst({
-          where: eq(usersTable.phone, phone),
-        });
-      }
-    } catch (dbErr) {
-      if (process.env.NODE_ENV === "development") {
-        const payload: AuthPayload = {
-          userId: "dev-user-id",
-          role: "administrador",
-          email: identifier || "dev@solvecorporate.ao",
-        };
-        const token = generateToken(payload);
-        res.cookie('token', token, {
-          httpOnly: true,
-          secure: false,
-          sameSite: 'strict',
-          maxAge: 24 * 60 * 60 * 1000,
-          path: '/',
-        });
-        return res.json({
-          token,
-          user: { id: "dev-user-id", name: "Administrador (dev)", email: identifier || "", role: "administrador" },
-        });
-      }
-      throw dbErr;
-    }
-
-    if (!user && process.env.NODE_ENV === "development") {
-      const payload: AuthPayload = {
-        userId: "dev-user-id",
-        role: "administrador",
-        email: identifier || "dev@solvecorporate.ao",
-      };
-      const token = generateToken(payload);
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: false,
-        sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000,
-        path: '/',
+    if (email) {
+      user = await db.query.usersTable.findFirst({
+        where: eq(usersTable.email, email),
       });
-      return res.json({
-        token,
-        user: { id: "dev-user-id", name: "Administrador (dev)", email: identifier || "", role: "administrador" },
+    } else if (phone) {
+      user = await db.query.usersTable.findFirst({
+        where: eq(usersTable.phone, phone),
       });
     }
 
@@ -146,7 +104,12 @@ router.post("/auth/login", validate(loginSchema), async (req, res, next) => {
 });
 
 router.post("/auth/logout", (_req, res) => {
-  res.clearCookie('token', { path: '/' });
+  res.clearCookie('token', {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
   res.json({ message: "Sessão terminada" });
 });
 
@@ -228,9 +191,9 @@ router.post("/auth/forgot-password", validate(forgotPasswordSchema), async (req,
         });
       }
 
-      // In production, send email with resetToken link
-      // For now, log it for development
-      console.log(`[PASSWORD RESET] Token for ${email}: ${resetToken}`);
+      // SEGURANÇA: token nunca vai para logs. Em produção enviar por email
+      // (fornecedor SMTP); em dev, usar a BD local para testes manuais.
+      // Token com 1h de validade, uso único (apagado após reset).
     }
 
     res.json({ message: "Se o email existir, receberá um link de recuperação" });
