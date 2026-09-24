@@ -389,7 +389,9 @@ export function useSolveAccessStream(onEvent: (event: AccessStreamEvent) => void
   const [history, setHistory] = useState<AccessStreamEvent[]>([]);
 
   useEffect(() => {
-    const es = new EventSource(`${ACCESS_API}/api/v1/access/stream?api_key=${ACCESS_API_KEY}`);
+    // VULN-16: sem ?api_key= no URL (vazava em logs). O cookie httpOnly
+    // segue automaticamente (mesma origem em prod; withCredentials em dev).
+    const es = new EventSource(`${ACCESS_API}/api/v1/access/stream`, { withCredentials: true });
 
     es.onopen = () => setConnected(true);
 
@@ -421,7 +423,8 @@ export function usePaymentStream(onUpdate: (data: { code: string; status: string
 
   useEffect(() => {
     const apiBase = import.meta.env.VITE_API_URL || '';
-    const es = new EventSource(`${apiBase}/api/v1/payments/stream`);
+    // Cookie httpOnly segue automaticamente (com credenciais em dev).
+    const es = new EventSource(`${apiBase}/api/v1/payments/stream`, { withCredentials: true });
 
     es.onopen = () => setConnected(true);
 

@@ -69,15 +69,56 @@ Trocar no Render + Neon + OVG + É-kwanza + Cademi: `JWT_SECRET`, `API_KEY`,
 Depois: novo login para todos (JWT antigo morre), atualizar PC do ginásio,
 Supabase (`CRM_API_KEY`) e `.env` local. Nunca commitar `.env`.
 
+## Resposta ao relatório externo de 24/09/2026 (17 itens)
+
+Auditoria grey-box independente confirmou o que já tínhamos fechado e achou
+mais 4 pontos. Estado após a ronda 2 (código já no ar):
+
+| ID | Item | Estado |
+|---|---|---|
+| VULN-01 | Credenciais hardcoded | Código limpo. **Falta (cliente): rodar password Neon `neondb_owner` + `OVG_PASSWORD` e purgar histórico Git** (ver abaixo) |
+| VULN-02 | Chave estática + JWT default | Fechado: fail-closed + timing-safe. Retestar: `X-API-Key: solve-crm-api-key-2024` → 401 |
+| VULN-03 | Webhook forjável | Fechado: confirmação GPO obrigatória. Prova viva apagada: linha falsa `AUDIT_NONEXISTENT_TEST` removida da BD |
+| VULN-04 | Unlock + `/db-*` abertos | Fechado: unlock com login; `/db-*` → 410 |
+| VULN-05 | Registo a admin | Fechado (whitelist) + convites com papel validado |
+| VULN-06 | Sem RBAC | **Fechado ronda 2**: `requireRole` no standalone (settings/planos/automações→gestor+; users→admin; cancelamento→financeiro+; syncs externas→gestor+). `apps/api` já tinha `authorize()` |
+| VULN-07 | IDOR | Parcial: `GET /users/:id` próprio-ou-chefia; gestão de users só admin. Leituras/edições de clientes/leads partilhadas **por desenho** (um ginásio, equipa partilha carteira) |
+| VULN-08 | Bypass frontend | Fechado: sem fallback local, CRM exige JWT |
+| VULN-09 | SSE + CORS `*` | Fechado: streams com login (cookie httpOnly), sem `*` |
+| VULN-10 | Sem rate-limit | Fechado: rate-limit em memória (200/20/60) |
+| VULN-11 | Reset em logs | Fechado: sem token em logs. SMTP continua TODO |
+| VULN-12 | JWT em localStorage | Aceite (ver riscos). Sem blacklist: logout invalida cookie; token expira em 24h |
+| VULN-13 | Stack traces | **Fechado ronda 2**: 500 genérico em 52 rotas + handler global + `x-powered-by` off |
+| VULN-14 | SSL `rejectUnauthorized:false` | Aceite (compat. Neon; `sslmode=require`). Mudar para `true` exige teste de ligação |
+| VULN-15 | Headers | Parcial: nosniff/DENY/Referrer/HSTS + `x-powered-by` off. **Sem CSP** (SPA Vite com inline — CSP quebraria; reavaliar com nonce) |
+| VULN-16 | `?api_key=` no URL | **Fechado ronda 2**: chave só via header; streams usam cookie (`withCredentials`) |
+| VULN-17 | Passwords fracas | Fechado: mínimo 8 em registo + reset (front e back) |
+
+## VULN-01 restante: rotação + histórico (ação do cliente, P0)
+
+1. **Neon**: dashboard do projeto → Roles → reset da password de `neondb_owner` →
+   atualizar `DATABASE_URL`/`CRM_DATABASE_URL` no Render + `.env` local.
+2. **OVG**: nova password → `OVG_PASSWORD` no Render + `settings`.
+3. **É-kwanza/Cademi**: rodar `EKWANZA_CLIENT_SECRET`, `CADEMI_API_KEY`, `API_KEY`, `JWT_SECRET`
+   (os dois últimos já têm valores novos gerados em Set/2026 — confirmar no Render).
+4. **Histórico Git**: os segredos existem em commits antigos. Purgar com
+   `git filter-repo` (reescreve hashes — coordenar com a equipa) ou, no mínimo,
+   nunca dar acesso ao histórico a terceiros e rodar tudo acima (password rodada
+   = histórico inofensivo).
+
 ## Riscos residuais aceites (documentados, não ignorados)
 
+- **`?api_key=` removido (ronda 2)**: streams usam cookie httpOnly; chave só em
+  header para máquinas/scripts. Fallback de chave no frontend só quando não há JWT.
+- **Leituras/edições de clientes e leads partilhadas por desenho**: um ginásio,
+  uma carteira — toda a equipa staff vê e edita. Apagar lead e gerir users exigem
+  chefia. Se um dia houver várias lojas, implementar tenancy.
 - **JWT em `localStorage`** — XSS roubaria sessão. Mitigado com headers,
   sem `dangerouslySetInnerHTML` com input de user, e sem `eval`. Migração para
   cookie-only exige mudar o frontend (fora deste âmbito).
-- **`?api_key=` no EventSource** — `EventSource` não envia headers; a chave vai
-  no query (fica em logs). Mitigado: chave rotativa + só streams de leitura.
 - **SSL `rejectUnauthorized:false`** no driver `pg` — aceite por compatibilidade
   Neon; a string exige `sslmode=require` (cifrado, sem verificação total).
+  Mudar para `true` exige teste de ligação (VULN-14).
 - **Registo público continua aberto** (comercial/financeiro/operacional) —
   se houver spam, pôr por convite (desligar `POST /auth/register` público).
 - **Callback É-kwanza sem HMAC do fornecedor** — compensado com confirmação

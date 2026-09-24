@@ -1,5 +1,20 @@
 # Changelog
 
+## Segurança ronda 2 (resposta ao relatório externo 24/09/2026, 17 itens)
+- RBAC no standalone (`requireRole`): settings/planos/automações/import/syncs
+  externas→gestor+; convites/toggle users→admin; cancelar pagamento→financeiro+;
+  apagar lead→gestor+. `apps/api` já tinha `authorize()`; fechado `GET /users/:id`
+  (próprio-ou-chefia).
+- Erros 500 genéricos em 52 rotas + handler global + `x-powered-by` off.
+- Chave API só via header (`?api_key=` removido); streams SSE via cookie
+  httpOnly (`withCredentials`); cookies lidos sem dependências.
+- Password mínima 8 também no reset; convites com papel validado.
+- Frontend: `authHeaders()` (Bearer primeiro) em todas as páginas; removido
+  `?api_key=` dos streams.
+- Linha falsa `AUDIT_NONEXISTENT_TEST` + 10 testes sem cliente apagados da BD.
+- Docs: tabela VULN-01..17 em `10-SEGURANCA.md` + checklist de rotação/histórico.
+- Por fazer (cliente): rodar Neon/OVG/É-kwanza/Cademi + purgar histórico Git.
+
 ## Segurança Set/2026 (parte 1: apps/api · parte 2: standalone · parte 3: scripts/front/deploy)
 - Auth fail-closed (`JWT_SECRET`/`API_KEY` sem fallbacks públicos; recusa
   arranque em prod; timing-safe); portal isolado (tokens `cliente` fora do staff).

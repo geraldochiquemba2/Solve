@@ -115,16 +115,33 @@ function apiKeyMatches(provided, expected) {
   return crypto.timingSafeEqual(a, b);
 }
 
+// VULN-16: cookies sem dependências (o EventSource do browser envia o cookie
+// httpOnly automaticamente, por isso a chave já não precisa de ir no URL).
+function parseCookies(req) {
+  const out = {};
+  const h = req.headers?.cookie;
+  if (!h) return out;
+  for (const part of h.split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0) {
+      try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); }
+      catch { out[part.slice(0, i).trim()] = part.slice(i + 1).trim(); }
+    }
+  }
+  return out;
+}
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   let token;
   if (authHeader?.startsWith("Bearer ")) {
     token = authHeader.split(" ")[1];
-  } else if (req.cookies?.token) {
-    token = req.cookies.token;
+  } else {
+    token = parseCookies(req).token;
   }
   if (!token) {
-    const key = req.headers["x-api-key"] || req.query.api_key;
+    // VULN-16: chave só via header (nunca ?api_key= no URL — vaza em logs).
+    const key = req.headers["x-api-key"];
     if (apiKeyMatches(key, API_KEY)) return next();
     return res.status(401).json({ error: "Token de autenticação necessário" });
   }
@@ -141,22 +158,31 @@ function requireAuth(req, res, next) {
   }
 }
 
-// Auth das máquinas do ginásio (só chave, sem JWT): sync_crm.py, sync_ovg.py,
-// edge_agent.py enviam `X-API-Key: <API_KEY>` (ou ?api_key=). Sem chave → 401.
+// Auth das máquinas do ginásio (só chave via header, sem JWT): sync_crm.py,
+// sync_ovg.py, edge_agent.py enviam `X-API-Key: <API_KEY>`. Sem chave → 401.
 function requireEdgeAuth(req, res, next) {
-  const key = req.headers["x-api-key"] || req.headers["x-edge-key"] || req.query.api_key;
+  const key = req.headers["x-api-key"] || req.headers["x-edge-key"];
   if (apiKeyMatches(key, EDGE_API_KEY)) return next();
   return res.status(401).json({ error: "Chave de máquina inválida" });
 }
 
-function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== "administrador") {
-    return res.status(403).json({ error: "Sem permissão para esta acção" });
-  }
-  next();
+function requireRole(...allowed) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: "Não autenticado" });
+    // Chave de máquina (userId api-key) vale como admin para ingestão, mas
+    // nunca para gestão: rotas admin exigem JWT de utilizador com papel.
+    if (req.user.userId === "api-key" || !allowed.includes(req.user.role)) {
+      return res.status(403).json({ error: "Sem permissão para esta acção" });
+    }
+    next();
+  };
 }
+const requireAdmin = requireRole("administrador");
+const requireManager = requireRole("administrador", "gestor");
+const requireFinance = requireRole("administrador", "gestor", "financeiro");
 
 const app = express();
+app.disable("x-powered-by"); // VULN-15: não anunciar framework.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -314,7 +340,7 @@ app.get("/api/v1/settings", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/v1/settings", requireAuth, async (req, res) => {
+app.put("/api/v1/settings", requireAuth, requireManager, async (req, res) => {
   try {
     const settings = req.body?.settings || req.body || {};
     for (const [key, value] of Object.entries(settings)) {
@@ -336,7 +362,7 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
     _settingsCache = { at: 0, map: {} };
     res.json({ message: "Definições guardadas" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -368,7 +394,7 @@ app.post("/api/v1/access/sync", requireEdgeAuth, async (req, res) => {
 
     res.json({ ok: true, inserted });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -403,7 +429,7 @@ app.post("/api/v1/access/ovg-sync", requireEdgeAuth, async (req, res) => {
     pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg')", [upserted]).catch(() => {});
     res.json({ ok: true, upserted });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -414,7 +440,7 @@ app.get("/api/v1/access/ovg-status", requireAuth, async (req, res) => {
     const last = await pool.query("SELECT MAX(synced_at) as last_sync FROM ovg_members");
     res.json({ total: parseInt(count.rows[0].cnt), lastSync: last.rows[0].last_sync });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -457,7 +483,7 @@ async function ovgGetMembers(token) {
   return data.clients_data || data.data?.clients_data || [];
 }
 
-app.post("/api/v1/access/ovg-reseed", requireAuth, async (req, res) => {
+app.post("/api/v1/access/ovg-reseed", requireAuth, requireManager, async (req, res) => {
   // On-demand (zona de Clientes no CRM): sem polling de fundo (cota Neon).
   // Aceita Bearer (login) ou X-API-Key (frontend/turnstile).
   const user = await cfg("ovg_username", OVG_USERNAME);
@@ -490,7 +516,7 @@ app.post("/api/v1/access/ovg-reseed", requireAuth, async (req, res) => {
     pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg-reseed')", [upserted]).catch(() => {});
     res.json({ ok: true, upserted, total: members.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -506,7 +532,7 @@ app.get("/api/v1/access/sync-status", requireAuth, async (req, res) => {
       todaySyncs: parseInt(todaySyncs.rows[0].cnt),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -551,7 +577,7 @@ app.post("/api/v1/access/midnight-reset", requireAuth, async (req, res) => {
     );
     res.json({ ok: true, checkedOut: r.rowCount });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -591,7 +617,7 @@ app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -654,7 +680,7 @@ app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
       pagination: { page, limit, total: parseInt(totalResult.rows[0].cnt), totalPages: Math.ceil(parseInt(totalResult.rows[0].cnt) / limit) },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -684,7 +710,7 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -730,7 +756,7 @@ app.post("/api/v1/terminal/unlock", requireAuth, async (req, res) => {
       res.status(502).json({ ok: false, error: "Catraca inalcançável. Verificar PC do ginásio." });
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -783,7 +809,7 @@ app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
     });
     res.json({ data: filtered, total: filtered.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -900,12 +926,12 @@ app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
       if (fb.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
       res.json({ data: fb.rows[0] });
     } catch (e2) {
-      res.status(500).json({ error: err.message });
+      console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
     }
   }
 });
 
-app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
+app.post("/api/v1/customers/import-dates", requireAuth, requireManager, async (req, res) => {
   try {
     const { rows } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -930,7 +956,7 @@ app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
     }
     res.json({ data: { updated, notFound, errors, total: rows.length }, message: `${updated} actualizados, ${notFound} não encontrados` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1075,7 +1101,7 @@ app.post("/api/v1/auth/forgot-password", rateLimit(20), async (req, res) => {
     res.json({ message: "Se o email existir, receberá um link de recuperação" });
   } catch (err) {
     console.error("[AUTH FORGOT] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1085,6 +1111,10 @@ app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: "Token e password são obrigatórios" });
+    // VULN-17: password mínima também no reset.
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: "Password deve ter pelo menos 8 caracteres" });
+    }
 
     const result = await pool.query("SELECT key, value FROM settings WHERE key LIKE 'password_reset_%'");
     let resetEntry = null;
@@ -1106,7 +1136,7 @@ app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
     res.json({ message: "Password atualizada com sucesso" });
   } catch (err) {
     console.error("[AUTH RESET] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1215,7 +1245,7 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
     res.json({ received: true, verified: true });
   } catch (err) {
     console.error("[EKWANZA-WEBHOOK] Erro:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1308,12 +1338,12 @@ app.get("/api/v1/payments/minha-historico", requireAuth, async (req, res) => {
        FROM payments p WHERE (${conds.join(" OR ")}) ORDER BY p.created_at DESC LIMIT 20`, params);
     res.json({ data: r.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
 // Cancelar pagamento pendente (aluno). Só o próprio (confere email/telefone).
-app.post("/api/v1/payments/:code/cancel", requireAuth, async (req, res) => {
+app.post("/api/v1/payments/:code/cancel", requireAuth, requireFinance, async (req, res) => {
   try {
     const code = String(req.params.code);
     const email = String(req.body?.email || "").toLowerCase().trim();
@@ -1336,7 +1366,7 @@ app.post("/api/v1/payments/:code/cancel", requireAuth, async (req, res) => {
     console.log(`[PAYMENTS] ${code}: cancelado pelo aluno`);
     res.json({ ok: true, code });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1607,7 +1637,7 @@ app.post("/api/v1/payments", requireAuth, async (req, res) => {
       setImmediate(() => fireEkwanzaCharge(bg).catch(e => console.error("[PAYMENTS] bg:", e.message)));
     }
   } catch (err) {
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -1652,7 +1682,8 @@ async function cademiFetch(path, options = {}) {
     }
     return data;
   } catch (err) {
-    return { success: false, error: err.message };
+    console.error("[CADEMI]", err?.message || err);
+    return { success: false, error: "Falha de rede ao contactar a Cademi" };
   }
 }
 
@@ -1806,14 +1837,14 @@ app.get("/api/v1/cademi/alunos-cobranca", requireAuth, async (req, res) => {
     });
     res.json({ data, total: data.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
 // Sync Cademi → CRM: cria/atualiza customers + subscriptions + payments (confirmado)
 // para alunos com acesso ativo. Idempotente: re-correr não duplica (code único).
 // Alimenta o "Controlo de pagamentos" (/cademi/alunos-cobranca cruza por metadata.email).
-app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
+app.post("/api/v1/cademi/sync", requireAuth, requireManager, async (req, res) => {
   try {
     const r = await cademiFetch("/usuario?usuario_email_id_doc=");
     if (!r.success) return res.status(502).json({ error: r.error });
@@ -1941,7 +1972,7 @@ app.post("/api/v1/cademi/sync", requireAuth, async (req, res) => {
     }
     res.json({ ok: true, cademiUsers: users.length, created, updated, subscriptions: subs, payments: pays, errors: errors.slice(0, 10) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2033,7 +2064,7 @@ app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
     }
     res.json({ data: list });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2058,7 +2089,7 @@ app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
     } catch {}
     res.status(404).json({ error: "nome não encontrado" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2089,7 +2120,7 @@ app.get("/api/v1/cademi/acesso", requireAuth, async (req, res) => {
     });
     res.json({ data });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2119,7 +2150,7 @@ app.post("/api/v1/webhooks/cademi", rateLimit(60), async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2206,7 +2237,7 @@ app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2244,7 +2275,7 @@ app.get("/api/v1/dashboard/charts", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2253,7 +2284,7 @@ app.get("/api/v1/integrations", requireAuth, async (req, res) => {
     const list = await getIntegrationsLive();
     res.json({ data: list, total: list.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2291,7 +2322,7 @@ app.get("/api/v1/audit-logs", requireAuth, async (req, res) => {
     const filtered = entity ? events.filter(e => e.entity === entity) : events;
     res.json({ data: filtered.slice(0, 100), total: filtered.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2313,7 +2344,7 @@ app.get("/api/v1/automations", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/automations", requireAuth, async (req, res) => {
+app.post("/api/v1/automations", requireAuth, requireManager, async (req, res) => {
   try {
     const { name, trigger, action } = req.body;
     if (!name || !trigger || !action) return res.status(400).json({ error: "name, trigger e action são obrigatórios" });
@@ -2323,11 +2354,11 @@ app.post("/api/v1/automations", requireAuth, async (req, res) => {
     );
     res.status(201).json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.patch("/api/v1/automations/:id", requireAuth, async (req, res) => {
+app.patch("/api/v1/automations/:id", requireAuth, requireManager, async (req, res) => {
   try {
     const fields = [];
     const params = [];
@@ -2341,27 +2372,27 @@ app.patch("/api/v1/automations/:id", requireAuth, async (req, res) => {
     if (r.rows.length === 0) return res.status(404).json({ error: "Automação não encontrada" });
     res.json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.delete("/api/v1/automations/:id", requireAuth, async (req, res) => {
+app.delete("/api/v1/automations/:id", requireAuth, requireManager, async (req, res) => {
   try {
     const r = await pool.query("DELETE FROM automations WHERE id = $1", [req.params.id]);
     if (r.rowCount === 0) return res.status(404).json({ error: "Automação não encontrada" });
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.patch("/api/v1/automations/:id/toggle", requireAuth, async (req, res) => {
+app.patch("/api/v1/automations/:id/toggle", requireAuth, requireManager, async (req, res) => {
   try {
     const r = await pool.query("UPDATE automations SET active = NOT active, updated_at = NOW() WHERE id = $1 RETURNING *", [req.params.id]);
     if (r.rows.length === 0) return res.status(404).json({ error: "Automação não encontrada" });
     res.json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2391,10 +2422,15 @@ app.get("/api/v1/users", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/users/invite", requireAuth, async (req, res) => {
+app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, email, role } = req.body;
     if (!name || !email) return res.status(400).json({ error: "Nome e email são obrigatórios" });
+    // VULN-05/06: papel válido obrigatório (só admin chega aqui).
+    const INVITE_ROLES = ["administrador", "gestor", "comercial", "financeiro", "operacional"];
+    if (role && !INVITE_ROLES.includes(role)) {
+      return res.status(400).json({ error: "Papel inválido" });
+    }
     const cols = await usersColumns();
     const tempPass = crypto.randomBytes(6).toString('hex');
     const hash = await bcrypt.hash(tempPass, SALT_ROUNDS);
@@ -2420,11 +2456,11 @@ app.post("/api/v1/users/invite", requireAuth, async (req, res) => {
     }
     res.status(201).json({ data: { ...row, tempPassword: tempPass } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.patch("/api/v1/users/:id/toggle", requireAuth, async (req, res) => {
+app.patch("/api/v1/users/:id/toggle", requireAuth, requireAdmin, async (req, res) => {
   try {
     const cols = await usersColumns();
     if (!cols.has("active")) return res.status(400).json({ error: "Tabela users sem coluna active" });
@@ -2432,7 +2468,7 @@ app.patch("/api/v1/users/:id/toggle", requireAuth, async (req, res) => {
     if (r.rows.length === 0) return res.status(404).json({ error: "Utilizador não encontrado" });
     res.json({ data: r.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2447,7 +2483,7 @@ app.get("/api/v1/ovg/sync/status", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/ovg/sync/now", requireAuth, async (req, res) => {
+app.post("/api/v1/ovg/sync/now", requireAuth, requireManager, async (req, res) => {
   try {
     const user = await cfg("ovg_username", OVG_USERNAME);
     const pass = await cfg("ovg_password", OVG_PASSWORD);
@@ -2468,7 +2504,7 @@ app.post("/api/v1/ovg/sync/now", requireAuth, async (req, res) => {
     }
     res.json({ data: { synced: upserted, total: members.length }, message: `${upserted} sócios sincronizados` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2522,7 +2558,7 @@ app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
     if (r2.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
     res.json({ data: r2.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2601,7 +2637,7 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
     );
     res.status(201).json({ data: mapLead(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2625,7 +2661,7 @@ app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
       convertidas: num(row.convertidas), perdidas: num(row.perdidas),
     } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2638,7 +2674,7 @@ app.get("/api/v1/leads/followups/hoje", requireAuth, async (req, res) => {
     const byId = Object.fromEntries(owners.rows.map((u) => [u.id, u.name]));
     res.json({ data: r.rows.map((x) => ({ ...mapLead(x), ownerNome: byId[x.owner_id] || null })), total: r.rows.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2653,7 +2689,7 @@ app.get("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
        WHERE c.lead_id = $1 ORDER BY c.created_at ASC`, [req.params.id]);
     res.json({ data: r.rows, total: r.rows.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2716,7 +2752,7 @@ app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
       staffNome: staffName, createdAt: c.created_at,
     }, lead: mapLead(lr.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2726,7 +2762,7 @@ app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2754,17 +2790,17 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.delete("/api/v1/leads/:id", requireAuth, async (req, res) => {
+app.delete("/api/v1/leads/:id", requireAuth, requireManager, async (req, res) => {
   try {
     const r = await pool.query("DELETE FROM leads WHERE id = $1", [req.params.id]);
     if (r.rowCount === 0) return res.status(404).json({ error: "Lead não encontrada" });
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2777,11 +2813,11 @@ app.post("/api/v1/leads/:id/convert", requireAuth, async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.post("/api/v1/plans", requireAuth, async (req, res) => {
+app.post("/api/v1/plans", requireAuth, requireManager, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
     if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
@@ -2792,11 +2828,11 @@ app.post("/api/v1/plans", requireAuth, async (req, res) => {
     );
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.put("/api/v1/plans/:id", requireAuth, async (req, res) => {
+app.put("/api/v1/plans/:id", requireAuth, requireManager, async (req, res) => {
   try {
     const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
     const fields = [];
@@ -2817,11 +2853,11 @@ app.put("/api/v1/plans/:id", requireAuth, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: "Plano não encontrado" });
     res.json({ data: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.delete("/api/v1/plans/:id", requireAuth, async (req, res) => {
+app.delete("/api/v1/plans/:id", requireAuth, requireManager, async (req, res) => {
   try {
     const id = String(req.params.id);
     // Planos são negócio à parte: apagar leva subscrições + pagamentos.
@@ -2840,7 +2876,7 @@ app.delete("/api/v1/plans/:id", requireAuth, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: "Plano não encontrado" });
     res.json({ ok: true, id: req.params.id, deleted: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -2937,7 +2973,7 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
     });
   } catch (err) {
     console.error("[CHECK-STATUS] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -3057,6 +3093,22 @@ if (existsSync(staticDir)) {
 }
 
 const port = Number(process.env.PORT || 3000);
+
+// VULN-13: erros genéricos em produção (sem stacks/mensagens internas).
+// Tem de vir depois das rotas e do fallback do SPA.
+app.use((req, res) => {
+  if (!res.headersSent) res.status(404).json({ error: "Não encontrado" });
+});
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  const msg = err?.type === "entity.parse.failed" ? "Pedido inválido (JSON malformado)" : "Erro interno. Tente de novo.";
+  const status = err?.type === "entity.parse.failed" ? 400 : (err?.status || 500);
+  try {
+    console.error("[UNHANDLED]", err?.message || err);
+  } catch {}
+  if (!res.headersSent) res.status(status).json({ error: msg });
+});
+
 app.listen(port, () => console.log(`Server listening on port ${port}`));
 
 // ─── Keep-alive anti-hibernação (Render free) ─────────────────────────────

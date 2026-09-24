@@ -33,9 +33,14 @@ router.get("/users", authenticate, authorize("administrador", "gestor"), async (
   }
 });
 
-// Get user by ID
+// Get user by ID (próprio perfil ou admin/gestor — VULN-07)
 router.get("/users/:id", authenticate, async (req, res, next) => {
   try {
+    const me = req.user!;
+    const isStaff = ["administrador", "gestor"].includes(me.role);
+    if (!isStaff && me.userId !== req.params.id) {
+      throw new AppError(403, "Sem permissão para esta acção");
+    }
     const user = await db.query.usersTable.findFirst({
       where: eq(usersTable.id, req.params.id as string),
     });
