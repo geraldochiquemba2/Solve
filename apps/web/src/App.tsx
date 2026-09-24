@@ -109,6 +109,17 @@ async function leadFetch(path: string, opts: RequestInit = {}) {
   return j;
 }
 
+// SEGURANÇA Set/2026: staff logado usa o JWT (Bearer); X-API-Key só como
+// recurso (máquinas/scripts). Antes cada página mandava só a chave de env —
+// vazia na build do Render → 401 silencioso → tabelas a zeros.
+function authHeaders(extra: HeadersInit = {}): HeadersInit {
+  try {
+    const t = localStorage.getItem('token');
+    if (t) return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json', ...extra };
+  } catch {}
+  return { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "", 'Content-Type': 'application/json', ...extra };
+}
+
 // Telefone → wa.me (AO: 9 dígitos ganham 244) e tel:.
 const waDigits = (p?: string | null) => {
   const d = String(p || '').replace(/\D/g, '');
@@ -687,7 +698,6 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
 function MiniList({ items }: { items: string[] }) { return <div style={{ display: 'grid', gap: '.65rem' }}>{items.map((x, i) => <div key={x} style={{ display: 'flex', alignItems: 'center', gap: '.55rem', fontSize: '.72rem', color: i === 0 ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? 'hsl(var(--chart-2))' : 'hsl(var(--border))' }} />{x}</div>)}</div>; }
 
 function PlansPage() {
-  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   const apiBase = import.meta.env.VITE_API_URL || '';
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -698,7 +708,7 @@ function PlansPage() {
   const fetchPlans = async () => {
     try {
       const res = await fetch(`${apiBase}/api/v1/plans`, {
-        headers: { 'X-API-Key': apiKey },
+        headers: authHeaders(),
       });
       if (res.ok) {
         const json = await res.json();
@@ -735,7 +745,7 @@ function PlansPage() {
       const url = editing ? `${apiBase}/api/v1/plans/${editing.id}` : `${apiBase}/api/v1/plans`;
       const res = await fetch(url, {
         method: editing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        headers: authHeaders(),
         body: JSON.stringify(body),
       });
       if (res.ok) {
@@ -753,14 +763,14 @@ function PlansPage() {
     try {
       const res = await fetch(`${apiBase}/api/v1/plans/${p.id}`, {
         method: 'DELETE',
-        headers: { 'X-API-Key': apiKey },
+        headers: authHeaders(),
       });
       const j: any = await res.json().catch(() => ({}));
       if (res.status === 409 && j.error === 'has_dependencies') {
         if (!confirm(`"${p.name}" tem ${j.subscriptions} subscrições e ${j.payments} pagamentos. APAGAR TUDO? (irreversível, histórico some do Controlo e do site)`)) return;
         const res2 = await fetch(`${apiBase}/api/v1/plans/${p.id}?force=1`, {
           method: 'DELETE',
-          headers: { 'X-API-Key': apiKey },
+          headers: authHeaders(),
         });
         const j2: any = await res2.json().catch(() => ({}));
         if (res2.ok) { alert('Plano e histórico apagados'); fetchPlans(); }
@@ -805,7 +815,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const sendCademi = async () => {
     setSending(true); setSendResult(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "" } });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: authHeaders() });
       const data = await res.json().catch(() => null);
       setSendResult(res.ok ? `Acesso libertado (${data?.email || ''})` : `Falha: ${data?.error || res.statusText}`);
     } catch (e: any) { setSendResult('Erro: ' + e.message); }
@@ -896,13 +906,12 @@ function fmtPaymentDate(d: string | null | undefined): string {
 function PaymentsPage() {
   const [paymentsData, setPaymentsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   
   const fetchPayments = async () => {
     try {
       const apiBase = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${apiBase}/api/v1/payments`, {
-        headers: { 'X-API-Key': apiKey },
+        headers: authHeaders(),
         credentials: 'include',
       });
       if (res.ok) {
@@ -940,7 +949,7 @@ function PaymentsPage() {
       for (const p of pend) {
         try {
           const r = await fetch(`${apiBase}/api/v1/payments/ekwanza/check-status/${p.code || p.id}`, {
-            headers: { 'X-API-Key': apiKey },
+            headers: authHeaders(),
           });
           const j = await r.json().catch(() => null);
           if (j?.changed) changed++;
@@ -980,7 +989,7 @@ function PaymentsPage() {
   useEffect(() => {
     if (!chargeOpen) return;
     const apiBase = import.meta.env.VITE_API_URL || '';
-    fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } })
+    fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() })
       .then(r => r.json())
       .then(j => {
         const list = Array.isArray(j.data) ? j.data : [];
@@ -1009,7 +1018,7 @@ function PaymentsPage() {
       try {
         res = await fetch(`${apiBase3}/api/v1/payments`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+          headers: authHeaders(),
           body: JSON.stringify(payload),
           signal: ctrl.signal,
         });
@@ -1197,7 +1206,6 @@ function IntegrationsPage() {
 }
 
 function AcademiaPage() {
-  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   const apiBase = import.meta.env.VITE_API_URL || '';
   const [products, setProducts] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -1222,7 +1230,7 @@ function AcademiaPage() {
       // Entregas reais (do endpoint): cada uma com o seu campo de preço.
       // (produto de entrega e envio automático são fixos — ver FIXO_PRODUTO_ID.)
       try {
-        const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+        const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() }).then(r => r.json());
         const list = Array.isArray(e.data) ? e.data : [];
         if (list.length > 0) setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
       } catch {}
@@ -1234,7 +1242,7 @@ function AcademiaPage() {
     try {
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        headers: authHeaders(),
         body: JSON.stringify({ settings: { cademi_produto_id: FIXO_PRODUTO_ID, cademi_auto_delivery: '1', cademi_entregas: JSON.stringify(entregasArr) } }),
       });
       if (!res.ok) throw new Error('Falha a guardar');
@@ -1247,9 +1255,9 @@ function AcademiaPage() {
     setLoading(true);
     try {
       const [p, u, c] = await Promise.all([
-        fetch(`${apiBase}/api/v1/cademi/products`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json()),
-        fetch(`${apiBase}/api/v1/cademi/users`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json()),
-        fetch(`${apiBase}/api/v1/cademi/alunos-cobranca`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json()).catch(() => ({ data: [] })),
+        fetch(`${apiBase}/api/v1/cademi/products`, { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${apiBase}/api/v1/cademi/users`, { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${apiBase}/api/v1/cademi/alunos-cobranca`, { headers: authHeaders() }).then(r => r.json()).catch(() => ({ data: [] })),
       ]);
       setProducts(p.data || []);
       setStudents(u.data || []);
@@ -1265,15 +1273,15 @@ function AcademiaPage() {
     setDetail(null);
     setLoadingDetail(true);
     try {
-      const a: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/access`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+      const a: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/access`, { headers: authHeaders() }).then(r => r.json());
       const acessos = a.data?.acesso || [];
     const withProgress = await Promise.all(acessos.map(async (ac: any) => {
       try {
-        const pr: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/progress/${ac.produto.id}`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+        const pr: any = await fetch(`${apiBase}/api/v1/cademi/users/${s.id}/progress/${ac.produto.id}`, { headers: authHeaders() }).then(r => r.json());
         // Total de aulas do curso (o progresso só traz completas/assistidas)
         let totalAulas: number | null = null;
         try {
-          const ls: any = await fetch(`${apiBase}/api/v1/cademi/products/${ac.produto.id}/lessons`, { headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+          const ls: any = await fetch(`${apiBase}/api/v1/cademi/products/${ac.produto.id}/lessons`, { headers: authHeaders() }).then(r => r.json());
           if (typeof ls.total === 'number') totalAulas = ls.total;
         } catch {}
         return { ...ac, progresso: pr.data || null, totalAulas };
@@ -1288,7 +1296,7 @@ function AcademiaPage() {
     setSyncing(true);
     setSyncMsg('');
     try {
-      const r: any = await fetch(`${apiBase}/api/v1/cademi/sync`, { method: 'POST', headers: { 'X-API-Key': apiKey } }).then(r => r.json());
+      const r: any = await fetch(`${apiBase}/api/v1/cademi/sync`, { method: 'POST', headers: authHeaders() }).then(r => r.json());
       setSyncMsg(`${r.matched ?? 0} alunos ligados de ${r.cademiUsers ?? 0} no SamoraFit Workout`);
     } catch (e: any) { setSyncMsg('Erro: ' + e.message); }
     setSyncing(false);

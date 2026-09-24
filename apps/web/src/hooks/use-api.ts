@@ -14,6 +14,11 @@ function getHeaders(): HeadersInit {
 }
 
 function getAccessHeaders(): HeadersInit {
+  // SEGURANÇA Set/2026: staff logado usa o JWT (Bearer); X-API-Key só recurso.
+  try {
+    const token = localStorage.getItem('token');
+    if (token) return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  } catch {}
   return {
     'Content-Type': 'application/json',
     'X-API-Key': ACCESS_API_KEY,
