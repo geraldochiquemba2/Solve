@@ -114,7 +114,7 @@ export const getHealthCheckUrl = () => {
 
 
 
-  return `/api/healthz`
+  return `/api/v1/healthz`
 }
 
 /**
@@ -137,7 +137,7 @@ export const healthCheck = async ( options?: Parameters<typeof customFetch>[1]):
 
 export const getHealthCheckQueryKey = () => {
     return [
-    `/api/healthz`
+    `/api/v1/healthz`
     ] as const;
     }
 
@@ -191,7 +191,7 @@ export const getLoginUrl = () => {
 
 
 
-  return `/api/auth/login`
+  return `/api/v1/auth/login`
 }
 
 /**
@@ -262,7 +262,7 @@ export const getRegisterUrl = () => {
 
 
 
-  return `/api/auth/register`
+  return `/api/v1/auth/register`
 }
 
 /**
@@ -340,7 +340,7 @@ export const getListLeadsUrl = (params?: ListLeadsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/leads?${stringifiedParams}` : `/api/leads`
+  return stringifiedParams.length > 0 ? `/api/v1/leads?${stringifiedParams}` : `/api/v1/leads`
 }
 
 /**
@@ -363,7 +363,7 @@ export const listLeads = async (params?: ListLeadsParams, options?: Parameters<t
 
 export const getListLeadsQueryKey = (params?: ListLeadsParams,) => {
     return [
-    `/api/leads`, ...(params ? [params] : [])
+    `/api/v1/leads`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -417,7 +417,7 @@ export const getCreateLeadUrl = () => {
 
 
 
-  return `/api/leads`
+  return `/api/v1/leads`
 }
 
 /**
@@ -488,7 +488,7 @@ export const getGetLeadsResumoUrl = () => {
 
 
 
-  return `/api/leads/resumo`
+  return `/api/v1/leads/resumo`
 }
 
 /**
@@ -511,7 +511,7 @@ export const getLeadsResumo = async ( options?: Parameters<typeof customFetch>[1
 
 export const getGetLeadsResumoQueryKey = () => {
     return [
-    `/api/leads/resumo`
+    `/api/v1/leads/resumo`
     ] as const;
     }
 
@@ -565,7 +565,7 @@ export const getGetLeadsFollowupsHojeUrl = () => {
 
 
 
-  return `/api/leads/followups/hoje`
+  return `/api/v1/leads/followups/hoje`
 }
 
 /**
@@ -588,7 +588,7 @@ export const getLeadsFollowupsHoje = async ( options?: Parameters<typeof customF
 
 export const getGetLeadsFollowupsHojeQueryKey = () => {
     return [
-    `/api/leads/followups/hoje`
+    `/api/v1/leads/followups/hoje`
     ] as const;
     }
 
@@ -642,7 +642,7 @@ export const getListLeadContactsUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}/contacts`
+  return `/api/v1/leads/${id}/contacts`
 }
 
 /**
@@ -665,7 +665,7 @@ export const listLeadContacts = async (id: string, options?: Parameters<typeof c
 
 export const getListLeadContactsQueryKey = (id: string,) => {
     return [
-    `/api/leads/${id}/contacts`
+    `/api/v1/leads/${id}/contacts`
     ] as const;
     }
 
@@ -719,7 +719,7 @@ export const getCreateLeadContactUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}/contacts`
+  return `/api/v1/leads/${id}/contacts`
 }
 
 /**
@@ -791,7 +791,7 @@ export const getGetLeadUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}`
+  return `/api/v1/leads/${id}`
 }
 
 /**
@@ -814,7 +814,7 @@ export const getLead = async (id: string, options?: Parameters<typeof customFetc
 
 export const getGetLeadQueryKey = (id: string,) => {
     return [
-    `/api/leads/${id}`
+    `/api/v1/leads/${id}`
     ] as const;
     }
 
@@ -868,7 +868,7 @@ export const getUpdateLeadUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}`
+  return `/api/v1/leads/${id}`
 }
 
 /**
@@ -940,7 +940,7 @@ export const getDeleteLeadUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}`
+  return `/api/v1/leads/${id}`
 }
 
 /**
@@ -1011,7 +1011,7 @@ export const getConvertLeadUrl = (id: string,) => {
 
 
 
-  return `/api/leads/${id}/convert`
+  return `/api/v1/leads/${id}/convert`
 }
 
 /**
@@ -1082,7 +1082,7 @@ export const getListCustomersUrl = () => {
 
 
 
-  return `/api/customers`
+  return `/api/v1/customers`
 }
 
 /**
@@ -1105,7 +1105,7 @@ export const listCustomers = async ( options?: Parameters<typeof customFetch>[1]
 
 export const getListCustomersQueryKey = () => {
     return [
-    `/api/customers`
+    `/api/v1/customers`
     ] as const;
     }
 
@@ -1159,7 +1159,7 @@ export const getCreateCustomerUrl = () => {
 
 
 
-  return `/api/customers`
+  return `/api/v1/customers`
 }
 
 /**
@@ -1230,7 +1230,7 @@ export const getGetCustomerUrl = (id: string,) => {
 
 
 
-  return `/api/customers/${id}`
+  return `/api/v1/customers/${id}`
 }
 
 /**
@@ -1253,7 +1253,7 @@ export const getCustomer = async (id: string, options?: Parameters<typeof custom
 
 export const getGetCustomerQueryKey = (id: string,) => {
     return [
-    `/api/customers/${id}`
+    `/api/v1/customers/${id}`
     ] as const;
     }
 
@@ -1307,7 +1307,7 @@ export const getUpdateCustomerUrl = (id: string,) => {
 
 
 
-  return `/api/customers/${id}`
+  return `/api/v1/customers/${id}`
 }
 
 /**
@@ -1379,7 +1379,7 @@ export const getDeleteCustomerUrl = (id: string,) => {
 
 
 
-  return `/api/customers/${id}`
+  return `/api/v1/customers/${id}`
 }
 
 /**
@@ -1450,7 +1450,7 @@ export const getListPlansUrl = () => {
 
 
 
-  return `/api/plans`
+  return `/api/v1/plans`
 }
 
 /**
@@ -1473,7 +1473,7 @@ export const listPlans = async ( options?: Parameters<typeof customFetch>[1]): P
 
 export const getListPlansQueryKey = () => {
     return [
-    `/api/plans`
+    `/api/v1/plans`
     ] as const;
     }
 
@@ -1527,7 +1527,7 @@ export const getCreatePlanUrl = () => {
 
 
 
-  return `/api/plans`
+  return `/api/v1/plans`
 }
 
 /**
@@ -1598,7 +1598,7 @@ export const getGetPlanUrl = (id: string,) => {
 
 
 
-  return `/api/plans/${id}`
+  return `/api/v1/plans/${id}`
 }
 
 /**
@@ -1621,7 +1621,7 @@ export const getPlan = async (id: string, options?: Parameters<typeof customFetc
 
 export const getGetPlanQueryKey = (id: string,) => {
     return [
-    `/api/plans/${id}`
+    `/api/v1/plans/${id}`
     ] as const;
     }
 
@@ -1675,7 +1675,7 @@ export const getUpdatePlanUrl = (id: string,) => {
 
 
 
-  return `/api/plans/${id}`
+  return `/api/v1/plans/${id}`
 }
 
 /**
@@ -1747,7 +1747,7 @@ export const getDeletePlanUrl = (id: string,) => {
 
 
 
-  return `/api/plans/${id}`
+  return `/api/v1/plans/${id}`
 }
 
 /**
@@ -1818,7 +1818,7 @@ export const getTogglePlanUrl = (id: string,) => {
 
 
 
-  return `/api/plans/${id}/toggle`
+  return `/api/v1/plans/${id}/toggle`
 }
 
 /**
@@ -1896,7 +1896,7 @@ export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/payments?${stringifiedParams}` : `/api/payments`
+  return stringifiedParams.length > 0 ? `/api/v1/payments?${stringifiedParams}` : `/api/v1/payments`
 }
 
 /**
@@ -1919,7 +1919,7 @@ export const listPayments = async (params?: ListPaymentsParams, options?: Parame
 
 export const getListPaymentsQueryKey = (params?: ListPaymentsParams,) => {
     return [
-    `/api/payments`, ...(params ? [params] : [])
+    `/api/v1/payments`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -1973,7 +1973,7 @@ export const getCreatePaymentUrl = () => {
 
 
 
-  return `/api/payments`
+  return `/api/v1/payments`
 }
 
 /**
@@ -2044,7 +2044,7 @@ export const getGetPaymentUrl = (id: string,) => {
 
 
 
-  return `/api/payments/${id}`
+  return `/api/v1/payments/${id}`
 }
 
 /**
@@ -2067,7 +2067,7 @@ export const getPayment = async (id: string, options?: Parameters<typeof customF
 
 export const getGetPaymentQueryKey = (id: string,) => {
     return [
-    `/api/payments/${id}`
+    `/api/v1/payments/${id}`
     ] as const;
     }
 
@@ -2121,7 +2121,7 @@ export const getReconcilePaymentUrl = (id: string,) => {
 
 
 
-  return `/api/payments/${id}/reconcile`
+  return `/api/v1/payments/${id}/reconcile`
 }
 
 /**
@@ -2192,7 +2192,7 @@ export const getListIntegrationsUrl = () => {
 
 
 
-  return `/api/integrations`
+  return `/api/v1/integrations`
 }
 
 /**
@@ -2215,7 +2215,7 @@ export const listIntegrations = async ( options?: Parameters<typeof customFetch>
 
 export const getListIntegrationsQueryKey = () => {
     return [
-    `/api/integrations`
+    `/api/v1/integrations`
     ] as const;
     }
 
@@ -2269,7 +2269,7 @@ export const getGetIntegrationUrl = (name: string,) => {
 
 
 
-  return `/api/integrations/${name}`
+  return `/api/v1/integrations/${name}`
 }
 
 /**
@@ -2292,7 +2292,7 @@ export const getIntegration = async (name: string, options?: Parameters<typeof c
 
 export const getGetIntegrationQueryKey = (name: string,) => {
     return [
-    `/api/integrations/${name}`
+    `/api/v1/integrations/${name}`
     ] as const;
     }
 
@@ -2346,7 +2346,7 @@ export const getUpdateIntegrationUrl = (name: string,) => {
 
 
 
-  return `/api/integrations/${name}`
+  return `/api/v1/integrations/${name}`
 }
 
 /**
@@ -2418,7 +2418,7 @@ export const getSyncIntegrationUrl = (name: string,) => {
 
 
 
-  return `/api/integrations/${name}/sync`
+  return `/api/v1/integrations/${name}/sync`
 }
 
 /**
@@ -2489,7 +2489,7 @@ export const getListWebhooksUrl = () => {
 
 
 
-  return `/api/webhooks`
+  return `/api/v1/webhooks`
 }
 
 /**
@@ -2512,7 +2512,7 @@ export const listWebhooks = async ( options?: Parameters<typeof customFetch>[1])
 
 export const getListWebhooksQueryKey = () => {
     return [
-    `/api/webhooks`
+    `/api/v1/webhooks`
     ] as const;
     }
 
@@ -2566,7 +2566,7 @@ export const getCreateWebhookUrl = () => {
 
 
 
-  return `/api/webhooks`
+  return `/api/v1/webhooks`
 }
 
 /**
@@ -2637,7 +2637,7 @@ export const getDeleteWebhookUrl = (id: string,) => {
 
 
 
-  return `/api/webhooks/${id}`
+  return `/api/v1/webhooks/${id}`
 }
 
 /**
@@ -2708,7 +2708,7 @@ export const getListWebhookDeliveriesUrl = (id: string,) => {
 
 
 
-  return `/api/webhooks/${id}/deliveries`
+  return `/api/v1/webhooks/${id}/deliveries`
 }
 
 /**
@@ -2731,7 +2731,7 @@ export const listWebhookDeliveries = async (id: string, options?: Parameters<typ
 
 export const getListWebhookDeliveriesQueryKey = (id: string,) => {
     return [
-    `/api/webhooks/${id}/deliveries`
+    `/api/v1/webhooks/${id}/deliveries`
     ] as const;
     }
 
@@ -2785,7 +2785,7 @@ export const getReprocessDeliveryUrl = (id: string,) => {
 
 
 
-  return `/api/webhooks/deliveries/${id}/reprocess`
+  return `/api/v1/webhooks/deliveries/${id}/reprocess`
 }
 
 /**
@@ -2856,7 +2856,7 @@ export const getGetDashboardStatsUrl = () => {
 
 
 
-  return `/api/dashboard/stats`
+  return `/api/v1/dashboard/stats`
 }
 
 /**
@@ -2879,7 +2879,7 @@ export const getDashboardStats = async ( options?: Parameters<typeof customFetch
 
 export const getGetDashboardStatsQueryKey = () => {
     return [
-    `/api/dashboard/stats`
+    `/api/v1/dashboard/stats`
     ] as const;
     }
 
@@ -2933,7 +2933,7 @@ export const getGetDashboardChartsUrl = () => {
 
 
 
-  return `/api/dashboard/charts`
+  return `/api/v1/dashboard/charts`
 }
 
 /**
@@ -2956,7 +2956,7 @@ export const getDashboardCharts = async ( options?: Parameters<typeof customFetc
 
 export const getGetDashboardChartsQueryKey = () => {
     return [
-    `/api/dashboard/charts`
+    `/api/v1/dashboard/charts`
     ] as const;
     }
 
@@ -3010,7 +3010,7 @@ export const getListUsersUrl = () => {
 
 
 
-  return `/api/users`
+  return `/api/v1/users`
 }
 
 /**
@@ -3033,7 +3033,7 @@ export const listUsers = async ( options?: Parameters<typeof customFetch>[1]): P
 
 export const getListUsersQueryKey = () => {
     return [
-    `/api/users`
+    `/api/v1/users`
     ] as const;
     }
 
@@ -3087,7 +3087,7 @@ export const getGetUserUrl = (id: string,) => {
 
 
 
-  return `/api/users/${id}`
+  return `/api/v1/users/${id}`
 }
 
 /**
@@ -3110,7 +3110,7 @@ export const getUser = async (id: string, options?: Parameters<typeof customFetc
 
 export const getGetUserQueryKey = (id: string,) => {
     return [
-    `/api/users/${id}`
+    `/api/v1/users/${id}`
     ] as const;
     }
 
@@ -3164,7 +3164,7 @@ export const getUpdateUserUrl = (id: string,) => {
 
 
 
-  return `/api/users/${id}`
+  return `/api/v1/users/${id}`
 }
 
 /**
@@ -3236,7 +3236,7 @@ export const getDeleteUserUrl = (id: string,) => {
 
 
 
-  return `/api/users/${id}`
+  return `/api/v1/users/${id}`
 }
 
 /**
@@ -3307,7 +3307,7 @@ export const getToggleUserUrl = (id: string,) => {
 
 
 
-  return `/api/users/${id}/toggle`
+  return `/api/v1/users/${id}/toggle`
 }
 
 /**
@@ -3385,7 +3385,7 @@ export const getListAccessUrl = (params?: ListAccessParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/access?${stringifiedParams}` : `/api/access`
+  return stringifiedParams.length > 0 ? `/api/v1/access?${stringifiedParams}` : `/api/v1/access`
 }
 
 /**
@@ -3408,7 +3408,7 @@ export const listAccess = async (params?: ListAccessParams, options?: Parameters
 
 export const getListAccessQueryKey = (params?: ListAccessParams,) => {
     return [
-    `/api/access`, ...(params ? [params] : [])
+    `/api/v1/access`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -3462,7 +3462,7 @@ export const getCreateAccessUrl = () => {
 
 
 
-  return `/api/access`
+  return `/api/v1/access`
 }
 
 /**
@@ -3533,7 +3533,7 @@ export const getGetAccessUrl = (id: string,) => {
 
 
 
-  return `/api/access/${id}`
+  return `/api/v1/access/${id}`
 }
 
 /**
@@ -3556,7 +3556,7 @@ export const getAccess = async (id: string, options?: Parameters<typeof customFe
 
 export const getGetAccessQueryKey = (id: string,) => {
     return [
-    `/api/access/${id}`
+    `/api/v1/access/${id}`
     ] as const;
     }
 
@@ -3610,7 +3610,7 @@ export const getUpdateAccessUrl = (id: string,) => {
 
 
 
-  return `/api/access/${id}`
+  return `/api/v1/access/${id}`
 }
 
 /**
@@ -3682,7 +3682,7 @@ export const getDeleteAccessUrl = (id: string,) => {
 
 
 
-  return `/api/access/${id}`
+  return `/api/v1/access/${id}`
 }
 
 /**
@@ -3760,7 +3760,7 @@ export const getListCheckinsUrl = (params?: ListCheckinsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/checkins?${stringifiedParams}` : `/api/checkins`
+  return stringifiedParams.length > 0 ? `/api/v1/checkins?${stringifiedParams}` : `/api/v1/checkins`
 }
 
 /**
@@ -3783,7 +3783,7 @@ export const listCheckins = async (params?: ListCheckinsParams, options?: Parame
 
 export const getListCheckinsQueryKey = (params?: ListCheckinsParams,) => {
     return [
-    `/api/checkins`, ...(params ? [params] : [])
+    `/api/v1/checkins`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -3837,7 +3837,7 @@ export const getCreateCheckinUrl = () => {
 
 
 
-  return `/api/checkins`
+  return `/api/v1/checkins`
 }
 
 /**
@@ -3908,7 +3908,7 @@ export const getGetCheckinUrl = (id: string,) => {
 
 
 
-  return `/api/checkins/${id}`
+  return `/api/v1/checkins/${id}`
 }
 
 /**
@@ -3931,7 +3931,7 @@ export const getCheckin = async (id: string, options?: Parameters<typeof customF
 
 export const getGetCheckinQueryKey = (id: string,) => {
     return [
-    `/api/checkins/${id}`
+    `/api/v1/checkins/${id}`
     ] as const;
     }
 
@@ -3985,7 +3985,7 @@ export const getDeleteCheckinUrl = (id: string,) => {
 
 
 
-  return `/api/checkins/${id}`
+  return `/api/v1/checkins/${id}`
 }
 
 /**
@@ -4056,7 +4056,7 @@ export const getListApiKeysUrl = () => {
 
 
 
-  return `/api/api-keys`
+  return `/api/v1/api-keys`
 }
 
 /**
@@ -4079,7 +4079,7 @@ export const listApiKeys = async ( options?: Parameters<typeof customFetch>[1]):
 
 export const getListApiKeysQueryKey = () => {
     return [
-    `/api/api-keys`
+    `/api/v1/api-keys`
     ] as const;
     }
 
@@ -4133,7 +4133,7 @@ export const getCreateApiKeyUrl = () => {
 
 
 
-  return `/api/api-keys`
+  return `/api/v1/api-keys`
 }
 
 /**
@@ -4204,7 +4204,7 @@ export const getGetApiKeyUrl = (id: string,) => {
 
 
 
-  return `/api/api-keys/${id}`
+  return `/api/v1/api-keys/${id}`
 }
 
 /**
@@ -4227,7 +4227,7 @@ export const getApiKey = async (id: string, options?: Parameters<typeof customFe
 
 export const getGetApiKeyQueryKey = (id: string,) => {
     return [
-    `/api/api-keys/${id}`
+    `/api/v1/api-keys/${id}`
     ] as const;
     }
 
@@ -4281,7 +4281,7 @@ export const getUpdateApiKeyUrl = (id: string,) => {
 
 
 
-  return `/api/api-keys/${id}`
+  return `/api/v1/api-keys/${id}`
 }
 
 /**
@@ -4353,7 +4353,7 @@ export const getDeleteApiKeyUrl = (id: string,) => {
 
 
 
-  return `/api/api-keys/${id}`
+  return `/api/v1/api-keys/${id}`
 }
 
 /**
@@ -4424,7 +4424,7 @@ export const getToggleApiKeyUrl = (id: string,) => {
 
 
 
-  return `/api/api-keys/${id}/toggle`
+  return `/api/v1/api-keys/${id}/toggle`
 }
 
 /**
