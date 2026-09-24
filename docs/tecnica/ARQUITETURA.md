@@ -5,7 +5,6 @@
 ```
 apps/web/       frontend React+Vite — /admin (staff) + /conta (portal cliente)
 apps/api/       backend TypeScript Express — FONTE do backend
-apps/mockup-sandbox/  protótipos, sem deploy
 packages/db/    Drizzle schema + drizzle/ (Postgres Neon)
 packages/api-spec/  OpenAPI spec (orval)
 packages/api-zod/   schemas Zod gerados

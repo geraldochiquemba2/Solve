@@ -1,5 +1,16 @@
 # Changelog
 
+## Limpeza entrega Set/2026 (não publicado)
+- Removidos scripts de diagnóstico com segredos hardcoded (`check-data.cjs`,
+  `check-today.cjs`, `check-ghosts.py`, `check-neon.py`, `packages/db/check-data.cjs`),
+  `temp-install.json`, `apps/mockup-sandbox/`, ficheiros Replit
+  (`replit.md`, `.replit`, `.replitignore`, `.replit-artifact/`),
+  pastas vazias `artifacts/`, `.agents/skills/`.
+- `.gitignore` passa a ignorar `.replit-artifact/`.
+- Docs reescritos para entrega: `README.md`, `ENTREGA-SAMORAFIT.md`,
+  `docs/cliente/00–04` em português simples de Angola.
+- Entrega exclui sempre: `node_modules/`, `dist/`, `*.tsbuildinfo`, `.env*` com valores.
+
 ## Quota Neon Set/2026 (não publicado)
 - Causa do login cair: projeto `academia` excedeu transferência (5.99/5GB) → Neon bloqueia.
 - Corte de consumo: frontend dashboards/listas 30s→5min, pagamentos 20–30s→2min,

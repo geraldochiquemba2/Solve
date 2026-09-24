@@ -47,6 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit-artifact/
 
 # Environment variables - NUNCA commitar segredos
 .env*
