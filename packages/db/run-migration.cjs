@@ -5,8 +5,12 @@ const path = require('path');
 const sql = fs.readFileSync(path.join(__dirname, 'drizzle', '0000_empty_hydra.sql'), 'utf8')
   .replace(/--> statement-breakpoint/g, '');
 
+// SEGURANÇA Set/2026: segredo via env, nunca hardcoded.
+const DB_URL = (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "");
+if (!DB_URL) { console.error('FATAL: define CRM_DATABASE_URL ou DATABASE_URL no ambiente.'); process.exit(1); }
+
 const client = new Client({
-  connectionString: 'postgresql://neondb_owner:npg_bXxHCos9Z3Nl@ep-rapid-heart-a5mtx2z6-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require',
+  connectionString: DB_URL,
   ssl: { rejectUnauthorized: false }
 });
 

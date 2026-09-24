@@ -16,7 +16,8 @@ RUN pnpm --filter @workspace/solve-crm run build
 FROM node:20
 WORKDIR /app
 COPY standalone-server/ .
-RUN npm install
+RUN npm ci --omit=dev
 COPY --from=frontend /frontend/apps/web/dist/public ./public
 EXPOSE 3000
+USER node
 CMD ["node", "index.js"]

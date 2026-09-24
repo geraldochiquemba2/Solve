@@ -2,7 +2,8 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CRM_URL = Deno.env.get("CRM_API_URL") || "https://solve-sqoh.onrender.com";
-const CRM_API_KEY = Deno.env.get("CRM_API_KEY") || "solve-crm-api-key-2024";
+// SEGURANÇA Set/2026: sem fallback público
+const CRM_API_KEY = Deno.env.get("CRM_API_KEY") || "";
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -13,6 +14,14 @@ serve(async (req) => {
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "content-type, authorization",
       },
+    });
+  }
+
+  if (!CRM_API_KEY) {
+    console.error("CRM_API_KEY em falta (configurar segredo CRM_API_KEY)");
+    return new Response(JSON.stringify({ error: "Configuração em falta" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
     });
   }
 

@@ -2,8 +2,17 @@ const { Client } = require('pg');
 const crypto = require('crypto');
 const bcrypt = require('./node_modules/bcryptjs');
 
+// SEGURANÇA Set/2026: segredo via env, nunca hardcoded.
+const DB_URL = (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "");
+if (!DB_URL) { console.error('FATAL: define CRM_DATABASE_URL ou DATABASE_URL no ambiente.'); process.exit(1); }
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+if (!ADMIN_PASSWORD) { console.error('FATAL: define ADMIN_PASSWORD no ambiente.'); process.exit(1); }
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@solvecorporate.ao';
+const ADMIN_PHONE = process.env.ADMIN_PHONE || "";
+if (!ADMIN_PHONE) { console.error('FATAL: define ADMIN_PHONE no ambiente.'); process.exit(1); }
+
 const client = new Client({
-  connectionString: 'postgresql://neondb_owner:npg_bXxHCos9Z3Nl@ep-rapid-heart-a5mtx2z6-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require',
+  connectionString: DB_URL,
   ssl: { rejectUnauthorized: false }
 });
 
@@ -16,14 +25,13 @@ async function run() {
 
   // 1. Admin user com password hasheada
   const userId = uuid();
-  const password = 'SolveCorporate2026!';
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
   await client.query(
     `INSERT INTO users (id, name, email, password_hash, role, phone, active) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [userId, 'Bruno Samora', 'admin@solvecorporate.ao', passwordHash, 'administrador', '+244923456789', true]
+    [userId, 'Bruno Samora', ADMIN_EMAIL, passwordHash, 'administrador', ADMIN_PHONE, true]
   );
-  console.log(`✓ Admin criado: admin@solvecorporate.ao / ${password}`);
+  console.log(`✓ Admin criado: ${ADMIN_EMAIL}`);
 
   // 2. Integrações
   const integrations = [
@@ -43,8 +51,7 @@ async function run() {
   console.log('✓ 5 integrações registadas');
 
   console.log('\nPronto! Podes fazer login com:');
-  console.log('  Email: admin@solvecorporate.ao');
-  console.log('  Password: SolveCorporate2026!');
+  console.log(`  Email: ${ADMIN_EMAIL}`);
 
   await client.end();
 }

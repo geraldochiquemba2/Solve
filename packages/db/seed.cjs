@@ -1,8 +1,15 @@
+// SEGURANÇA Set/2026: segredo via env, nunca hardcoded.
 const { Client } = require('./node_modules/pg');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+
+const DB_URL = (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "");
+if (!DB_URL) { console.error('FATAL: define CRM_DATABASE_URL ou DATABASE_URL no ambiente.'); process.exit(1); }
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+if (!ADMIN_PASSWORD) { console.error('FATAL: define ADMIN_PASSWORD no ambiente.'); process.exit(1); }
 
 const client = new Client({
-  connectionString: 'postgresql://neondb_owner:npg_bXxHCos9Z3Nl@ep-rapid-heart-a5mtx2z6-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require',
+  connectionString: DB_URL,
   ssl: { rejectUnauthorized: false }
 });
 
@@ -20,9 +27,10 @@ async function run() {
   if (existing.rows.length > 0) {
     console.log('Users: admin user already exists, reusing id');
   } else {
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
     await client.query(
       `INSERT INTO users (id, name, email, password_hash, role, phone, active) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [userId, 'Ana Martins', 'admin@solvecorporate.ao', '1234567890', 'administrador', '999999999', true]
+      [userId, 'Ana Martins', 'admin@solvecorporate.ao', passwordHash, 'administrador', '999999999', true]
     );
     console.log('Users: admin user created');
   }

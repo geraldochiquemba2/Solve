@@ -23,12 +23,13 @@ async function run() {
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await client.connect();
 
-  // 1. Admin (credenciais padrão do ginásio).
-  // AVISO: valores via ADMIN_PHONE/ADMIN_PASSWORD quando possível — o fallback
-  // abaixo existe só porque o ginásio pediu estas credenciais simples.
-  const adminEmail = 'admin@solvecorporate.ao';
-  const adminPhone = process.env.ADMIN_PHONE || '999999999';
-  const adminPass = process.env.ADMIN_PASSWORD || '1234567890';
+  // 1. Admin (credenciais via ambiente; sem fallbacks fracos).
+  // SEGURANÇA Set/2026: segredo via env, nunca hardcoded.
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@solvecorporate.ao';
+  const adminPhone = process.env.ADMIN_PHONE || "";
+  if (!adminPhone) { console.error('FATAL: define ADMIN_PHONE no ambiente.'); process.exit(1); }
+  const adminPass = process.env.ADMIN_PASSWORD || "";
+  if (!adminPass) { console.error('FATAL: define ADMIN_PASSWORD no ambiente.'); process.exit(1); }
   const exists = await client.query('SELECT id FROM users WHERE LOWER(email)=LOWER($1)', [adminEmail]);
   if (exists.rows.length === 0) {
     const hash = await bcrypt.hash(adminPass, 10);

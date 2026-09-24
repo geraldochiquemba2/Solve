@@ -1,15 +1,22 @@
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 
-const sql = neon("postgresql://neondb_owner:npg_bXxHCos9Z3Nl@ep-rapid-heart-a5mtx2z6-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require");
+// SEGURANÇA Set/2026: sem segredos hardcoded. Uso pontual:
+//   CRM_DATABASE_URL=... ADMIN_EMAIL=... ADMIN_PASSWORD=... node fix-password.mjs
+const DATABASE_URL = process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@solvecorporate.ao";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
-const hash = await bcrypt.hash("admin123", 10);
-console.log("New hash:", hash);
+if (!DATABASE_URL || !ADMIN_PASSWORD) {
+  console.error("CRM_DATABASE_URL (ou DATABASE_URL) e ADMIN_PASSWORD são obrigatórios.");
+  process.exit(1);
+}
 
-await sql`UPDATE users SET password_hash = ${hash} WHERE email = 'admin@solvecorporate.ao'`;
-console.log("Password updated!");
+const sql = neon(DATABASE_URL);
 
-const users = await sql`SELECT email, password_hash FROM users WHERE email = 'admin@solvecorporate.ao'`;
-console.log("Updated:", JSON.stringify(users));
+const hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+
+await sql`UPDATE users SET password_hash = ${hash} WHERE email = ${ADMIN_EMAIL}`;
+console.log(`Password atualizada para ${ADMIN_EMAIL}.`);
 
 process.exit(0);

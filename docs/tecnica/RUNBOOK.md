@@ -14,5 +14,7 @@
 | É-kwanza 401 (`AADSTS7000215 invalid_client`) | client secret expirado/rodado — nada é gerado (Express e Referência) | Novo secret Pay4All/Azure (o Value) → `EKWANZA_CLIENT_SECRET` no Render + `.env` local; depois "Verificar Estado" regenera referências pendentes | Pay4All |
 | Deploy mau | build falhou | Render → rollback para deploy anterior; `git revert` | Técnico |
 | BD corrompida | — | Restore PITR Neon num branch, validar, promover | Dono Neon |
+| Sync ginásio 401 | PC sem `X-API-Key` | Pôr a chave no script do PC (ver `10-SEGURANCA.md` § Máquinas) | Técnico |
+| Callback não confirmado | É-kwanza indisponível | Ver `metadata.ekwanza_unverified_callback`; Sincronizar/auto-sync resolve | Suporte É-kwanza |
 
 Contactos e contas: ver `ENTREGA-SAMORAFIT.md`.

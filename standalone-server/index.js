@@ -53,10 +53,23 @@ const pool = new Pool({
 //   4. Frontend CRM → GET/POST endpoints → customers, leads, plans, etc.
 // ────────────────────────────────────────────────────────────────────────────
 
-const API_KEY = process.env.API_KEY || "solve-crm-api-key-2024";
-const JWT_SECRET = process.env.JWT_SECRET || "solve-corporate-crm-secret";
+const API_KEY = process.env.API_KEY || "";
+const JWT_SECRET = process.env.JWT_SECRET || "";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 const SALT_ROUNDS = 10;
+
+// SEGURANÇA: em produção o servidor recusa arrancar sem segredos.
+// (Antes aceitava chaves públicas conhecidas — qualquer pessoa entrava.)
+if (process.env.NODE_ENV === "production" && (!API_KEY || !JWT_SECRET)) {
+  console.error("[segurança] API_KEY e JWT_SECRET são obrigatórios em produção. A recusar arranque.");
+  process.exit(1);
+}
+if (!API_KEY || !JWT_SECRET) {
+  console.warn("[segurança] API_KEY/JWT_SECRET em falta: a usar modo dev local inseguro");
+}
+// Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
+// por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
+const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
 
 // Cademi (plataforma de cursos) — defaults; editável em Integrações > Configurar
 const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
@@ -88,6 +101,14 @@ const isMember = (alias) => `(TRIM(${alias}.nome) LIKE '% %' AND NOT EXISTS (SEL
 // Registos apagados têm numero_cartao com sufixo _del → ocultar também.
 const notDeleted = (alias) => `(COALESCE(POSITION('_del' IN ${alias}.numero_cartao), 0) = 0)`;
 
+function apiKeyMatches(provided, expected) {
+  if (typeof provided !== "string" || !expected) return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   let token;
@@ -98,11 +119,15 @@ function requireAuth(req, res, next) {
   }
   if (!token) {
     const key = req.headers["x-api-key"] || req.query.api_key;
-    if (key === API_KEY) return next();
+    if (apiKeyMatches(key, API_KEY)) return next();
     return res.status(401).json({ error: "Token de autenticação necessário" });
   }
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    // Isolamento portal-cliente: tokens role=cliente não valem nas rotas staff.
+    if (decoded && decoded.role === "cliente") {
+      return res.status(403).json({ error: "Sem permissão para esta acção" });
+    }
     req.user = decoded;
     next();
   } catch {
@@ -110,15 +135,64 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Auth das máquinas do ginásio (só chave, sem JWT): sync_crm.py, sync_ovg.py,
+// edge_agent.py enviam `X-API-Key: <API_KEY>` (ou ?api_key=). Sem chave → 401.
+function requireEdgeAuth(req, res, next) {
+  const key = req.headers["x-api-key"] || req.headers["x-edge-key"] || req.query.api_key;
+  if (apiKeyMatches(key, EDGE_API_KEY)) return next();
+  return res.status(401).json({ error: "Chave de máquina inválida" });
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== "administrador") {
+    return res.status(403).json({ error: "Sem permissão para esta acção" });
+  }
+  next();
+}
+
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// SEGURANÇA: cabeçalhos mínimos (sem helmet para não adicionar dependências).
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+// Rate-limit simples em memória (sem dependências): 200 req/min por IP no
+// geral; 20/min em auth/OTP/edge; 60/min em webhooks.
+const _hits = new Map();
+function rateLimit(maxPerMin) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
+    const key = `${maxPerMin}:${ip}`;
+    const arr = (_hits.get(key) || []).filter((t) => now - t < 60000);
+    if (arr.length >= maxPerMin) {
+      return res.status(429).json({ error: "Demasiados pedidos. Tente mais tarde" });
+    }
+    arr.push(now);
+    _hits.set(key, arr);
+    // Limpeza ocasional para não crescer sem limite.
+    if (_hits.size > 5000) _hits.clear();
+    next();
+  };
+}
+setInterval(() => _hits.clear(), 5 * 60 * 1000).unref?.();
+
 const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com,https://brunosamora.cademi.com.br";
 app.use(cors({
-  origin: CORS_ORIGIN.split(",").map(s => s.trim()),
+  origin: CORS_ORIGIN.split(",").map(s => s.trim()).filter(Boolean),
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+app.use(rateLimit(200));
 
 app.get("/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -139,49 +213,14 @@ app.get("/api/v1/debug/egress-ip", requireAuth, async (_req, res) => {
   }
 });
 
-// ─── Diagnostic: list all tables ────────────────────────────────────────────
-app.get("/api/v1/db-acessos", async (req, res) => {
-  try {
-    const r = await pool.query('SELECT a.*, c.nome as cliente_nome FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente ORDER BY a.id_acesso DESC LIMIT 50');
-    res.json({ total: r.rows.length, columns: r.fields.map(f => f.name), data: r.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/v1/db-clientes", async (req, res) => {
-  try {
-    const r = await pool.query('SELECT * FROM clientes LIMIT 10');
-    res.json({ total: r.rows.length, columns: r.fields.map(f => f.name), data: r.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/v1/db-terminais", async (req, res) => {
-  try {
-    const r = await pool.query('SELECT * FROM terminais');
-    res.json({ total: r.rows.length, data: r.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/v1/db-tables", async (req, res) => {
-  try {
-    const r = await pool.query(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
-    );
-    const tables = [];
-    for (const row of r.rows) {
-      const count = await pool.query(`SELECT count(*) as c FROM "${row.table_name}"`);
-      tables.push({ name: row.table_name, rows: parseInt(count.rows[0].c) });
-    }
-    res.json({ tables });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ─── Diagnóstico /db-* REMOVIDO (segurança, Set/2026) ───────────────────────
+// Expunha SELECT * de clientes/acessos/terminais e a lista de tabelas a
+// qualquer visitante, sem login. Quem precisar de diagnóstico usa a BD
+// (Neon) com credenciais próprias ou logs do Render. Mantém-se 410 Gone
+// para não confundir com "rota inexistente".
+for (const p of ["/api/v1/db-acessos", "/api/v1/db-clientes", "/api/v1/db-terminais", "/api/v1/db-tables"]) {
+  app.get(p, (_req, res) => res.status(410).json({ error: "Diagnóstico removido por segurança" }));
+}
 
 // ─── Sync: PC da catraca envia acessos ──────────────────────────────────────
 
@@ -295,7 +334,9 @@ app.put("/api/v1/settings", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/access/sync", async (req, res) => {
+// SEGURANÇA: só as máquinas do ginásio (X-API-Key). Antes aceitava qualquer
+// POST da internet e escrevia acessos falsos.
+app.post("/api/v1/access/sync", requireEdgeAuth, async (req, res) => {
   try {
     const { acessos } = req.body;
     if (!Array.isArray(acessos) || acessos.length === 0) {
@@ -326,7 +367,8 @@ app.post("/api/v1/access/sync", async (req, res) => {
 });
 
 // ─── OVG Sync: PC envia membros OVG ────────────────────────────────────────
-app.post("/api/v1/access/ovg-sync", async (req, res) => {
+// SEGURANÇA: só as máquinas do ginásio (X-API-Key).
+app.post("/api/v1/access/ovg-sync", requireEdgeAuth, async (req, res) => {
   try {
     const { members } = req.body;
     if (!Array.isArray(members) || members.length === 0) {
@@ -359,8 +401,8 @@ app.post("/api/v1/access/ovg-sync", async (req, res) => {
   }
 });
 
-// OVG Sync status
-app.get("/api/v1/access/ovg-status", async (req, res) => {
+// OVG Sync status (só staff logado)
+app.get("/api/v1/access/ovg-status", requireAuth, async (req, res) => {
   try {
     const count = await pool.query("SELECT COUNT(*) as cnt FROM ovg_members");
     const last = await pool.query("SELECT MAX(synced_at) as last_sync FROM ovg_members");
@@ -382,19 +424,17 @@ async function ovgLogin() {
   const pass = await cfg("ovg_password", OVG_PASSWORD);
   if (!user || !pass) throw new Error("OVG credentials not configured (Integrações > Configurar)");
   const url = `${base}/APIControlAccess`;
-  console.log("OVG login:", url);
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
     body: JSON.stringify({ username: user, password: pass }),
   });
   const body = await resp.text();
-  console.log("OVG login status:", resp.status, "body:", body.substring(0, 200));
-  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status} ${body.substring(0, 300)}`);
+  // SEGURANÇA: logs mínimos — nunca despejar corpo da resposta (pode ter tokens).
+  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status}`);
   const data = JSON.parse(body);
-  console.log("OVG login keys:", Object.keys(data));
   const token = data.token || data.Token || data.access_token;
-  if (!token) throw new Error(`OVG: no token in response. Keys: ${Object.keys(data).join(',')} Msg: ${(data.msg || data.message || data.error || '').toString().slice(0, 200)} Body: ${body.substring(0, 300)}`);
+  if (!token) throw new Error("OVG: no token in response");
   return token;
 }
 
@@ -402,13 +442,11 @@ async function ovgGetMembers(token) {
   const base = await cfg("ovg_api_url", OVG_API_URL);
   const club = await cfg("ovg_club_code", OVG_CLUB_CODE);
   const url = `${base}/ListOfCustomersDataDetailed/${club}`;
-  console.log("OVG members:", url);
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
   });
   const body = await resp.text();
-  console.log("OVG members status:", resp.status, "body length:", body.length);
-  if (!resp.ok) throw new Error(`OVG members failed: ${resp.status} ${body.substring(0, 200)}`);
+  if (!resp.ok) throw new Error(`OVG members failed: ${resp.status}`);
   const data = JSON.parse(body);
   return data.clients_data || data.data?.clients_data || [];
 }
@@ -450,8 +488,8 @@ app.post("/api/v1/access/ovg-reseed", requireAuth, async (req, res) => {
   }
 });
 
-// Sync status endpoint
-app.get("/api/v1/access/sync-status", async (req, res) => {
+// Sync status endpoint (só staff logado)
+app.get("/api/v1/access/sync-status", requireAuth, async (req, res) => {
   try {
     const last = await pool.query("SELECT synced_at, records_synced FROM sync_log ORDER BY id DESC LIMIT 1");
     const totalSyncs = await pool.query("SELECT COUNT(*) as cnt FROM sync_log");
@@ -645,8 +683,8 @@ app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
 });
 
 // ─── Terminal Unlock ───────────────────────────────────────────────────────
-
-app.post("/api/v1/terminal/unlock", async (req, res) => {
+// SEGURANÇA: só staff logado. Abre a catraca física — nunca público.
+app.post("/api/v1/terminal/unlock", requireAuth, async (req, res) => {
   try {
     const { door, tipo } = req.body;
     console.log(`[UNLOCK] Pedido de desbloqueio: porta ${door} (${tipo})`);
@@ -682,7 +720,8 @@ app.post("/api/v1/terminal/unlock", async (req, res) => {
       res.json({ ok: true, message: `Catraca ${tipo || "entrada"} desbloqueada`, detail: unlockResult });
     } catch (e) {
       console.log(`[UNLOCK] Erro ao contactar ZKTeco: ${e.message}`);
-      res.json({ ok: true, message: `Pedido de desbloqueio enviado para ${tipo || "entrada"}`, warning: e.message });
+      // SEGURANÇA: falha reportada como falha (antes dizia ok:true e enganava).
+      res.status(502).json({ ok: false, error: "Catraca inalcançável. Verificar PC do ginásio." });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -890,7 +929,7 @@ app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
 
 // ─── Auth: Login ────────────────────────────────────────────────────────────
 
-app.post("/api/v1/auth/login", async (req, res) => {
+app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
   try {
     const { email, phone, password } = req.body;
     if (!password || (!email && !phone)) {
@@ -944,12 +983,18 @@ app.post("/api/v1/auth/login", async (req, res) => {
 
 // ─── Auth: Register ─────────────────────────────────────────────────────────
 
-app.post("/api/v1/auth/register", async (req, res) => {
+app.post("/api/v1/auth/register", rateLimit(20), async (req, res) => {
   try {
     const { name, email, password, role, phone } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Nome, email e password são obrigatórios" });
     }
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: "Password deve ter pelo menos 8 caracteres" });
+    }
+    // SEGURANÇA: auto-registo público nunca cria administrador/gestor.
+    const PUBLIC_ROLES = ["comercial", "financeiro", "operacional"];
+    const userRole = PUBLIC_ROLES.includes(role) ? role : "comercial";
 
     const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
     if (existing.rows.length > 0) {
@@ -957,7 +1002,6 @@ app.post("/api/v1/auth/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const userRole = role || "comercial";
 
     const result = await pool.query(
       "INSERT INTO users (name, email, password_hash, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role",
@@ -978,13 +1022,18 @@ app.post("/api/v1/auth/register", async (req, res) => {
 // ─── Auth: Logout ───────────────────────────────────────────────────────────
 
 app.post("/api/v1/auth/logout", (_req, res) => {
-  res.clearCookie("token", { path: "/" });
+  res.clearCookie("token", {
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
   res.json({ message: "Sessão terminada" });
 });
 
 // ─── Auth: Forgot Password ──────────────────────────────────────────────────
 
-app.post("/api/v1/auth/forgot-password", async (req, res) => {
+app.post("/api/v1/auth/forgot-password", rateLimit(20), async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email é obrigatório" });
@@ -1000,7 +1049,11 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
         [`password_reset_${user.id}`, JSON.stringify({ token: resetToken, expiresAt: expiresAt.toISOString() })]
       );
-      console.log(`[PASSWORD RESET] Token for ${email}: ${resetToken}`);
+      // SEGURANÇA: token nunca vai para logs. Em produção enviar por email
+      // (fornecedor SMTP); o link expira em 1h e é de uso único.
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[PASSWORD RESET] pedido para ${email} (token guardado, ver BD local)`);
+      }
     }
 
     res.json({ message: "Se o email existir, receberá um link de recuperação" });
@@ -1012,7 +1065,7 @@ app.post("/api/v1/auth/forgot-password", async (req, res) => {
 
 // ─── Auth: Reset Password ───────────────────────────────────────────────────
 
-app.post("/api/v1/auth/reset-password", async (req, res) => {
+app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: "Token e password são obrigatórios" });
@@ -1045,12 +1098,11 @@ app.post("/api/v1/auth/reset-password", async (req, res) => {
 
 const paymentSSEClients = new Set();
 
-app.get("/api/v1/payments/stream", (req, res) => {
+app.get("/api/v1/payments/stream", requireAuth, (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
   });
   res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
   paymentSSEClients.add(res);
@@ -1065,70 +1117,86 @@ function broadcastPaymentUpdate(data) {
 }
 
 // ─── É-kwanza Webhook (Multicaixa Express callback) ────────────────────────
-
-app.post("/webhooks/ekwanza", async (req, res) => {
+// SEGURANÇA (Set/2026): um callback HTTP nunca é confiável sozinho.
+//  1. valida formato (400 em lixo); 2. nunca CRIA pagamentos;
+//  3. só muda estado com confirmação server-side (consulta GPO à É-kwanza);
+//     sem confirmação, regista em metadata e mantém "pendente".
+app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
   try {
     const body = req.body || {};
-    console.log("[EKWANZA-WEBHOOK] Callback recebido:", JSON.stringify(body).slice(0, 500));
 
-    // Aceita variações de nomes/casing que a É-kwanza possa enviar.
     const merchantTransactionId =
-      body.merchantTransactionId ?? body.merchant_transaction_id ?? body.merchanttransactionid ??
-      body.code ?? body.reference ?? body.merchantReference ?? null;
+      body.merchantTransactionId ?? body.merchant_transaction_id ?? body.code ?? body.reference ?? null;
     const ekwanzaTransactionId =
-      body.ekwanzaTransactionId ?? body.ekwanza_transaction_id ?? body.providerTransactionId ??
-      body.transactionId ?? body.id ?? null;
-    const operationStatus = body.operationStatus ?? body.operation_status ?? body.operationStatusCode ?? body.statusCode;
-    const rawStatus = body.status ?? body.paymentStatus ?? body.chargeStatus ?? null;
+      body.ekwanzaTransactionId ?? body.ekwanza_transaction_id ?? body.transactionId ?? null;
+    const operationStatus = body.operationStatus ?? body.operation_status ?? null;
     const operationData = body.operationData ?? body.data ?? null;
 
+    if (typeof merchantTransactionId !== "string" || !merchantTransactionId || merchantTransactionId.length > 100) {
+      return res.status(400).json({ error: "Callback inválido" });
+    }
     const statusMap = { 1: "confirmado", 3: "rejeitado", 4: "rejeitado", 5: "rejeitado" };
-    let mappedStatus = statusMap[Number(operationStatus)] || "pendente";
-    if (mappedStatus === "pendente" && rawStatus != null) {
-      const s = String(rawStatus).toLowerCase();
-      if (["success", "successful", "paid", "confirmado", "completed", "1"].includes(s)) mappedStatus = "confirmado";
-      else if (["failed", "fail", "cancelled", "canceled", "expired", "rejected", "rejeitado", "error", "3", "4", "5"].includes(s)) mappedStatus = "rejeitado";
+    if (!Object.hasOwn(statusMap, Number(operationStatus))) {
+      console.log(`[EKWANZA-WEBHOOK] status desconhecido para ${merchantTransactionId} — ignorado`);
+      return res.status(400).json({ error: "Callback inválido" });
     }
 
-    if (merchantTransactionId && mappedStatus !== "pendente") {
-      // Cancelado pelo aluno: ignora callbacks tardios da É-kwanza.
-      try {
-        const cg = await pool.query("SELECT metadata FROM payments WHERE code = $1", [merchantTransactionId]);
-        const mm = cg.rows[0]?.metadata;
-        const mmo = typeof mm === "string" ? JSON.parse(mm) : (mm || {});
-        if (mmo.cancelled_by_user) {
-          console.log(`[EKWANZA-WEBHOOK] ${merchantTransactionId} ignorado (cancelado pelo aluno)`);
-          return res.json({ received: true, ignored: true });
-        }
-      } catch {}
-      let upd;
-      if (mappedStatus === "confirmado") {
-        upd = await pool.query(
-          `UPDATE payments SET status = 'confirmado', ekwanza_operation_code = $1, paid_at = NOW(), reconciled_at = NOW(), updated_at = NOW() WHERE code = $2`,
-          [ekwanzaTransactionId || null, merchantTransactionId]
-        );
-      } else {
-        upd = await pool.query(
-          `UPDATE payments SET status = $1, ekwanza_operation_code = $2, updated_at = NOW() WHERE code = $3`,
-          [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
-        );
-      }
-      if (upd.rowCount === 0) {
-        const amount = Number(operationData?.amount ?? body.amount ?? 0) || 0;
-        await pool.query(
-          `INSERT INTO payments (code, amount, method, status, reference_code, ekwanza_operation_code, metadata)
-           VALUES ($1, $2, 'mcx_express', $3, $1, $4, $5)`,
-          [merchantTransactionId, amount, mappedStatus, ekwanzaTransactionId || null, JSON.stringify(body).slice(0, 2000)]
-        );
-        console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} criado como ${mappedStatus}`);
-      } else {
-        console.log(`[EKWANZA-WEBHOOK] Pagamento ${merchantTransactionId} atualizado para ${mappedStatus}`);
-      }
-      broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
-      if (mappedStatus === "confirmado") setImmediate(() => sendCademiDelivery(merchantTransactionId));
+    const cur = await pool.query("SELECT id, status, amount, metadata FROM payments WHERE code = $1", [merchantTransactionId]);
+    if (cur.rows.length === 0) {
+      // Nunca criar pagamento por callback — responde ok sem enumerar.
+      return res.json({ received: true });
+    }
+    const payment = cur.rows[0];
+    const meta = typeof payment.metadata === "string"
+      ? JSON.parse(payment.metadata || "{}") : (payment.metadata || {});
+    if (meta.cancelled_by_user) {
+      return res.json({ received: true, ignored: true });
+    }
+    if (operationData?.amount != null && Number(operationData.amount) !== Number(payment.amount)) {
+      meta.ekwanza_unverified_callback = { reason: "amount_mismatch", at: new Date().toISOString() };
+      await pool.query("UPDATE payments SET metadata = $1, updated_at = NOW() WHERE id = $2", [JSON.stringify(meta), payment.id]);
+      return res.json({ received: true, verified: false });
     }
 
-    res.json({ received: true });
+    // Confirmação autoritativa junto da É-kwanza (fonte da verdade).
+    let authoritativeSuccess = null;
+    try {
+      const token = await getEkwanzaToken();
+      const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
+      const cr = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(merchantTransactionId)}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+      });
+      if (cr.ok) {
+        const cj = await cr.json().catch(() => null);
+        const ch = cj?.payments?.[0];
+        if (ch?.status) authoritativeSuccess = String(ch.status).toLowerCase() === "success";
+      }
+    } catch (e) {
+      console.log(`[EKWANZA-WEBHOOK] confirmação falhou para ${merchantTransactionId}: ${e.message}`);
+    }
+
+    if (authoritativeSuccess === null) {
+      meta.ekwanza_unverified_callback = { reason: "no_authoritative_confirmation", at: new Date().toISOString() };
+      await pool.query("UPDATE payments SET metadata = $1, updated_at = NOW() WHERE id = $2", [JSON.stringify(meta), payment.id]);
+      return res.json({ received: true, verified: false });
+    }
+
+    const mappedStatus = authoritativeSuccess ? "confirmado" : statusMap[Number(operationStatus)];
+    if (mappedStatus === "confirmado") {
+      await pool.query(
+        `UPDATE payments SET status = 'confirmado', ekwanza_operation_code = $1, paid_at = NOW(), reconciled_at = NOW(), updated_at = NOW() WHERE code = $2`,
+        [ekwanzaTransactionId || null, merchantTransactionId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE payments SET status = $1, ekwanza_operation_code = $2, updated_at = NOW() WHERE code = $3`,
+        [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
+      );
+    }
+    broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
+    if (mappedStatus === "confirmado") setImmediate(() => sendCademiDelivery(merchantTransactionId));
+
+    res.json({ received: true, verified: true });
   } catch (err) {
     console.error("[EKWANZA-WEBHOOK] Erro:", err.message);
     res.status(500).json({ error: err.message });
@@ -2015,17 +2083,20 @@ app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res)
 });
 
 // Webhook recetor (configurar URL no painel Cademi: /api/v1/webhooks/cademi)
-app.post("/api/v1/webhooks/cademi", async (req, res) => {
+app.post("/api/v1/webhooks/cademi", rateLimit(60), async (req, res) => {
   try {
     const { event_type, event } = req.body || {};
-    console.log(`[CADEMI WEBHOOK] ${event_type}`, event?.usuario?.email || "");
-    // Liga aluno ao cliente por email quando houver evento de usuário
+    // SEGURANÇA: valida formato antes de tocar na BD (só liga cademi_id por
+    // email válido; nunca mexe em pagamentos por este webhook).
+    if (event_type != null && typeof event_type !== "string") {
+      return res.status(400).json({ error: "Callback inválido" });
+    }
     const email = event?.usuario?.email;
     const cademiId = event?.usuario?.id;
-    if (email && cademiId) {
+    if (email && cademiId && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
       await pool.query(
         "UPDATE customers SET cademi_id = $1 WHERE LOWER(email) = LOWER($2)",
-        [String(cademiId), email]
+        [String(cademiId).slice(0, 100), String(email).slice(0, 255)]
       ).catch(() => {});
     }
     res.json({ ok: true });
@@ -2847,11 +2918,12 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, re
   }
 });
 
-// ─── Edge Agent API (for gym PC edge_agent.py) ──────────────────────────────
-
+// ─── Edge Agent API (PC do ginásio) ─────────────────────────────────────────
+// SEGURANÇA: só com X-API-Key das máquinas (requireEdgeAuth). Os scripts do
+// PC (edge_agent.py, sync_crm.py, sync_ovg.py) têm de enviar o header.
 const pendingCommands = [];
 
-app.post("/api/edge/evento", async (req, res) => {
+app.post("/api/edge/evento", requireEdgeAuth, async (req, res) => {
   try {
     const { tipo, pin, terminal_serie, timestamp } = req.body;
     if (!tipo || !pin) {
@@ -2877,7 +2949,7 @@ app.post("/api/edge/evento", async (req, res) => {
   }
 });
 
-app.get("/api/edge/comandos", (req, res) => {
+app.get("/api/edge/comandos", requireEdgeAuth, (req, res) => {
   const agentId = req.query.agent_id || "PC01";
   const cmds = pendingCommands.filter(c => c.agent_id === agentId || !c.agent_id);
   // Clear delivered commands
@@ -2885,7 +2957,7 @@ app.get("/api/edge/comandos", (req, res) => {
   res.json({ comandos: cmds });
 });
 
-app.get("/api/edge/sincronizar", async (req, res) => {
+app.get("/api/edge/sincronizar", requireEdgeAuth, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT DISTINCT customer_id as id, customer_name as nome FROM solve_access_logs ORDER BY customer_name ASC"
@@ -2917,7 +2989,6 @@ app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
   });
 
   try {

@@ -100,7 +100,7 @@ function leadHeaders(): HeadersInit {
     const t = localStorage.getItem('token');
     if (t) return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
   } catch {}
-  return { 'X-API-Key': 'solve-crm-api-key-2024', 'Content-Type': 'application/json' };
+  return { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "", 'Content-Type': 'application/json' };
 }
 async function leadFetch(path: string, opts: RequestInit = {}) {
   const r = await fetch(`${leadApiBase()}${path}`, { ...opts, headers: { ...leadHeaders(), ...(opts.headers || {}) } });
@@ -687,7 +687,7 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
 function MiniList({ items }: { items: string[] }) { return <div style={{ display: 'grid', gap: '.65rem' }}>{items.map((x, i) => <div key={x} style={{ display: 'flex', alignItems: 'center', gap: '.55rem', fontSize: '.72rem', color: i === 0 ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: i === 0 ? 'hsl(var(--chart-2))' : 'hsl(var(--border))' }} />{x}</div>)}</div>; }
 
 function PlansPage() {
-  const apiKey = 'solve-crm-api-key-2024';
+  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   const apiBase = import.meta.env.VITE_API_URL || '';
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -805,7 +805,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const sendCademi = async () => {
     setSending(true); setSendResult(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: { 'X-API-Key': 'solve-crm-api-key-2024' } });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "" } });
       const data = await res.json().catch(() => null);
       setSendResult(res.ok ? `Acesso libertado (${data?.email || ''})` : `Falha: ${data?.error || res.statusText}`);
     } catch (e: any) { setSendResult('Erro: ' + e.message); }
@@ -896,7 +896,7 @@ function fmtPaymentDate(d: string | null | undefined): string {
 function PaymentsPage() {
   const [paymentsData, setPaymentsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const apiKey = 'solve-crm-api-key-2024';
+  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   
   const fetchPayments = async () => {
     try {
@@ -1197,7 +1197,7 @@ function IntegrationsPage() {
 }
 
 function AcademiaPage() {
-  const apiKey = 'solve-crm-api-key-2024';
+  const apiKey = import.meta.env.VITE_ACCESS_API_KEY || "";
   const apiBase = import.meta.env.VITE_API_URL || '';
   const [products, setProducts] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);

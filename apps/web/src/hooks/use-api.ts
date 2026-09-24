@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const ACCESS_API = import.meta.env.VITE_ACCESS_API_URL || 'https://solve-sqoh.onrender.com';
-const ACCESS_API_KEY = import.meta.env.VITE_ACCESS_API_KEY || 'solve-crm-api-key-2024';
+const ACCESS_API_KEY = import.meta.env.VITE_ACCESS_API_KEY || "";
 
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem('token');

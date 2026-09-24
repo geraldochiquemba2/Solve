@@ -6,7 +6,8 @@
  */
 (function () {
   var API = (window.SOLVE_PAY_API || "https://solve-sqoh.onrender.com").replace(/\/$/, "");
-  var API_KEY = "solve-crm-api-key-2024";
+  // Configurar com a chave pública do widget (nunca commitar valor real)
+  var API_KEY = "";
   var RED = "#D71920";
 
   function h(url, opts) {
