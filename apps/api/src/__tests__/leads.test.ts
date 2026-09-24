@@ -46,12 +46,23 @@ describe("Leads API", () => {
         },
       ];
 
-      const chainable = {
+      const leadsChain: any = {
         from: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockResolvedValue(mockLeads),
+        orderBy: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue(mockLeads),
       };
-      mockDb.select.mockReturnValue(chainable as any);
+      leadsChain.from.mockReturnValue(leadsChain);
+      leadsChain.where.mockReturnValue(leadsChain);
+      leadsChain.orderBy.mockReturnValue(leadsChain);
+      const contactsChain: any = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockResolvedValue([]),
+      };
+      contactsChain.from.mockReturnValue(contactsChain);
+      contactsChain.where.mockReturnValue(contactsChain);
+      mockDb.select.mockImplementationOnce(() => leadsChain).mockImplementation(() => contactsChain);
 
       const res = await request(app)
         .get("/api/v1/leads")
@@ -188,34 +199,21 @@ describe("Leads API", () => {
   });
 
   describe("DELETE /api/v1/leads/:id", () => {
-    it("should delete a lead when authenticated as admin", async () => {
-      const existingLead = {
-        id: "lead-1",
-        code: "LD-24001",
-        name: "Lead to Delete",
-      };
-
-      mockDb.query.leadsTable.findFirst.mockResolvedValue(existingLead as any);
-      mockDb.delete.mockReturnValue({
-        where: vi.fn().mockResolvedValue(undefined),
-      } as any);
-
+    it("should block physical delete — leads nunca desaparecem (410)", async () => {
       const res = await request(app)
         .delete("/api/v1/leads/lead-1")
         .set("Authorization", `Bearer ${adminToken}`);
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(410);
+      expect(res.body.error).toMatch(/não podem ser apagadas/i);
     });
 
-    it("should return 404 if lead not found", async () => {
-      mockDb.query.leadsTable.findFirst.mockResolvedValue(undefined as any);
-
+    it("should return 410 even if lead not found (nunca apaga)", async () => {
       const res = await request(app)
         .delete("/api/v1/leads/nonexistent")
         .set("Authorization", `Bearer ${adminToken}`);
 
-      expect(res.status).toBe(404);
-      expect(res.body.error).toBe("Lead não encontrado");
+      expect(res.status).toBe(410);
     });
 
     it("should return 403 for unauthorized role", async () => {

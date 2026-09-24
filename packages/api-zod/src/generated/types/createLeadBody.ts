@@ -18,4 +18,8 @@ export type CreateLeadBody = {
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  whatsapp?: string;
+  produtoInteresse?: string;
+  proximoContato?: Date;
+  motivoPerda?: string;
 };

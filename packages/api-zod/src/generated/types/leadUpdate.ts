@@ -12,10 +12,14 @@ export interface LeadUpdate {
   name?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   company?: string;
   source?: string;
   status?: LeadUpdateStatus;
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  produtoInteresse?: string;
+  proximoContato?: Date;
+  motivoPerda?: string;
 }

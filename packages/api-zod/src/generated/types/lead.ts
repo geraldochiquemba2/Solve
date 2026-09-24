@@ -13,12 +13,20 @@ export interface Lead {
   name?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   company?: string;
   source?: string;
   status?: LeadStatus;
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  produtoInteresse?: string;
+  proximoContato?: Date;
+  motivoPerda?: string;
+  contactosTotal?: number;
+  ultimoContactoAt?: Date;
+  ultimoResultado?: string;
+  ultimoStaff?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

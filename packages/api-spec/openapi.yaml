@@ -195,6 +195,15 @@ paths:
                   type: integer
                 notes:
                   type: string
+                whatsapp:
+                  type: string
+                produtoInteresse:
+                  type: string
+                proximoContato:
+                  type: string
+                  format: date
+                motivoPerda:
+                  type: string
       responses:
         "201":
           description: Lead created
@@ -205,6 +214,94 @@ paths:
                 properties:
                   data:
                     $ref: "#/components/schemas/Lead"
+  /leads/resumo:
+    get:
+      operationId: getLeadsResumo
+      tags: [leads]
+      summary: KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resumo de leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LeadsResumo"
+  /leads/followups/hoje:
+    get:
+      operationId: getLeadsFollowupsHoje
+      tags: [leads]
+      summary: Follow-ups de hoje (proximo_contato = hoje, não convertidas)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Follow-ups de hoje
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Lead"
+                  total:
+                    type: integer
+  /leads/{id}/contacts:
+    get:
+      operationId: listLeadContacts
+      tags: [leads]
+      summary: Histórico de contactos (quem, quando, canal, resultado)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Histórico de contactos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LeadContact"
+                  total:
+                    type: integer
+    post:
+      operationId: createLeadContact
+      tags: [leads]
+      summary: Registar contacto (canal/resultado/próximo passo via SELECT)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadContactInput"
+      responses:
+        "201":
+          description: Contacto registado
   /leads/{id}:
     get:
       operationId: getLead
@@ -265,7 +362,7 @@ paths:
     delete:
       operationId: deleteLead
       tags: [leads]
-      summary: Delete lead
+      summary: Bloqueado — leads nunca desaparecem (usar Perdida + motivo)
       security:
         - bearerAuth: []
       parameters:
@@ -276,10 +373,8 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
-          description: Lead deleted
-        "404":
-          description: Lead not found
+        "410":
+          description: Leads não podem ser apagadas
   /leads/{id}/convert:
     post:
       operationId: convertLead
@@ -1117,6 +1212,260 @@ paths:
                     $ref: "#/components/schemas/User"
         "404":
           description: User not found
+  /access:
+    get:
+      operationId: listAccess
+      tags: [access]
+      summary: Listar acessos
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: platform
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista de acessos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Access"
+                  total:
+                    type: integer
+    post:
+      operationId: createAccess
+      tags: [access]
+      summary: Criar acesso
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessInput"
+      responses:
+        "201":
+          description: Acesso criado
+  /access/{id}:
+    get:
+      operationId: getAccess
+      tags: [access]
+      summary: Obter acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Acesso encontrado
+    patch:
+      operationId: updateAccess
+      tags: [access]
+      summary: Atualizar acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessInput"
+      responses:
+        "200":
+          description: Acesso atualizado
+    delete:
+      operationId: deleteAccess
+      tags: [access]
+      summary: Eliminar acesso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Acesso eliminado
+  /checkins:
+    get:
+      operationId: listCheckins
+      tags: [checkins]
+      summary: Listar check-ins
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de check-ins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Checkin"
+                  total:
+                    type: integer
+    post:
+      operationId: createCheckin
+      tags: [checkins]
+      summary: Criar check-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckinInput"
+      responses:
+        "201":
+          description: Check-in criado
+  /checkins/{id}:
+    get:
+      operationId: getCheckin
+      tags: [checkins]
+      summary: Obter check-in
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Check-in encontrado
+    delete:
+      operationId: deleteCheckin
+      tags: [checkins]
+      summary: Eliminar check-in
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Check-in eliminado
+  /api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [api-keys]
+      summary: Listar chaves de API
+      responses:
+        "200":
+          description: Lista de chaves
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+                  total:
+                    type: integer
+    post:
+      operationId: createApiKey
+      tags: [api-keys]
+      summary: Criar chave de API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "201":
+          description: Chave criada
+  /api-keys/{id}:
+    get:
+      operationId: getApiKey
+      tags: [api-keys]
+      summary: Obter chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chave encontrada
+    patch:
+      operationId: updateApiKey
+      tags: [api-keys]
+      summary: Atualizar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "200":
+          description: Chave atualizada
+    delete:
+      operationId: deleteApiKey
+      tags: [api-keys]
+      summary: Eliminar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Chave eliminada
+  /api-keys/{id}/toggle:
+    patch:
+      operationId: toggleApiKey
+      tags: [api-keys]
+      summary: Ativar/desativar chave de API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chave atualizada
 components:
   securitySchemes:
     bearerAuth:
@@ -1181,6 +1530,8 @@ components:
           type: string
         phone:
           type: string
+        whatsapp:
+          type: string
         company:
           type: string
         source:
@@ -1194,6 +1545,22 @@ components:
         estimatedValue:
           type: integer
         notes:
+          type: string
+        produtoInteresse:
+          type: string
+        proximoContato:
+          type: string
+          format: date
+        motivoPerda:
+          type: string
+        contactosTotal:
+          type: integer
+        ultimoContactoAt:
+          type: string
+          format: date-time
+        ultimoResultado:
+          type: string
+        ultimoStaff:
           type: string
         createdAt:
           type: string
@@ -1212,6 +1579,8 @@ components:
           format: email
         phone:
           type: string
+        whatsapp:
+          type: string
         company:
           type: string
         source:
@@ -1225,6 +1594,72 @@ components:
         estimatedValue:
           type: integer
         notes:
+          type: string
+        produtoInteresse:
+          type: string
+        proximoContato:
+          type: string
+          format: date
+        motivoPerda:
+          type: string
+    LeadsResumo:
+      type: object
+      properties:
+        total:
+          type: integer
+        novas:
+          type: integer
+        contactadas:
+          type: integer
+        pendentes:
+          type: integer
+        emAcompanhamento:
+          type: integer
+        convertidas:
+          type: integer
+        perdidas:
+          type: integer
+    LeadContact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        canal:
+          type: string
+          enum: [WhatsApp, Telefone, SMS, Presencial, E-mail]
+        resultado:
+          type: string
+          enum: [Não respondeu, Interessado, Pediu mais informações, Pediu para contactar depois, Não tem interesse, Converteu, Número inválido]
+        proximo_passo:
+          type: string
+        proximo_contato:
+          type: string
+          format: date
+        observacao:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        staff_nome:
+          type: string
+    LeadContactInput:
+      type: object
+      required: [canal, resultado]
+      properties:
+        canal:
+          type: string
+          enum: [WhatsApp, Telefone, SMS, Presencial, E-mail]
+        resultado:
+          type: string
+          enum: [Não respondeu, Interessado, Pediu mais informações, Pediu para contactar depois, Não tem interesse, Converteu, Número inválido]
+        proximo_passo:
+          type: string
+          enum: [Contactar amanhã, Contactar em 3 dias, Contactar em 7 dias, Sem próximo contacto, Agendar visita]
+        proximo_contato:
+          type: string
+          format: date
+        observacao:
           type: string
     Customer:
       type: object
@@ -1519,262 +1954,6 @@ components:
                 type: string
               count:
                 type: integer
-  /access:
-    get:
-      operationId: listAccess
-      tags: [access]
-      summary: Listar acessos
-      parameters:
-        - name: customerId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: platform
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Lista de acessos
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Access"
-                  total:
-                    type: integer
-    post:
-      operationId: createAccess
-      tags: [access]
-      summary: Criar acesso
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AccessInput"
-      responses:
-        "201":
-          description: Acesso criado
-  /access/{id}:
-    get:
-      operationId: getAccess
-      tags: [access]
-      summary: Obter acesso
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Acesso encontrado
-    patch:
-      operationId: updateAccess
-      tags: [access]
-      summary: Atualizar acesso
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AccessInput"
-      responses:
-        "200":
-          description: Acesso atualizado
-    delete:
-      operationId: deleteAccess
-      tags: [access]
-      summary: Eliminar acesso
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Acesso eliminado
-  /checkins:
-    get:
-      operationId: listCheckins
-      tags: [checkins]
-      summary: Listar check-ins
-      parameters:
-        - name: customerId
-          in: query
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Lista de check-ins
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Checkin"
-                  total:
-                    type: integer
-    post:
-      operationId: createCheckin
-      tags: [checkins]
-      summary: Criar check-in
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CheckinInput"
-      responses:
-        "201":
-          description: Check-in criado
-  /checkins/{id}:
-    get:
-      operationId: getCheckin
-      tags: [checkins]
-      summary: Obter check-in
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Check-in encontrado
-    delete:
-      operationId: deleteCheckin
-      tags: [checkins]
-      summary: Eliminar check-in
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Check-in eliminado
-  /api-keys:
-    get:
-      operationId: listApiKeys
-      tags: [api-keys]
-      summary: Listar chaves de API
-      responses:
-        "200":
-          description: Lista de chaves
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ApiKey"
-                  total:
-                    type: integer
-    post:
-      operationId: createApiKey
-      tags: [api-keys]
-      summary: Criar chave de API
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiKeyInput"
-      responses:
-        "201":
-          description: Chave criada
-  /api-keys/{id}:
-    get:
-      operationId: getApiKey
-      tags: [api-keys]
-      summary: Obter chave de API
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Chave encontrada
-    patch:
-      operationId: updateApiKey
-      tags: [api-keys]
-      summary: Atualizar chave de API
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiKeyInput"
-      responses:
-        "200":
-          description: Chave atualizada
-    delete:
-      operationId: deleteApiKey
-      tags: [api-keys]
-      summary: Eliminar chave de API
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Chave eliminada
-  /api-keys/{id}/toggle:
-    patch:
-      operationId: toggleApiKey
-      tags: [api-keys]
-      summary: Ativar/desativar chave de API
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Chave atualizada
-components:
-  schemas:
     Access:
       type: object
       properties:

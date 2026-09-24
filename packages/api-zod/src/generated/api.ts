@@ -90,12 +90,20 @@ export const ListLeadsResponse = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
   "company": zod.string().optional(),
   "source": zod.string().optional(),
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
   "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional(),
+  "contactosTotal": zod.number().int().optional(),
+  "ultimoContactoAt": zod.coerce.date().optional(),
+  "ultimoResultado": zod.string().optional(),
+  "ultimoStaff": zod.string().optional(),
   "createdAt": zod.coerce.date().optional(),
   "updatedAt": zod.coerce.date().optional()
 })).optional(),
@@ -119,7 +127,11 @@ export const CreateLeadBody = zod.object({
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).default(createLeadBodyStatusDefault),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional()
 })
 
 export const CreateLeadResponse = zod.object({
@@ -129,16 +141,111 @@ export const CreateLeadResponse = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
   "company": zod.string().optional(),
   "source": zod.string().optional(),
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
   "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional(),
+  "contactosTotal": zod.number().int().optional(),
+  "ultimoContactoAt": zod.coerce.date().optional(),
+  "ultimoResultado": zod.string().optional(),
+  "ultimoStaff": zod.string().optional(),
   "createdAt": zod.coerce.date().optional(),
   "updatedAt": zod.coerce.date().optional()
 }).optional()
 })
+
+
+/**
+ * @summary KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+ */
+export const GetLeadsResumoResponse = zod.object({
+  "data": zod.object({
+  "total": zod.number().int().optional(),
+  "novas": zod.number().int().optional(),
+  "contactadas": zod.number().int().optional(),
+  "pendentes": zod.number().int().optional(),
+  "emAcompanhamento": zod.number().int().optional(),
+  "convertidas": zod.number().int().optional(),
+  "perdidas": zod.number().int().optional()
+}).optional()
+})
+
+
+/**
+ * @summary Follow-ups de hoje (proximo_contato = hoje, não convertidas)
+ */
+export const GetLeadsFollowupsHojeResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid().optional(),
+  "code": zod.string().optional(),
+  "name": zod.string().optional(),
+  "email": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
+  "company": zod.string().optional(),
+  "source": zod.string().optional(),
+  "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
+  "ownerId": zod.string().uuid().optional(),
+  "estimatedValue": zod.number().int().optional(),
+  "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional(),
+  "contactosTotal": zod.number().int().optional(),
+  "ultimoContactoAt": zod.coerce.date().optional(),
+  "ultimoResultado": zod.string().optional(),
+  "ultimoStaff": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})).optional(),
+  "total": zod.number().int().optional()
+})
+
+
+/**
+ * @summary Histórico de contactos (quem, quando, canal, resultado)
+ */
+export const ListLeadContactsParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const ListLeadContactsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid().optional(),
+  "canal": zod.enum(['WhatsApp', 'Telefone', 'SMS', 'Presencial', 'E-mail']).optional(),
+  "resultado": zod.enum(['Não respondeu', 'Interessado', 'Pediu mais informações', 'Pediu para contactar depois', 'Não tem interesse', 'Converteu', 'Número inválido']).optional(),
+  "proximo_passo": zod.string().optional(),
+  "proximo_contato": zod.coerce.date().optional(),
+  "observacao": zod.string().optional(),
+  "created_at": zod.coerce.date().optional(),
+  "staff_nome": zod.string().optional()
+})).optional(),
+  "total": zod.number().int().optional()
+})
+
+
+/**
+ * @summary Registar contacto (canal/resultado/próximo passo via SELECT)
+ */
+export const CreateLeadContactParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const CreateLeadContactBody = zod.object({
+  "canal": zod.enum(['WhatsApp', 'Telefone', 'SMS', 'Presencial', 'E-mail']),
+  "resultado": zod.enum(['Não respondeu', 'Interessado', 'Pediu mais informações', 'Pediu para contactar depois', 'Não tem interesse', 'Converteu', 'Número inválido']),
+  "proximo_passo": zod.enum(['Contactar amanhã', 'Contactar em 3 dias', 'Contactar em 7 dias', 'Sem próximo contacto', 'Agendar visita']).optional(),
+  "proximo_contato": zod.coerce.date().optional(),
+  "observacao": zod.string().optional()
+})
+
+export const CreateLeadContactResponse = zod.void()
 
 
 /**
@@ -155,12 +262,20 @@ export const GetLeadResponse = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
   "company": zod.string().optional(),
   "source": zod.string().optional(),
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
   "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional(),
+  "contactosTotal": zod.number().int().optional(),
+  "ultimoContactoAt": zod.coerce.date().optional(),
+  "ultimoResultado": zod.string().optional(),
+  "ultimoStaff": zod.string().optional(),
   "createdAt": zod.coerce.date().optional(),
   "updatedAt": zod.coerce.date().optional()
 }).optional()
@@ -182,12 +297,16 @@ export const UpdateLeadBody = zod.object({
   "name": zod.string().min(updateLeadBodyNameMin).optional(),
   "email": zod.string().email().optional(),
   "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
   "company": zod.string().optional(),
   "source": zod.string().optional(),
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional()
 })
 
 export const UpdateLeadResponse = zod.object({
@@ -197,12 +316,20 @@ export const UpdateLeadResponse = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
+  "whatsapp": zod.string().optional(),
   "company": zod.string().optional(),
   "source": zod.string().optional(),
   "status": zod.enum(['novo_lead', 'contacto', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido']).optional(),
   "ownerId": zod.string().uuid().optional(),
   "estimatedValue": zod.number().int().optional(),
   "notes": zod.string().optional(),
+  "produtoInteresse": zod.string().optional(),
+  "proximoContato": zod.coerce.date().optional(),
+  "motivoPerda": zod.string().optional(),
+  "contactosTotal": zod.number().int().optional(),
+  "ultimoContactoAt": zod.coerce.date().optional(),
+  "ultimoResultado": zod.string().optional(),
+  "ultimoStaff": zod.string().optional(),
   "createdAt": zod.coerce.date().optional(),
   "updatedAt": zod.coerce.date().optional()
 }).optional()
@@ -210,7 +337,7 @@ export const UpdateLeadResponse = zod.object({
 
 
 /**
- * @summary Delete lead
+ * @summary Bloqueado — leads nunca desaparecem (usar Perdida + motivo)
  */
 export const DeleteLeadParams = zod.object({
   "id": zod.coerce.string().uuid()
@@ -971,5 +1098,210 @@ export const ToggleUserResponse = zod.object({
   "updatedAt": zod.coerce.date().optional()
 }).optional()
 })
+
+
+/**
+ * @summary Listar acessos
+ */
+export const ListAccessQueryParams = zod.object({
+  "customerId": zod.coerce.string().uuid().optional(),
+  "platform": zod.coerce.string().optional()
+})
+
+export const ListAccessResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid().optional(),
+  "customerId": zod.string().uuid().optional(),
+  "platform": zod.string().optional(),
+  "status": zod.string().optional(),
+  "ovgAccessId": zod.string().optional(),
+  "cademiAccessId": zod.string().optional(),
+  "activatedAt": zod.coerce.date().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "createdAt": zod.coerce.date().optional()
+})).optional(),
+  "total": zod.number().int().optional()
+})
+
+
+/**
+ * @summary Criar acesso
+ */
+export const CreateAccessBody = zod.object({
+  "customerId": zod.string().uuid(),
+  "platform": zod.string(),
+  "status": zod.string(),
+  "ovgAccessId": zod.string().optional(),
+  "cademiAccessId": zod.string().optional(),
+  "activatedAt": zod.coerce.date().optional(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+export const CreateAccessResponse = zod.void()
+
+
+/**
+ * @summary Obter acesso
+ */
+export const GetAccessParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const GetAccessResponse = zod.unknown()
+
+
+/**
+ * @summary Atualizar acesso
+ */
+export const UpdateAccessParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const UpdateAccessBody = zod.object({
+  "customerId": zod.string().uuid(),
+  "platform": zod.string(),
+  "status": zod.string(),
+  "ovgAccessId": zod.string().optional(),
+  "cademiAccessId": zod.string().optional(),
+  "activatedAt": zod.coerce.date().optional(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+export const UpdateAccessResponse = zod.unknown()
+
+
+/**
+ * @summary Eliminar acesso
+ */
+export const DeleteAccessParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const DeleteAccessResponse = zod.void()
+
+
+/**
+ * @summary Listar check-ins
+ */
+export const ListCheckinsQueryParams = zod.object({
+  "customerId": zod.coerce.string().uuid().optional()
+})
+
+export const ListCheckinsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid().optional(),
+  "customerId": zod.string().uuid().optional(),
+  "location": zod.string().optional(),
+  "ovgCheckinId": zod.string().optional(),
+  "checkedInAt": zod.coerce.date().optional()
+})).optional(),
+  "total": zod.number().int().optional()
+})
+
+
+/**
+ * @summary Criar check-in
+ */
+export const CreateCheckinBody = zod.object({
+  "customerId": zod.string().uuid(),
+  "location": zod.string().optional(),
+  "ovgCheckinId": zod.string().optional(),
+  "checkedInAt": zod.coerce.date().optional()
+})
+
+export const CreateCheckinResponse = zod.void()
+
+
+/**
+ * @summary Obter check-in
+ */
+export const GetCheckinParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const GetCheckinResponse = zod.unknown()
+
+
+/**
+ * @summary Eliminar check-in
+ */
+export const DeleteCheckinParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const DeleteCheckinResponse = zod.void()
+
+
+/**
+ * @summary Listar chaves de API
+ */
+export const ListApiKeysResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid().optional(),
+  "name": zod.string().optional(),
+  "keyPreview": zod.string().optional(),
+  "active": zod.boolean().optional(),
+  "lastUsedAt": zod.coerce.date().optional(),
+  "expiresAt": zod.coerce.date().optional(),
+  "createdAt": zod.coerce.date().optional()
+})).optional(),
+  "total": zod.number().int().optional()
+})
+
+
+/**
+ * @summary Criar chave de API
+ */
+export const CreateApiKeyBody = zod.object({
+  "name": zod.string(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+export const CreateApiKeyResponse = zod.void()
+
+
+/**
+ * @summary Obter chave de API
+ */
+export const GetApiKeyParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const GetApiKeyResponse = zod.unknown()
+
+
+/**
+ * @summary Atualizar chave de API
+ */
+export const UpdateApiKeyParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const UpdateApiKeyBody = zod.object({
+  "name": zod.string(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+export const UpdateApiKeyResponse = zod.unknown()
+
+
+/**
+ * @summary Eliminar chave de API
+ */
+export const DeleteApiKeyParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const DeleteApiKeyResponse = zod.void()
+
+
+/**
+ * @summary Ativar/desativar chave de API
+ */
+export const ToggleApiKeyParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const ToggleApiKeyResponse = zod.unknown()
 
 

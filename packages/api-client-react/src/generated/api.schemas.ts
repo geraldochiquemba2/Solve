@@ -67,12 +67,20 @@ export interface Lead {
   name?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   company?: string;
   source?: string;
   status?: LeadStatus;
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  produtoInteresse?: string;
+  proximoContato?: string;
+  motivoPerda?: string;
+  contactosTotal?: number;
+  ultimoContactoAt?: string;
+  ultimoResultado?: string;
+  ultimoStaff?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -95,12 +103,104 @@ export interface LeadUpdate {
   name?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   company?: string;
   source?: string;
   status?: LeadUpdateStatus;
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  produtoInteresse?: string;
+  proximoContato?: string;
+  motivoPerda?: string;
+}
+
+export interface LeadsResumo {
+  total?: number;
+  novas?: number;
+  contactadas?: number;
+  pendentes?: number;
+  emAcompanhamento?: number;
+  convertidas?: number;
+  perdidas?: number;
+}
+
+export type LeadContactCanal = typeof LeadContactCanal[keyof typeof LeadContactCanal];
+
+
+export const LeadContactCanal = {
+  WhatsApp: 'WhatsApp',
+  Telefone: 'Telefone',
+  SMS: 'SMS',
+  Presencial: 'Presencial',
+  'E-mail': 'E-mail',
+} as const;
+
+export type LeadContactResultado = typeof LeadContactResultado[keyof typeof LeadContactResultado];
+
+
+export const LeadContactResultado = {
+  Não_respondeu: 'Não respondeu',
+  Interessado: 'Interessado',
+  Pediu_mais_informações: 'Pediu mais informações',
+  Pediu_para_contactar_depois: 'Pediu para contactar depois',
+  Não_tem_interesse: 'Não tem interesse',
+  Converteu: 'Converteu',
+  Número_inválido: 'Número inválido',
+} as const;
+
+export interface LeadContact {
+  id?: string;
+  canal?: LeadContactCanal;
+  resultado?: LeadContactResultado;
+  proximo_passo?: string;
+  proximo_contato?: string;
+  observacao?: string;
+  created_at?: string;
+  staff_nome?: string;
+}
+
+export type LeadContactInputCanal = typeof LeadContactInputCanal[keyof typeof LeadContactInputCanal];
+
+
+export const LeadContactInputCanal = {
+  WhatsApp: 'WhatsApp',
+  Telefone: 'Telefone',
+  SMS: 'SMS',
+  Presencial: 'Presencial',
+  'E-mail': 'E-mail',
+} as const;
+
+export type LeadContactInputResultado = typeof LeadContactInputResultado[keyof typeof LeadContactInputResultado];
+
+
+export const LeadContactInputResultado = {
+  Não_respondeu: 'Não respondeu',
+  Interessado: 'Interessado',
+  Pediu_mais_informações: 'Pediu mais informações',
+  Pediu_para_contactar_depois: 'Pediu para contactar depois',
+  Não_tem_interesse: 'Não tem interesse',
+  Converteu: 'Converteu',
+  Número_inválido: 'Número inválido',
+} as const;
+
+export type LeadContactInputProximoPasso = typeof LeadContactInputProximoPasso[keyof typeof LeadContactInputProximoPasso];
+
+
+export const LeadContactInputProximoPasso = {
+  Contactar_amanhã: 'Contactar amanhã',
+  Contactar_em_3_dias: 'Contactar em 3 dias',
+  Contactar_em_7_dias: 'Contactar em 7 dias',
+  Sem_próximo_contacto: 'Sem próximo contacto',
+  Agendar_visita: 'Agendar visita',
+} as const;
+
+export interface LeadContactInput {
+  canal: LeadContactInputCanal;
+  resultado: LeadContactInputResultado;
+  proximo_passo?: LeadContactInputProximoPasso;
+  proximo_contato?: string;
+  observacao?: string;
 }
 
 export type CustomerState = typeof CustomerState[keyof typeof CustomerState];
@@ -332,6 +432,58 @@ export interface DashboardCharts {
   paymentMethods?: DashboardChartsPaymentMethodsItem[];
 }
 
+export interface Access {
+  id?: string;
+  customerId?: string;
+  platform?: string;
+  status?: string;
+  ovgAccessId?: string;
+  cademiAccessId?: string;
+  activatedAt?: string;
+  expiresAt?: string;
+  createdAt?: string;
+}
+
+export interface AccessInput {
+  customerId: string;
+  platform: string;
+  status: string;
+  ovgAccessId?: string;
+  cademiAccessId?: string;
+  activatedAt?: string;
+  expiresAt?: string;
+}
+
+export interface Checkin {
+  id?: string;
+  customerId?: string;
+  location?: string;
+  ovgCheckinId?: string;
+  checkedInAt?: string;
+}
+
+export interface CheckinInput {
+  customerId: string;
+  location?: string;
+  ovgCheckinId?: string;
+  checkedInAt?: string;
+}
+
+export interface ApiKey {
+  id?: string;
+  name?: string;
+  keyPreview?: string;
+  active?: boolean;
+  lastUsedAt?: string;
+  expiresAt?: string;
+  createdAt?: string;
+}
+
+export interface ApiKeyInput {
+  name: string;
+  expiresAt?: string;
+}
+
 export type HealthCheck200 = {
   status?: string;
   timestamp?: string;
@@ -421,10 +573,28 @@ export type CreateLeadBody = {
   ownerId?: string;
   estimatedValue?: number;
   notes?: string;
+  whatsapp?: string;
+  produtoInteresse?: string;
+  proximoContato?: string;
+  motivoPerda?: string;
 };
 
 export type CreateLead201 = {
   data?: Lead;
+};
+
+export type GetLeadsResumo200 = {
+  data?: LeadsResumo;
+};
+
+export type GetLeadsFollowupsHoje200 = {
+  data?: Lead[];
+  total?: number;
+};
+
+export type ListLeadContacts200 = {
+  data?: LeadContact[];
+  total?: number;
 };
 
 export type GetLead200 = {
@@ -640,5 +810,29 @@ export type UpdateUser200 = {
 
 export type ToggleUser200 = {
   data?: User;
+};
+
+export type ListAccessParams = {
+customerId?: string;
+platform?: string;
+};
+
+export type ListAccess200 = {
+  data?: Access[];
+  total?: number;
+};
+
+export type ListCheckinsParams = {
+customerId?: string;
+};
+
+export type ListCheckins200 = {
+  data?: Checkin[];
+  total?: number;
+};
+
+export type ListApiKeys200 = {
+  data?: ApiKey[];
+  total?: number;
 };
 

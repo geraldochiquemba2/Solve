@@ -6,6 +6,12 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './access';
+export * from './accessInput';
+export * from './apiKey';
+export * from './apiKeyInput';
+export * from './checkin';
+export * from './checkinInput';
 export * from './createCustomer201';
 export * from './createCustomerBody';
 export * from './createCustomerBodyState';
@@ -37,6 +43,8 @@ export * from './getDashboardCharts200';
 export * from './getDashboardStats200';
 export * from './getIntegration200';
 export * from './getLead200';
+export * from './getLeadsFollowupsHoje200';
+export * from './getLeadsResumo200';
 export * from './getPayment200';
 export * from './getPlan200';
 export * from './getUser200';
@@ -45,11 +53,25 @@ export * from './integration';
 export * from './integrationConfig';
 export * from './integrationStatus';
 export * from './lead';
+export * from './leadContact';
+export * from './leadContactCanal';
+export * from './leadContactInput';
+export * from './leadContactInputCanal';
+export * from './leadContactInputProximoPasso';
+export * from './leadContactInputResultado';
+export * from './leadContactResultado';
+export * from './leadsResumo';
 export * from './leadStatus';
 export * from './leadUpdate';
 export * from './leadUpdateStatus';
+export * from './listAccess200';
+export * from './listAccessParams';
+export * from './listApiKeys200';
+export * from './listCheckins200';
+export * from './listCheckinsParams';
 export * from './listCustomers200';
 export * from './listIntegrations200';
+export * from './listLeadContacts200';
 export * from './listLeads200';
 export * from './listLeadsParams';
 export * from './listLeadsStatus';
