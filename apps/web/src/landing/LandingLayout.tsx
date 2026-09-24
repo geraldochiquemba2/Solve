@@ -54,7 +54,7 @@ function LandingInner({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden max-w-[1920px] mx-auto w-full shadow-[0_0_100px_rgba(0,0,0,0.1)] flex flex-col transition-colors duration-300"
+      className="landing min-h-screen relative overflow-hidden max-w-[1920px] mx-auto w-full shadow-[0_0_100px_rgba(0,0,0,0.1)] flex flex-col transition-colors duration-300"
       style={{
         backgroundColor: isDark ? '#09090b' : '#f5f5f7',
         color: isDark ? '#f4f4f5' : '#18181b',
