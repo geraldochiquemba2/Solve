@@ -67,6 +67,10 @@ if (process.env.NODE_ENV === "production" && (!API_KEY || !JWT_SECRET)) {
 if (!API_KEY || !JWT_SECRET) {
   console.warn("[segurança] API_KEY/JWT_SECRET em falta: a usar modo dev local inseguro");
 }
+// Diagnóstico de arranque: visível nos logs do Render.
+console.log(`[boot] NODE_ENV=${process.env.NODE_ENV || "?"}` +
+  ` API_KEY=${API_KEY ? "ok" : "EM FALTA"} JWT_SECRET=${JWT_SECRET ? "ok" : "EM FALTA"}` +
+  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"}`);
 // Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
 // por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
 const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
@@ -931,6 +935,11 @@ app.post("/api/v1/customers/import-dates", requireAuth, async (req, res) => {
 
 app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
   try {
+    // SEGURANÇA: sem segredo não há sessão — mensagem clara em vez de 500 críptico.
+    if (!JWT_SECRET) {
+      console.error("[AUTH LOGIN] JWT_SECRET em falta no ambiente");
+      return res.status(500).json({ error: "Servidor sem JWT_SECRET configurado. Ver docs/tecnica/10-SEGURANCA.md" });
+    }
     const { email, phone, password } = req.body;
     if (!password || (!email && !phone)) {
       return res.status(400).json({ error: "Dados inválidos" });
@@ -977,7 +986,7 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
     });
   } catch (err) {
     console.error("[AUTH LOGIN] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
@@ -985,6 +994,10 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
 
 app.post("/api/v1/auth/register", rateLimit(20), async (req, res) => {
   try {
+    if (!JWT_SECRET) {
+      console.error("[AUTH REGISTER] JWT_SECRET em falta no ambiente");
+      return res.status(500).json({ error: "Servidor sem JWT_SECRET configurado. Ver docs/tecnica/10-SEGURANCA.md" });
+    }
     const { name, email, password, role, phone } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Nome, email e password são obrigatórios" });
@@ -1015,7 +1028,7 @@ app.post("/api/v1/auth/register", rateLimit(20), async (req, res) => {
     res.status(201).json({ token, user });
   } catch (err) {
     console.error("[AUTH REGISTER] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
