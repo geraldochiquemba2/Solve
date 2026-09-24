@@ -560,6 +560,9 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .metric::after { content:''; position:absolute; width:72px; height:72px; border-radius:50%; right:-24px; bottom:-34px; border:1px solid hsl(var(--accent) / .45); }
 .metric-value { font-family:'Space Grotesk', sans-serif; font-size:1.45rem; font-weight:600; letter-spacing:-.05em; margin-top:.35rem; }
 .metric-note { color:hsl(var(--muted-foreground)); font-size:.7rem; margin-top:.32rem; }
+.metric-compact .metric { padding:.55rem .7rem; min-height:0; }
+.metric-compact .metric-value { font-size:1.15rem; margin-top:.15rem; }
+.metric-compact .metric-note { margin-top:.15rem; }
 .section-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
 .section-title { font-family:'Space Grotesk', sans-serif; font-size:.92rem; font-weight:700; letter-spacing:-.01em; }
 .section-note { color:hsl(var(--muted-foreground)); font-size:.72rem; margin-top:.2rem; }
