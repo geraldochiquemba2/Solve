@@ -2609,6 +2609,9 @@ app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
     const up = [proxData];
     if (resultado === "Converteu" && lead.rows[0].status !== "convertido") {
       upd += ", status = 'convertido', converted_at = NOW()";
+    } else if (lead.rows[0].status === "novo_lead") {
+      // Estado nunca diverge do histórico: 1º contacto registado ⇒ Contactada
+      upd += ", status = 'contacto'";
     }
     upd += " WHERE id = $" + (up.length + 1) + " RETURNING *";
     up.push(req.params.id);

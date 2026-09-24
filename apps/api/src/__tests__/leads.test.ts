@@ -198,6 +198,47 @@ describe("Leads API", () => {
     });
   });
 
+  describe("POST /api/v1/leads/:id/contacts", () => {
+    it("avança Nova para Contactada no 1º contacto registado", async () => {
+      mockDb.query.leadsTable.findFirst.mockResolvedValue({ id: "lead-1", status: "novo_lead" } as any);
+      mockDb.query.usersTable = { findFirst: vi.fn().mockResolvedValue(undefined) } as any;
+      const mockContact = { id: "c-1", canal: "WhatsApp", resultado: "Não respondeu" };
+      mockDb.insert.mockReturnValue({
+        values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([mockContact]) }),
+      } as any);
+      const leadUpd = { id: "lead-1", status: "contacto" };
+      const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([leadUpd]) }) });
+      mockDb.update.mockReturnValue({ set: setSpy } as any);
+
+      const res = await request(app)
+        .post("/api/v1/leads/lead-1/contacts")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ canal: "WhatsApp", resultado: "Não respondeu" });
+
+      expect(res.status).toBe(201);
+      expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({ status: "contacto" }));
+      expect(res.body.lead.status).toBe("contacto");
+    });
+
+    it("não altera estado se já foi contactada", async () => {
+      mockDb.query.leadsTable.findFirst.mockResolvedValue({ id: "lead-1", status: "contacto" } as any);
+      mockDb.query.usersTable = { findFirst: vi.fn().mockResolvedValue(undefined) } as any;
+      mockDb.insert.mockReturnValue({
+        values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "c-2" }]) }),
+      } as any);
+      const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "lead-1", status: "contacto" }]) }) });
+      mockDb.update.mockReturnValue({ set: setSpy } as any);
+
+      const res = await request(app)
+        .post("/api/v1/leads/lead-1/contacts")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ canal: "Telefone", resultado: "Interessado" });
+
+      expect(res.status).toBe(201);
+      expect(setSpy).toHaveBeenCalledWith(expect.not.objectContaining({ status: "contacto" }));
+    });
+  });
+
   describe("DELETE /api/v1/leads/:id", () => {
     it("should block physical delete — leads nunca desaparecem (410)", async () => {
       const res = await request(app)

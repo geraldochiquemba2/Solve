@@ -217,6 +217,9 @@ router.post("/leads/:id/contacts", authenticate, authorize("administrador", "ges
     if (req.body.resultado === "Converteu" && (lead as any).status !== "convertido") {
       update.status = "convertido";
       update.convertedAt = new Date();
+    } else if ((lead as any).status === "novo_lead") {
+      // Estado nunca diverge do histórico: 1º contacto registado ⇒ Contactada
+      update.status = "contacto";
     }
     const [leadUpd] = await db.update(leadsTable).set(update).where(eq(leadsTable.id, req.params.id as string)).returning();
     res.status(201).json({ data: c, lead: await withStats(leadUpd) });
