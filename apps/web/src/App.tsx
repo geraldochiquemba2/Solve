@@ -1594,14 +1594,18 @@ function AppShell({ children, userName, auditCount }: { children: ReactNode; use
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, token } = useAuth();
   const [, setLocation] = useLocation();
+  // SEGURANÇA Set/2026: o CRM exige JWT (token). A sessão da loja
+  // (samora_user) sozinha não entra — sem token as queries dariam 401 e
+  // parecia "entra e sai sozinho".
+  const allowed = isAuthenticated && !!token;
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!allowed) {
       setLocation('/');
     }
-  }, [isAuthenticated, setLocation]);
-  if (!isAuthenticated) return null;
+  }, [allowed, setLocation]);
+  if (!allowed) return null;
   return <>{children}</>;
 }
 

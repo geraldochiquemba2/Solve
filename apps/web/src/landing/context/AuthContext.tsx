@@ -30,15 +30,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const USERS_KEY = 'samora_users'
 const SESSION_KEY = 'samora_user'
 
-// Default admin for API login — never stored with password in localStorage
-const DEFAULT_ADMIN_IDENTITY = {
-  id: 'admin-001',
-  name: 'Administrador',
-  email: 'admin',
-  phone: '999999999',
-  role: 'admin' as const,
-}
-
 function getStoredUsers(): AuthUser[] {
   try {
     const raw = localStorage.getItem(USERS_KEY)
@@ -52,20 +43,11 @@ function saveUsers(users: AuthUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users))
 }
 
-function seedAdmin() {
-  const users = getStoredUsers()
-  const adminExists = users.find(u => u.email === DEFAULT_ADMIN_IDENTITY.email || u.phone === DEFAULT_ADMIN_IDENTITY.phone)
-  if (!adminExists) {
-    saveUsers([DEFAULT_ADMIN_IDENTITY, ...users])
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    seedAdmin()
     try {
       const raw = localStorage.getItem(SESSION_KEY)
       if (raw) {
@@ -111,25 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('token', data.token)
         }
         return { success: true, user: apiUser }
-      } else {
-        const err = await response.json().catch(() => ({}))
-        // Fall through to localStorage check
       }
+      // SEGURANÇA Set/2026: sem login local sem password. Antes, se a API
+      // falhasse (ex. 429, API em baixo) e o identificador batesse no admin
+      // semeado, entrava sem token e o CRM expulsava logo a seguir
+      // ("entra e sai sozinho"). Agora o erro real aparece no ecrã.
+      const err = await response.json().catch(() => ({} as Record<string, string>))
+      return { success: false, error: err.error || 'Erro ao entrar.' }
     } catch {
-      // API unavailable — fall through to localStorage
+      return { success: false, error: 'API indisponível. Verifique a internet e tente de novo.' }
     }
-
-    // Fallback: localStorage (passwords not stored — API-only auth for real users)
-    const users = getStoredUsers()
-    const found = users.find(u =>
-      (u.email.toLowerCase() === identifier.toLowerCase() || u.phone === identifier)
-    )
-    if (!found) {
-      return { success: false, error: 'Email, telefone ou palavra-passe incorretos.' }
-    }
-    setUser(found)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(found))
-    return { success: true, user: found }
   }
 
   const register = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
