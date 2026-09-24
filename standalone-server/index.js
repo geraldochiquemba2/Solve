@@ -299,22 +299,7 @@ pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`).ca
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS produto_interesse VARCHAR(255)`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
-// Regra Fit90: leads da landing são descartáveis — duração máxima de 72h após a criação.
-const FIT90_LEAD_TTL = 72 * 60 * 60 * 1000;
-async function cleanupExpiredFit90Leads({ silent = false } = {}) {
-  try {
-    const r = await pool.query(
-      `DELETE FROM leads WHERE source = 'fit90_landing' AND created_at < NOW() - INTERVAL '72 hours' RETURNING id`
-    );
-    if (r.rows.length && !silent) console.log(`[fit90 cleanup] ${r.rows.length} lead(s) Fit90 expirado(s) (72h) removido(s)`);
-    return r.rows.length;
-  } catch (e) {
-    if (!silent) console.error('[fit90 cleanup] erro ao limpar leads expirados:', e.message);
-    return 0;
-  }
-}
-cleanupExpiredFit90Leads({ silent: true });
-setInterval(() => cleanupExpiredFit90Leads(), 30 * 60 * 1000);
+// Leads da landing são permanentes — passam a viver no funil; sem cleanup.
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -2589,7 +2574,6 @@ const LEAD_WITH_STATS = `l.*,
   ) lc ON true`;
 
 app.get("/api/v1/leads", requireAuth, async (req, res) => {
-  cleanupExpiredFit90Leads({ silent: true });
   try {
     const where = [];
     const params = [];
