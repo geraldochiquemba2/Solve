@@ -67,13 +67,13 @@ if (process.env.NODE_ENV === "production" && (!API_KEY || !JWT_SECRET)) {
 if (!API_KEY || !JWT_SECRET) {
   console.warn("[segurança] API_KEY/JWT_SECRET em falta: a usar modo dev local inseguro");
 }
+// Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
+// por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
+const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
 // Diagnóstico de arranque: visível nos logs do Render.
 console.log(`[boot] NODE_ENV=${process.env.NODE_ENV || "?"}` +
   ` API_KEY=${API_KEY ? "ok" : "EM FALTA"} JWT_SECRET=${JWT_SECRET ? "ok" : "EM FALTA"}` +
   ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"}`);
-// Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
-// por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
-const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
 
 // Cademi (plataforma de cursos) — defaults; editável em Integrações > Configurar
 const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
