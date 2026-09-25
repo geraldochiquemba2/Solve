@@ -822,6 +822,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const [checkResult, setCheckResult] = useState<any>(null);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const sendCademi = async () => {
     setSending(true); setSendResult(null);
@@ -844,6 +845,23 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
       }
     } catch (e) { console.error(e); }
     setChecking(false);
+  };
+
+  const cancelPayment = async () => {
+    const code = payment.code || payment.id;
+    if (!confirm(`Cancelar o pagamento ${code}? O aluno pode gerar nova cobrança depois.`)) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${code}/cancel`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ email: payment.customerEmail || undefined, phone: payment.customerPhone || undefined }),
+      });
+      const j: any = await res.json().catch(() => ({}));
+      if (res.ok) { alert('Pagamento cancelado'); window.location.reload(); }
+      else alert('Não cancelou: ' + (j.error || res.statusText));
+    } catch (e: any) { alert('Erro: ' + e.message); }
+    setCancelling(false);
   };
 
   const fmtDate = (d: string | null) => {
@@ -885,6 +903,13 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
           {sending ? 'A enviar...' : 'Enviar SamoraFit Workout'}
         </button>
       </div>
+      {(payment.state === 'pendente' || payment.raw?.status === 'pendente') && (
+        <div style={{ marginTop: '.5rem' }}>
+          <button className="btn-secondary" onClick={cancelPayment} disabled={cancelling} style={{ flex: 1, width: '100%', color: 'hsl(0 70% 50%)' }}>
+            {cancelling ? 'A cancelar...' : 'Cancelar pagamento'}
+          </button>
+        </div>
+      )}
       {sendResult && (
         <div style={{ marginTop: '.4rem', padding: '.5rem .65rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.4rem', fontSize: '.72rem' }}>
           <strong>SamoraFit Workout:</strong> {sendResult}
