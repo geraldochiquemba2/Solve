@@ -142,7 +142,12 @@ function requireAuth(req, res, next) {
   if (!token) {
     // VULN-16: chave só via header (nunca ?api_key= no URL — vaza em logs).
     const key = req.headers["x-api-key"];
-    if (apiKeyMatches(key, API_KEY)) return next();
+    if (apiKeyMatches(key, API_KEY)) {
+      // Paridade com apps/api: máquina autenticada, sem JWT de utilizador.
+      // requireRole bloqueia este userId nas rotas de gestão.
+      req.user = { userId: "api-key", role: "administrador", email: "" };
+      return next();
+    }
     return res.status(401).json({ error: "Token de autenticação necessário" });
   }
   try {
