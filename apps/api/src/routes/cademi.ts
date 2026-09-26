@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { customersTable } from "@workspace/db/schema";
+import { customersTable, settingsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { AppError } from "../middlewares/error";
@@ -92,6 +92,51 @@ router.get("/cademi/products", authenticate, async (req, res, next) => {
     }
     const products = result.data?.produto || [];
     res.json({ data: products, total: products.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function slugify(s: unknown): string {
+  return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// Lista de entregas Cademi (paridade com standalone-server de produção):
+// 1) manual em settings@cademi_entregas (traz nome bonito + preço)
+// 2) slugs derivados dos produtos reais da API (/produto)
+// 3) fallback para settings@cademi_produto_id ou 'samorafit-workout'
+router.get("/cademi/entregas", authenticate, async (req, res, next) => {
+  try {
+    const byId = new Map<string, { id: string; nome: string; preco?: number }>();
+    try {
+      const row = await db.query.settingsTable.findFirst({ where: eq(settingsTable.key, "cademi_entregas") });
+      let manual: any = (row as any)?.value ?? [];
+      if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
+      (Array.isArray(manual) ? manual : []).forEach((o: any) => {
+        if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) });
+      });
+    } catch {}
+    try {
+      const pr = await cademi.getProducts();
+      const produtos: any[] = (pr.data as any)?.produto || [];
+      produtos.forEach((p: any) => {
+        const slug = slugify(p?.nome);
+        if (slug && !byId.has(slug)) byId.set(slug, { id: slug, nome: p.nome });
+      });
+    } catch {}
+    let list = [...byId.values()];
+    if (list.length === 0) {
+      let def = "samorafit-workout";
+      try {
+        const row = await db.query.settingsTable.findFirst({ where: eq(settingsTable.key, "cademi_produto_id") });
+        let v: any = (row as any)?.value;
+        if (typeof v === "string") { try { v = JSON.parse(v); } catch {} }
+        if (typeof v === "string" && v.trim()) def = v.trim();
+      } catch {}
+      list = [{ id: def, nome: "SamoraFit Workout" }];
+    }
+    res.json({ data: list });
   } catch (err) {
     next(err);
   }

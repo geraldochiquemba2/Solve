@@ -90,7 +90,7 @@ export function LoginPage() {
             style={{ marginTop: '.25rem' }}
           >
             <LockKeyhole size={14} />
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Entrando…' : 'Entrar'}
           </button>
         </form>
 

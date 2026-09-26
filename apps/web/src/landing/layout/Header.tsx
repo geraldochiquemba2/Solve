@@ -14,7 +14,7 @@ export default function Header() {
   const { scrolled } = useScrollProgress()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [location, navigate] = useLocation()
+  const [, navigate] = useLocation()
   const { isDark } = useTheme()
   const { isAuthenticated, isAdmin, logout } = useAuth()
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -75,7 +75,7 @@ export default function Header() {
               <ThemeToggle />
 
               {/* Auth Button */}
-              {isAuthenticated ? (
+              {isAuthenticated && (
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -128,13 +128,6 @@ export default function Header() {
                     )}
                   </AnimatePresence>
                 </div>
-              ) : location === '/login' ? null : (
-                <Link to="/login"
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-[7px] text-sm font-bold transition-colors"
-                  style={{ backgroundColor: '#042251', color: '#fff', boxShadow: '0 2px 12px rgba(4,34,81,0.3)' }}
-                >
-                  <User size={14} /> Entrar
-                </Link>
               )}
             </div>
 
@@ -206,12 +199,6 @@ export default function Header() {
                   </>
                 ) : (
                   <>
-                    {location !== '/login' && (
-                    <Link to="/login" onClick={() => setMobileOpen(false)}
-                      className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase text-white bg-[#042251] py-3 hover:bg-[#0A3A75] transition-colors rounded-sm">
-                      <User size={16} /> Entrar
-                    </Link>
-                    )}
                     <Link to="/login?tab=register" onClick={() => setMobileOpen(false)}
                       className="flex items-center justify-center gap-2 font-body font-semibold text-[12px] tracking-wide uppercase py-3 transition-colors rounded-sm"
                       style={{ color: textPrimary, border: `1px solid ${dividerColor}` }}>

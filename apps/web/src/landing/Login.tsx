@@ -30,7 +30,7 @@ export default function Login() {
   const bg = isDark ? '#09090b' : '#f5f5f7'
   const cardBg = isDark ? '#111113' : '#ffffff'
   const textPrimary = isDark ? '#f4f4f5' : '#18181b'
-  const textMuted = isDark ? '#a1a1aa' : '#71717a'
+  const textMuted = isDark ? '#a1a1aa' : '#5b5b64'
   const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
   const inputBg = isDark ? '#1a1a1f' : '#f9f9fb'
 
@@ -40,24 +40,24 @@ export default function Login() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-md"
+        className="w-full max-w-[340px]"
       >
         {/* Card */}
-        <div className="rounded-[7px] overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.12)]" style={{ backgroundColor: cardBg, border: `1px solid ${borderColor}` }}>
+        <div className="rounded-[7px] overflow-hidden shadow-[0_16px_40px_rgba(0,0,0,0.10)]" style={{ backgroundColor: cardBg, border: `1px solid ${borderColor}` }}>
 
           {/* Header */}
-          <div className="px-8 pt-8 pb-0 text-center">
-            <img src="/samorafit-logo.png" alt="SamoraFit" className="h-12 mx-auto mb-6 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
-            <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: textPrimary }}>
+          <div className="px-6 pt-6 pb-0 text-center">
+            <img src="/samorafit-logo.png" alt="SamoraFit" className="h-9 mx-auto mb-4 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
+            <h1 className="font-heading font-bold text-xl mb-0.5" style={{ color: textPrimary }}>
               Bem-vindo de volta
             </h1>
-            <p className="text-sm mb-6" style={{ color: textMuted }}>
+            <p className="text-xs mb-4" style={{ color: textMuted }}>
               Acede ao CRM.
             </p>
           </div>
 
           {/* Forms */}
-          <div className="px-8 pb-8">
+          <div className="px-6 pb-6">
             <AnimatePresence mode="wait">
               {error && (
                 <motion.div
@@ -82,18 +82,18 @@ export default function Login() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.25 }}
                 onSubmit={handleLogin}
-                className="space-y-4"
+                className="space-y-3"
               >
                 <Field
                   label="Email ou Telefone" type="text" value={loginIdentifier}
                   onChange={setLoginIdentifier} placeholder="exemplo@email.com ou 999999999"
-                  icon={<Mail size={16} />} inputBg={inputBg}
+                  icon={<Mail size={14} />} inputBg={inputBg}
                   textPrimary={textPrimary} textMuted={textMuted} borderColor={borderColor}
                 />
                 <Field
                   label="Palavra-passe" type={showPass ? 'text' : 'password'}
                   value={loginPassword} onChange={setLoginPassword} placeholder="••••••••"
-                  icon={<Lock size={16} />} inputBg={inputBg}
+                  icon={<Lock size={14} />} inputBg={inputBg}
                   textPrimary={textPrimary} textMuted={textMuted} borderColor={borderColor}
                   endIcon={
                     <button type="button" onClick={() => setShowPass(!showPass)} style={{ color: textMuted }}>
@@ -129,10 +129,11 @@ function Field({ label, type, value, onChange, placeholder, icon, endIcon, input
           required type={type} value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full h-11 pl-10 pr-10 text-sm outline-none transition-all rounded-[7px]"
+          autoComplete={type === 'password' ? 'current-password' : 'username'}
+          className="w-full h-9 pl-9 pr-9 text-[13px] outline-none transition-all rounded-[7px]"
           style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}
-          onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#042251' }}
-          onBlur={e => { (e.target as HTMLInputElement).style.borderColor = borderColor }}
+          onFocus={e => { const t = e.target as HTMLInputElement; t.style.borderColor = '#042251'; t.style.boxShadow = '0 0 0 3px rgba(4,34,81,0.18)' }}
+          onBlur={e => { const t = e.target as HTMLInputElement; t.style.borderColor = borderColor; t.style.boxShadow = 'none' }}
         />
         {endIcon && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2">{endIcon}</span>
@@ -147,7 +148,7 @@ function SubmitBtn({ children, loading }: { children: React.ReactNode; loading: 
     <button
       type="submit"
       disabled={loading}
-      className="w-full h-12 flex items-center justify-center gap-2 font-heading font-bold text-sm text-white transition-all rounded-[7px] mt-2"
+      className="w-full h-10 flex items-center justify-center gap-2 font-heading font-bold text-[13px] text-white transition-all rounded-[7px] mt-1"
       style={{ backgroundColor: loading ? '#999' : '#042251', boxShadow: loading ? 'none' : '0 4px 20px rgba(4,34,81,0.3)', cursor: loading ? 'not-allowed' : 'pointer' }}
     >
       {loading ? (

@@ -26,6 +26,7 @@ function LandingInner({ children }: { children: ReactNode }) {
   const [isCookiesOpen, setIsCookiesOpen] = useState(false)
 
   const isBackoffice = location.startsWith('/admin')
+  const isAuthPage = location === '/login' || location === '/' || location === '/conta/login'
 
   useEffect(() => {
     const handleOpenModal = (e: Event) => {
@@ -48,8 +49,11 @@ function LandingInner({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    document.documentElement.classList.add('dark')
-    document.documentElement.classList.remove('light')
+    // O tema (claro/escuro/sistema) é decidido pelo ThemeContext + ThemeToggle.
+    // Não forçar 'dark' aqui para o login respeitar a escolha do utilizador.
+    if (!document.documentElement.classList.contains('dark') && !document.documentElement.classList.contains('light')) {
+      document.documentElement.classList.add('light')
+    }
   }, [])
 
   return (
@@ -80,8 +84,8 @@ function LandingInner({ children }: { children: ReactNode }) {
       <div className="flex-grow">
         {children}
       </div>
-      {!isBackoffice && <Footer />}
-      {!isBackoffice && <BackToTopButton />}
+      {!isBackoffice && !isAuthPage && <Footer />}
+      {!isBackoffice && !isAuthPage && <BackToTopButton />}
     </div>
   )
 }

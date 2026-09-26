@@ -100,8 +100,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ("entra e sai sozinho"). Agora o erro real aparece no ecrã.
       const err = await response.json().catch(() => ({} as Record<string, string>))
       return { success: false, error: err.error || 'Erro ao entrar.' }
-    } catch {
-      return { success: false, error: 'API indisponível. Verifique a internet e tente de novo.' }
+    } catch (e) {
+      const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin
+      // Auto-diagnóstico: o /healthz distingue "servidor em baixo" de "CORS/bloqueio no POST"
+      let diag = ''
+      try {
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), 8000)
+        const h = await fetch(`${apiUrl}/healthz`, { signal: ctrl.signal })
+        clearTimeout(t)
+        diag = h.ok ? 'healthz OK (servidor responde; falha é no POST — provável CORS)' : `healthz respondeu ${h.status}`
+      } catch (e2) {
+        diag = e2 instanceof Error && e2.name === 'AbortError' ? 'healthz sem resposta (timeout 8s — servidor não chega ao browser)' : 'healthz sem resposta (servidor não chega ao browser)'
+      }
+      return { success: false, error: `API indisponível (${detail}; ${diag}) — página em ${window.location.origin}, tentou ${apiUrl}.` }
     }
   }
 

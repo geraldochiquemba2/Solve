@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Instagram, Linkedin, Youtube, Mail, Phone, MapPin, ArrowRight } from 'lucide-react'
+import { Instagram, Linkedin, Youtube, ArrowRight } from 'lucide-react'
 import solveAccessLogo from '../logo/Solve-Access.jpeg'
 
 const footerLinks = {
@@ -9,18 +9,6 @@ const footerLinks = {
     { label: 'Palestras', href: '#servicos' },
     { label: 'Workshops', href: '#servicos' },
     { label: 'Masterclass', href: '#agenda' },
-  ],
-  Empresa: [
-    { label: 'Sobre Bruno Samora', href: '#bruno' },
-    { label: 'Metodologia', href: '#metodologia' },
-    { label: 'Casos de Sucesso', href: '#casos' },
-    { label: 'Planos', href: '#planos' },
-    { label: 'FAQ', href: '#faq' },
-  ],
-  Legal: [
-    { label: 'Política de Privacidade (Lei n.º 22/11)', href: '#privacy' },
-    { label: 'Termos e Condições', href: '#terms' },
-    { label: 'Política de Cookies', href: '#cookies' },
   ],
 }
 
@@ -69,22 +57,6 @@ export default function Footer() {
             <p className="text-zinc-500 dark:text-zinc-400 text-sm font-body leading-relaxed mb-6 max-w-xs">
               A Ciência da Alta Performance aplicada à Liderança, Saúde e Resultados. Transformando pessoas e organizações há mais de 15 anos.
             </p>
-
-            {/* Contact info */}
-            <div className="flex flex-col gap-3 mb-8">
-              <a href="tel:+244000000000" className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm transition-colors group">
-                <Phone size={15} className="text-[#042251] group-hover:scale-110 transition-transform" />
-                +244 000 000 000
-              </a>
-              <a href="mailto:geral@brunosamora.com" className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-sm transition-colors group">
-                <Mail size={15} className="text-[#042251] group-hover:scale-110 transition-transform" />
-                geral@brunosamora.com
-              </a>
-              <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 text-sm">
-                <MapPin size={15} className="text-[#042251]" />
-                Talatona, Angola
-              </div>
-            </div>
 
             {/* Socials */}
             <div className="flex gap-3">

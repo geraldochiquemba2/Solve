@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
@@ -460,7 +460,7 @@
   --secondary: 240 6% 95%;
   --secondary-foreground: 0 0% 7%;
   --muted: 240 6% 93%;
-  --muted-foreground: 240 4% 46%;
+  --muted-foreground: 240 5% 41%;
   --accent: 217 91% 17%;
   --accent-foreground: 0 0% 100%;
   --destructive: 357 80% 47%;
@@ -493,18 +493,32 @@
   --card-border: 0 0% 12%;
   --sidebar: 217 90% 8%;
   --sidebar-foreground: 0 0% 80%;
+  --sidebar-border: 217 60% 20%;
+  --sidebar-primary: 217 88% 45%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 70% 28%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 217 88% 60%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0% 95%;
+  --popover-border: 0 0% 16%;
   --primary: 217 88% 60%;
-  --primary-foreground: 0 0% 100%;
+  --primary-foreground: 221 71% 9%;
   --secondary: 0 0% 10%;
   --secondary-foreground: 0 0% 95%;
   --muted: 0 0% 14%;
   --muted-foreground: 0 0% 60%;
   --accent: 217 88% 60%;
-  --accent-foreground: 0 0% 100%;
+  --accent-foreground: 221 71% 9%;
   --input: 0 0% 16%;
   --ring: 217 88% 60%;
   --destructive: 357 88% 60%;
   --destructive-foreground: 0 0% 100%;
+  --chart-1: 217 88% 65%;
+  --chart-2: 181 60% 55%;
+  --chart-3: 217 85% 70%;
+  --chart-4: 155 50% 60%;
+  --chart-5: 0 0% 85%;
 }
 
 html { background: hsl(var(--background)); }
@@ -548,14 +562,24 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .select { appearance:none; background:hsl(var(--card)); border:1px solid hsl(var(--input)); border-radius:.5rem; color:hsl(var(--foreground)); padding:.58rem 1.8rem .58rem .7rem; font:inherit; font-size:.77rem; outline:none; }
 .status { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .48rem; border-radius:99px; font-size:.67rem; font-weight:700; white-space:nowrap; }
 .status::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
-.status-good { color:hsl(155 41% 35%); background:hsl(155 41% 43% / .12); }
+.status-good { color:hsl(155 45% 30%); background:hsl(155 41% 43% / .12); }
 .status-warn { color:hsl(357 80% 47%); background:hsl(357 80% 47% / .15); }
 .status-danger { color:hsl(357 88% 60%); background:hsl(357 88% 60% / .12); }
 .status-neutral { color:hsl(var(--muted-foreground)); background:hsl(var(--muted)); }
+/* Texto semântico bom/mau com variantes dark */
+.text-good { color:hsl(155 45% 30%); }
+.text-bad { color:hsl(3 67% 45%); }
+.dark .text-good { color:hsl(155 50% 68%); }
+.dark .text-bad { color:hsl(0 84% 70%); }
+.dark .status-good { color:hsl(155 50% 68%); background:hsl(155 50% 55% / .16); }
+.dark .status-warn { color:hsl(357 90% 70%); background:hsl(357 90% 65% / .14); }
+.dark .status-danger { color:hsl(357 90% 70%); background:hsl(357 90% 65% / .14); }
+.dark .status-live { color:hsl(155 50% 68%); background:hsl(155 50% 55% / .16); }
+.dark .status-pending { color:hsl(42 95% 65%); background:hsl(42 95% 55% / .16); }
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .status-live { color:hsl(155 41% 35%); background:hsl(155 41% 43% / .12); }
 .status-live::before { animation: livePulse 1.5s ease-in-out infinite; }
-.status-pending { color:hsl(38 85% 38%); background:hsl(42 95% 50% / .16); }
+.status-pending { color:hsl(38 90% 30%); background:hsl(42 95% 50% / .16); }
 .metric { padding:1rem; min-height:112px; position:relative; overflow:hidden; }
 .metric::after { content:''; position:absolute; width:72px; height:72px; border-radius:50%; right:-24px; bottom:-34px; border:1px solid hsl(var(--accent) / .45); }
 .metric-value { font-family:'Space Grotesk', sans-serif; font-size:1.45rem; font-weight:600; letter-spacing:-.05em; margin-top:.35rem; }
@@ -597,6 +621,17 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .grid-2 { display:grid; gap:.8rem; grid-template-columns:repeat(2, minmax(0, 1fr)); }
 .grid-3 { display:grid; gap:.6rem; grid-template-columns:repeat(3, minmax(0, 1fr)); }
 .page-actions { display:flex; gap:.45rem; flex-wrap:wrap; }
+/* Foco visível de teclado (acessibilidade): anel consistente em todo o CRM */
+:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:2px; border-radius:.35rem; }
+/* Skeletons de carregamento (tabelas/dashboard) */
+.skeleton { position:relative; overflow:hidden; background:hsl(var(--muted)); border-radius:.45rem; min-height:.9rem; }
+.skeleton::after { content:''; position:absolute; inset:0; transform:translateX(-100%); background:linear-gradient(90deg, transparent, hsl(var(--foreground) / .08), transparent); animation:skeleton-shimmer 1.4s ease-in-out infinite; }
+@keyframes skeleton-shimmer { 100% { transform:translateX(100%); } }
+/* Respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  .landing-marquee-track, .marquee-track { animation:none !important; }
+}
 @media (max-width: 900px) { .sidebar { width:210px !important; } .content-grid { grid-template-columns:1fr !important; } }
 @media (max-width: 700px) {
   .mobile-only { display:flex; }
