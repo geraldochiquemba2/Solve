@@ -7,7 +7,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 if (!ADMIN_PASSWORD) { console.error('FATAL: define ADMIN_PASSWORD no ambiente.'); process.exit(1); }
 const client = new Client({
   connectionString: DB_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
 });
 async function run() {
   await client.connect();

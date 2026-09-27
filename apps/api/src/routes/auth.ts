@@ -13,6 +13,15 @@ const router = Router();
 
 const SALT_ROUNDS = 10;
 
+// Comparação timing-safe para não vazar o token de reset por tempo de resposta.
+function tokenMatches(provided: unknown, expected: unknown): boolean {
+  if (typeof provided !== "string" || typeof expected !== "string") return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 const loginSchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
@@ -213,7 +222,7 @@ router.post("/auth/reset-password", validate(resetPasswordSchema), async (req, r
       if (!s.key.startsWith("password_reset_")) return false;
       try {
         const data = JSON.parse(JSON.stringify(s.value));
-        return data.token === token;
+        return tokenMatches(token, data.token);
       } catch {
         return false;
       }

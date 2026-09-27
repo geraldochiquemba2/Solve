@@ -6,7 +6,7 @@ if (!DB_URL) { console.error('FATAL: define CRM_DATABASE_URL ou DATABASE_URL no 
 
 const client = new Client({
   connectionString: DB_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
 });
 
 const CADEMI_API = 'https://brunosamora.cademi.com.br/api/v1';

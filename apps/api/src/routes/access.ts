@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { customersTable } from "@workspace/db/schema";
 import { isNotNull, sql } from "drizzle-orm";
 import { getSyncStatus, syncOVGMembers } from "../lib/ovg-sync";
+import { resolveAllowedOrigin } from "../lib/cors";
 
 const router = Router();
 
@@ -193,11 +194,15 @@ router.post("/access/ovg-reseed", authenticate, async (req, res, next) => {
 });
 
 router.get("/access/stream", async (req, res) => {
+  // SEGURANÇA: reflete a origem só se estiver na allowlist — "*" desliga a
+  // Same Origin Policy e o front abre o stream com withCredentials.
+  const allowedOrigin = resolveAllowedOrigin(req);
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
+    Vary: "Origin",
+    ...(allowedOrigin ? { "Access-Control-Allow-Origin": allowedOrigin } : {}),
   });
 
   try {

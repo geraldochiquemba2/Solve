@@ -38,7 +38,7 @@ async function run() {
   const members = mb.clients_data || (mb.data && mb.data.clients_data) || [];
   log(`OVG: ${members.length} membros recebidos`);
 
-  const c = new pg.Client({ connectionString: dburl, ssl: { rejectUnauthorized: false } });
+  const c = new pg.Client({ connectionString: dburl, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } });
   await c.connect();
   await c.query(`CREATE TABLE IF NOT EXISTS ovg_members (
     customer_number TEXT PRIMARY KEY, name TEXT, sex TEXT, nif TEXT, mobile_number TEXT,

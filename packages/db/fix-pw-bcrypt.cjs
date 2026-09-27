@@ -11,7 +11,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@solvecorporate.ao';
 
 const client = new Client({
   connectionString: DB_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
 });
 
 async function run() {

@@ -13,7 +13,7 @@ if (!ADMIN_PHONE) { console.error('FATAL: define ADMIN_PHONE no ambiente.'); pro
 
 const client = new Client({
   connectionString: DB_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
 });
 
 function uuid() { return crypto.randomUUID(); }

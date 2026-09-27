@@ -9,6 +9,7 @@ import {
   type MinhaContaResponse,
   type PortalPayment,
 } from './api';
+import { randomId } from '@/lib/random';
 
 const money = (n: number) =>
   new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
@@ -43,7 +44,7 @@ function fmtDate(d?: string | null): string {
 /** Normaliza linha de pagamento (drizzle devolve camelCase; legado pode vir snake_case). */
 function normPay(p: any) {
   return {
-    key: p.id || p.code || Math.random().toString(36),
+    key: p.id || p.code || randomId(),
     reciboId: p.id || p.code || '',
     code: p.code || p.id || '',
     amount: p.amount ?? 0,

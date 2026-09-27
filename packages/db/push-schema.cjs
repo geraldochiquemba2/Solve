@@ -12,7 +12,7 @@ async function run() {
     process.exit(1);
   }
   const sql = readFileSync(join(__dirname, 'drizzle', '0000_empty_hydra.sql'), 'utf-8');
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } });
   const statements = sql.split('--> statement-breakpoint').map(s => s.trim()).filter(s => s.length > 0);
   const client = await pool.connect();
   try {

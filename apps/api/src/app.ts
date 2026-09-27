@@ -140,10 +140,49 @@ app.post("/webhooks/ekwanza", express.json(), async (req, res) => {
 });
 
 // Backward compatibility: redirect old /api/* to /api/v1/*
+// The target is derived from the request path, so it is validated before use:
+// anything that could escape the origin (scheme, protocol-relative "//",
+// backslashes, control chars) or leave the /api/v1 namespace is rejected.
+const API_V1_PREFIX = "/api/v1";
+const UNSAFE_REDIRECT_CHARS = /[\u0000-\u001f\u007f\\]/;
+// Mesmos caracteres de controlo, mas escapados (%00-%1f, %7f) — o Node repassa
+// o Location tal e qual, e %0d/%0a dariam injecção de cabeçalho.
+const UNSAFE_REDIRECT_ESCAPES = /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i;
+const EXTERNAL_URL_RE = /^[a-z][a-z0-9+.-]*:/i;
+// RFC 3986 pchar reduzido ao que uma API usa: unreserved + escape %XX.
+// ":" e "@" ficam de fora de propósito (separadores de autoridade).
+const SAFE_SEGMENT_RE = /^(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+$/;
+
+function buildV1RedirectTarget(reqPath: string): string {
+  const fallback = `${API_V1_PREFIX}/`;
+  if (typeof reqPath !== "string" || reqPath.length === 0) return fallback;
+  if (reqPath.includes("//") || EXTERNAL_URL_RE.test(reqPath)) return fallback;
+  if (UNSAFE_REDIRECT_CHARS.test(reqPath)) return fallback;
+  if (UNSAFE_REDIRECT_ESCAPES.test(reqPath)) return fallback;
+
+  const normalized = reqPath.startsWith("/") ? reqPath : `/${reqPath}`;
+  // Resolve "." / ".." so the final URL cannot climb out of the /api/v1 namespace.
+  // %2e também conta como ponto: o browser normaliza depois de descodificar.
+  const segments: string[] = [];
+  for (const raw of normalized.split("/")) {
+    if (raw === "") continue;
+    const segment = raw.replace(/%2e/gi, ".");
+    if (segment === ".") continue;
+    if (segment === "..") { segments.pop(); continue; }
+    // Valida em vez de codificar: req.path vem percent-encoded do request,
+    // então encodeURIComponent dobraria o escape ("%20" -> "%2520") e
+    // quebraria clientes legítimos. Qualquer caractere inesperado cai no
+    // destino seguro em vez de ser reescrito.
+    if (!SAFE_SEGMENT_RE.test(raw)) return fallback;
+    segments.push(raw);
+  }
+  if (segments.length === 0) return fallback;
+  return `${API_V1_PREFIX}/${segments.join("/")}`;
+}
+
 app.use("/api", (req, res, next) => {
   if (req.path.startsWith("/v1/")) return next();
-  const newPath = req.path === "/" ? "/api/v1/" : `/api/v1${req.path}`;
-  res.redirect(301, newPath);
+  res.redirect(301, buildV1RedirectTarget(req.path));
 });
 
 // Error handling

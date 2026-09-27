@@ -24,7 +24,7 @@ async function run() {
     console.error('FATAL: define CRM_DATABASE_URL no ambiente. Ex: CRM_DATABASE_URL="..." node packages/db/add-indexes.cjs');
     process.exit(1);
   }
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } });
   await client.connect();
   for (const s of statements) {
     try { await client.query(s); console.log('OK:', s.slice(0, 70)); }

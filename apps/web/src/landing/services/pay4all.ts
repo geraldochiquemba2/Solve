@@ -12,9 +12,10 @@ export interface PaymentRequest {
   items: any[]
 }
 
+// Configuração vem do ambiente — nunca escrever a chave no bundle.
 // TODO: Substituir pelo Endpoint e Chave de API reais da Pay4All
-const PAY4ALL_API_URL = 'https://api.pay4all.ao/v1/payments' 
-const PAY4ALL_API_KEY = 'SUA_CHAVE_AQUI'
+const PAY4ALL_API_URL = import.meta.env.VITE_PAY4ALL_API_URL || ''
+const PAY4ALL_API_KEY = import.meta.env.VITE_PAY4ALL_API_KEY || ''
 
 export const createPay4AllPayment = async (data: PaymentRequest) => {
   // --- MOCK IMPLEMENTATION ---

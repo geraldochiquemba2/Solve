@@ -10,7 +10,7 @@ if (!ADMIN_PASSWORD) { console.error('FATAL: define ADMIN_PASSWORD no ambiente.'
 
 const client = new Client({
   connectionString: DB_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
 });
 
 function uuid() { return crypto.randomUUID(); }

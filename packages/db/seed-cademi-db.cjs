@@ -20,7 +20,7 @@ async function run() {
     console.error('FATAL: define CRM_DATABASE_URL. Ex: CRM_DATABASE_URL="..." node packages/db/seed-cademi-db.cjs');
     process.exit(1);
   }
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } });
   await client.connect();
 
   // 1. Admin (credenciais via ambiente; sem fallbacks fracos).

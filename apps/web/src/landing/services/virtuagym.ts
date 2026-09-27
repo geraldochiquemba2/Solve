@@ -34,10 +34,11 @@ export interface VirtuagymResponse {
   error?: string
 }
 
-// TODO (Backend): Substituir pelos valores reais nas variáveis de ambiente do servidor
-const VIRTUAGYM_API_URL = 'https://api.virtuagym.com/api/v1' // process.env.VIRTUAGYM_API_URL
-const VIRTUAGYM_API_KEY = 'SEU_API_KEY_AQUI'                 // process.env.VIRTUAGYM_API_KEY
-const VIRTUAGYM_CLUB_ID = 'SEU_CLUB_ID_AQUI'                 // process.env.VIRTUAGYM_CLUB_ID
+// Configuração vem do ambiente — nunca escrever chave/ID no bundle.
+// Estas credenciais são de servidor: o serviço só deve ser invocado pelo backend.
+const VIRTUAGYM_API_URL = import.meta.env.VITE_VIRTUAGYM_API_URL || ''
+const VIRTUAGYM_API_KEY = import.meta.env.VITE_VIRTUAGYM_API_KEY || ''
+const VIRTUAGYM_CLUB_ID = import.meta.env.VITE_VIRTUAGYM_CLUB_ID || ''
 
 /**
  * Cria um membro no Virtuagym.

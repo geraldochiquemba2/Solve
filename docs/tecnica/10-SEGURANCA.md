@@ -89,7 +89,7 @@ mais 4 pontos. Estado após a ronda 2 (código já no ar):
 | VULN-11 | Reset em logs | Fechado: sem token em logs. SMTP continua TODO |
 | VULN-12 | JWT em localStorage | Aceite (ver riscos). Sem blacklist: logout invalida cookie; token expira em 24h |
 | VULN-13 | Stack traces | **Fechado ronda 2**: 500 genérico em 52 rotas + handler global + `x-powered-by` off |
-| VULN-14 | SSL `rejectUnauthorized:false` | Aceite (compat. Neon; `sslmode=require`). Mudar para `true` exige teste de ligação |
+| VULN-14 | SSL `rejectUnauthorized:false` | **Fechado**: os 20 clientes `pg` (`packages/db/*`, `scripts/push-schema.mjs`) verificam o certificado por omissão. Só se desliga com `DB_SSL_REJECT_UNAUTHORIZED=false` (BD local self-signed) |
 | VULN-15 | Headers | Parcial: nosniff/DENY/Referrer/HSTS + `x-powered-by` off. **Sem CSP** (SPA Vite com inline — CSP quebraria; reavaliar com nonce) |
 | VULN-16 | `?api_key=` no URL | **Fechado ronda 2**: chave só via header; streams usam cookie (`withCredentials`) |
 | VULN-17 | Passwords fracas | Fechado: mínimo 8 em registo + reset (front e back) |
@@ -116,9 +116,12 @@ mais 4 pontos. Estado após a ronda 2 (código já no ar):
 - **JWT em `localStorage`** — XSS roubaria sessão. Mitigado com headers,
   sem `dangerouslySetInnerHTML` com input de user, e sem `eval`. Migração para
   cookie-only exige mudar o frontend (fora deste âmbito).
-- **SSL `rejectUnauthorized:false`** no driver `pg` — aceite por compatibilidade
-  Neon; a string exige `sslmode=require` (cifrado, sem verificação total).
-  Mudar para `true` exige teste de ligação (VULN-14).
+- **TLS do Postgres** — os clientes `pg` verificam o certificado por omissão
+  (`rejectUnauthorized: true`). Desligar só com
+  `DB_SSL_REJECT_UNAUTHORIZED=false`, e apenas para BD local com certificado
+  self-signed; em produção isso deixa a ligação aberta a MITM. Nota: a imagem
+  de produção corre `standalone-server/index.js`, que tem o seu próprio `pg.Pool`
+  e **mantém** `rejectUnauthorized: false` por não estar no âmbito da ronda.
 - **Registo público continua aberto** (comercial/financeiro/operacional) —
   se houver spam, pôr por convite (desligar `POST /auth/register` público).
 - **Callback É-kwanza sem HMAC do fornecedor** — compensado com confirmação

@@ -20,7 +20,10 @@ const connectionString = CRM_URL
 
 export const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false },
+  // Verifica o certificado do servidor por omissão. Só desligar com
+  // DB_SSL_REJECT_UNAUTHORIZED=false (BD local com certificado self-signed):
+  // sem isso a ligação fica vulnerável a MITM.
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false" },
   connectionTimeoutMillis: 15000,
   max: 5,
 });

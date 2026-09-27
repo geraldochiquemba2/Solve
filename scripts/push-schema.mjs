@@ -6,7 +6,7 @@ const sql = readFileSync(resolve(import.meta.dirname, '..', 'packages', 'db', 'd
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' },
 });
 
 const statements = sql

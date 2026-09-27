@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middlewares/auth';
+import { resolveAllowedOrigin } from '../lib/cors';
 
 const router = Router();
 
@@ -221,11 +222,15 @@ router.post('/event', (req: Request, res: Response) => {
 });
 
 router.get('/stream', (req: Request, res: Response) => {
+  // SEGURANÇA: reflete a origem só se estiver na allowlist — "*" desliga a
+  // Same Origin Policy e o front abre o stream com withCredentials.
+  const allowedOrigin = resolveAllowedOrigin(req);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+    Vary: 'Origin',
+    ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin } : {}),
   });
 
   res.write(`data: ${JSON.stringify({ type: 'connected', history: eventHistory.slice(0, 20) })}\n\n`);

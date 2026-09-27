@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { Copy, Check, Eye, RefreshCw } from 'lucide-react';
 import { listPagamentos, type PortalPayment } from './api';
+import { randomId } from '@/lib/random';
 
 const money = (n: number) =>
   new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
@@ -19,7 +20,7 @@ function fmtDate(d?: string | null): string {
 function normPay(p: any) {
   const id = p.id || p.code || '';
   return {
-    key: p.id || p.code || Math.random().toString(36),
+    key: p.id || p.code || randomId(),
     reciboId: id,
     code: p.code || p.id || '—',
     amount: p.amount ?? 0,

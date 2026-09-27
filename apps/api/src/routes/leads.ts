@@ -255,10 +255,17 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         where: eq(leadsTable.externalId, externalId),
       });
       if (existing) {
+        // Campos escritos com notação literal de propósito: usar req.body como
+        // chave de objeto permitiria escrever em __proto__/constructor/prototype
+        // (remote property injection). A lista vem do schema Zod, nunca do body.
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
-        for (const field of ["name", "email", "phone", "company", "source", "estimatedValue", "notes"] as const) {
-          if (req.body[field] !== undefined) updateData[field] = req.body[field];
-        }
+        if (req.body.name !== undefined) updateData.name = req.body.name;
+        if (req.body.email !== undefined) updateData.email = req.body.email;
+        if (req.body.phone !== undefined) updateData.phone = req.body.phone;
+        if (req.body.company !== undefined) updateData.company = req.body.company;
+        if (req.body.source !== undefined) updateData.source = req.body.source;
+        if (req.body.estimatedValue !== undefined) updateData.estimatedValue = req.body.estimatedValue;
+        if (req.body.notes !== undefined) updateData.notes = req.body.notes;
         const [lead] = await db
           .update(leadsTable)
           .set(updateData)
