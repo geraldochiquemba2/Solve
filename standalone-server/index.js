@@ -1314,7 +1314,8 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 });
 
 // Histórico do aluno (widget Cademi): por email e/ou telefone.
-app.get("/api/v1/payments/minha-historico", requireAuth, async (req, res) => {
+// PÚBLICO (widget corre sem JWT): só devolve os próprios (filtro por email/telefone) + rate-limit.
+app.get("/api/v1/payments/minha-historico", rateLimit(60), async (req, res) => {
   try {
     const email = String(req.query.email || "").toLowerCase().trim();
     const digits = String(req.query.phone || "").replace(/\D/g, "").slice(-9);
@@ -1333,7 +1334,8 @@ app.get("/api/v1/payments/minha-historico", requireAuth, async (req, res) => {
 });
 
 // Cancelar pagamento pendente (aluno). Só o próprio (confere email/telefone).
-app.post("/api/v1/payments/:code/cancel", requireAuth, requireFinance, async (req, res) => {
+// PÚBLICO (widget sem JWT): a posse prova-se pelo email/telefone do metadata + rate-limit.
+app.post("/api/v1/payments/:code/cancel", rateLimit(30), async (req, res) => {
   try {
     const code = String(req.params.code);
     const email = String(req.body?.email || "").toLowerCase().trim();
@@ -1556,11 +1558,26 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
 // Criar pagamento: regista como pendente e responde DE IMEDIATO (<300ms).
 // A cobrança Ekwanza corre em background (fire-and-forget) para o modal
 // fechar sem esperar pelo OAuth + POST GPO (10-45s).
-app.post("/api/v1/payments", requireAuth, async (req, res) => {
+// PÚBLICO (widget Cademi sem JWT): validado por montante/telefone + regra 1 pendente + rate-limit.
+// O preço é revalidado no servidor contra settings@cademi_entregas (anti-tamper do widget).
+app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
   try {
     const { amount, method, customer_id, customer_phone: raw_phone, customer_email, customer_name, cademi_produto, description, reference_code } = req.body || {};
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
+    // Preço oficial do conteúdo (se configurado): bloqueia underpay via widget adulterado.
+    if (cademi_produto) {
+      try {
+        const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
+        let manual = srow?.rows?.[0]?.value ?? [];
+        if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
+        const found = (Array.isArray(manual) ? manual : []).find(o => String(o?.id || "").toLowerCase() === String(cademi_produto).toLowerCase());
+        const preco = found?.preco != null && found.preco !== "" ? Number(found.preco) : null;
+        if (preco != null && Number.isFinite(preco) && preco > 0 && amt < preco) {
+          return res.status(400).json({ error: `Montante abaixo do preço (${preco} Kz)` });
+        }
+      } catch {}
+    }
     const m = method || "mcx_express";
     const customer_phone = normPhone(raw_phone) || null;
     if (m === "mcx_express" && (!customer_phone || customer_phone.length !== 9)) {
@@ -2029,7 +2046,7 @@ function slugify(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
-app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
+app.get("/api/v1/cademi/entregas", rateLimit(60), async (req, res) => {
   try {
     const byId = new Map();
     // Manual primeiro (tem preço).
@@ -2059,7 +2076,8 @@ app.get("/api/v1/cademi/entregas", requireAuth, async (req, res) => {
 });
 
 // Nome do aluno na Cademi pelo email (para o widget pré-preencher).
-app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
+// PÚBLICO (widget sem JWT): só devolve nome por email exato + rate-limit.
+app.get("/api/v1/cademi/nome", rateLimit(60), async (req, res) => {
   try {
     const email = String(req.query.email || "").trim();
     if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
@@ -2084,7 +2102,8 @@ app.get("/api/v1/cademi/nome", requireAuth, async (req, res) => {
 });
 
 // Acessos do aluno na Cademi por email (produto + validade) — para o widget.
-app.get("/api/v1/cademi/acesso", requireAuth, async (req, res) => {
+// PÚBLICO (widget sem JWT): só os acessos do próprio email + rate-limit.
+app.get("/api/v1/cademi/acesso", rateLimit(60), async (req, res) => {
   try {
     const email = String(req.query.email || "").trim();
     if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
@@ -2881,7 +2900,7 @@ app.get("/api/v1/subscriptions", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/v1/payments/ekwanza/check-status/:id", requireAuth, async (req, res) => {
+app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, res) => {
   try {
     const { id } = req.params;
     // Aceita code (SC...) ou id (uuid) — o frontend envia code.
