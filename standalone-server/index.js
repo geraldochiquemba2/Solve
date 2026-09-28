@@ -2054,7 +2054,7 @@ app.get("/api/v1/cademi/entregas", rateLimit(60), async (req, res) => {
       const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
       let manual = srow?.rows?.[0]?.value ?? [];
       if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
-      (Array.isArray(manual) ? manual : []).forEach(o => { if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: o.preco } : {}) }); });
+      (Array.isArray(manual) ? manual : []).forEach(o => { if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: o.preco } : {}), ...(o.dias ? { dias: o.dias } : {}) }); });
     } catch {}
     // Produtos reais da Cademi (aparecem automaticamente ao criar).
     try {

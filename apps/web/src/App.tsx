@@ -1011,7 +1011,7 @@ function PaymentsPage() {
   const [cPhone, setCPhone] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cName, setCName] = useState('');
-  const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
+  const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string; preco?: number; dias?: number }>>([]);
   const [cProduto, setCProduto] = useState('');
   const pickProduto = (id: string) => {
     setCProduto(id);
@@ -1154,7 +1154,7 @@ function PaymentsPage() {
     <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (SamoraFit Workout) *</label>
     <select className="select" value={cProduto} onChange={e => pickProduto(e.target.value)} style={{ width: '100%' }}>
       {cEntregas.length === 0 && <option value="">A carregar…</option>}
-      {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}{o.preco ? ` — ${o.preco} Kz` : ''}</option>)}
+      {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}{o.preco ? ` — ${o.preco} Kz` : ''}{o.dias ? ` · ${o.dias} dias` : ''}</option>)}
     </select></div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
@@ -1258,7 +1258,7 @@ function AcademiaPage() {
   const [cademiView, setCademiView] = useState<'pagamentos' | 'alunos'>('pagamentos');
   // Entrega Cademi fixa (não editável): produto sempre 'samorafit-workout', envio sempre ligado.
   const FIXO_PRODUTO_ID = 'samorafit-workout';
-  const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
+  const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number; dias?: number }>>([]);
   const [cfgMsg, setCfgMsg] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
 
@@ -1269,7 +1269,7 @@ function AcademiaPage() {
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() }).then(r => r.json());
         const list = Array.isArray(e.data) ? e.data : [];
-        if (list.length > 0) setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
+        if (list.length > 0) setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}), ...(o.dias ? { dias: Number(o.dias) } : {}) })));
       } catch {}
     } catch {}
   };
@@ -1351,12 +1351,13 @@ function AcademiaPage() {
       <div><label className="label">Envio automático</label>
       <div style={{ padding: '.55rem .7rem' }}><Status tone="good">Ligado</Status></div></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Preços e validade por conteúdo (Kz / dias — dias vazio = vitalício)</label>
     <div style={{ display: 'grid', gap: '.45rem' }}>
       {entregasArr.length === 0 && <div className="section-note">A carregar entregas…</div>}
       {entregasArr.map(o => <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
         <div style={{ flex: 1, fontSize: '.78rem', fontWeight: 600 }}>{o.nome}<div className="mono" style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{o.id}</div></div>
-        <input className="input" type="number" min="0" value={o.preco ?? ''} onChange={e => setEntregasArr(entregasArr.map(x => x.id === o.id ? { ...x, preco: e.target.value === '' ? undefined : Number(e.target.value) } : x))} placeholder="Preço" style={{ width: '130px' }} />
+        <input className="input" type="number" min="0" value={o.preco ?? ''} onChange={e => setEntregasArr(entregasArr.map(x => x.id === o.id ? { ...x, preco: e.target.value === '' ? undefined : Number(e.target.value) } : x))} placeholder="Preço" title="Preço em Kz" style={{ width: '110px' }} />
+        <input className="input" type="number" min="0" value={o.dias ?? ''} onChange={e => setEntregasArr(entregasArr.map(x => x.id === o.id ? { ...x, dias: e.target.value === '' ? undefined : Number(e.target.value) } : x))} placeholder="Dias" title="Validade em dias (vazio = vitalício)" style={{ width: '80px' }} />
       </div>)}
     </div></div>
     {cfgMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cfgMsg}</div>}
