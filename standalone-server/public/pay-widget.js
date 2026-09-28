@@ -94,10 +94,8 @@
       var op = document.createElement("option");
       op.value = o.id;
       // Sem preço no CRM = "disponível em breve", não selecionável.
-      // Dias vazio = vitalício; com dias = validade do conteúdo.
-      var diasTxt = o.dias ? (" · " + o.dias + " dias") : " · vitalício";
       if (o.preco) {
-        op.textContent = o.nome + " — " + fmtKz(o.preco) + " Kz" + diasTxt;
+        op.textContent = o.nome + " — " + fmtKz(o.preco) + " Kz";
       } else {
         op.textContent = o.nome + " — disponível em breve";
         op.disabled = true;
@@ -300,7 +298,7 @@
           if (slug === op.value || pn === base.toLowerCase().trim()) {
             var hasPrice = false;
             var priceTxt = "";
-            entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + fmtKz(o.preco) + " Kz" + (o.dias ? " · " + o.dias + " dias" : " · vitalício"); } });
+            entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + fmtKz(o.preco) + " Kz"; } });
             var active = !ac.encerrado;
             // Expirado mostra o preço NOVO (renovação); ativo mostra o tempo.
             var tag = ac.encerrado

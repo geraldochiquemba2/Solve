@@ -114,7 +114,7 @@ router.get("/cademi/entregas", authenticate, async (req, res, next) => {
       let manual: any = (row as any)?.value ?? [];
       if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
       (Array.isArray(manual) ? manual : []).forEach((o: any) => {
-        if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}), ...(o.dias ? { dias: Number(o.dias) } : {}) });
+        if (o?.id) byId.set(o.id, { id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) });
       });
     } catch {}
     try {
