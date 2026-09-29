@@ -1007,7 +1007,6 @@ function PaymentsPage() {
   const [syncing, setSyncing] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
   const [cAmount, setCAmount] = useState('');
-  const [cMethod, setCMethod] = useState('mcx_express');
   const [cPhone, setCPhone] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cName, setCName] = useState('');
@@ -1039,11 +1038,11 @@ function PaymentsPage() {
   const createCharge = async () => {
     const amt = parseFloat(cAmount);
     if (!amt || amt <= 0) { setCMsg('Indica um montante válido'); return; }
-    if (cMethod === 'mcx_express' && !cPhone.trim()) { setCMsg('Express precisa do número de telefone'); return; }
+    if (!cPhone.trim()) { setCMsg('Indica o número de telefone'); return; }
     // Snapshot dos campos. O modal fica aberto a mostrar o link WiPay
     // (igual ao widget): o método escolhe-se na página hospedada.
-    const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined };
-    const snap = { amount: cAmount, method: cMethod, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc };
+    const payload = { amount: amt, method: 'mcx_express', customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined };
+    const snap = { amount: cAmount, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc };
     setCharging(true);
     setCLink(null);
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -1081,7 +1080,7 @@ function PaymentsPage() {
       setCharging(false);
     } catch (e: any) {
       // Falhou: reabre o modal com os valores e o erro.
-      setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCProduto(snap.produto); setCDesc(snap.desc);
+      setCAmount(snap.amount); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCProduto(snap.produto); setCDesc(snap.desc);
       setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
       setChargeOpen(true);
       setCharging(false);
@@ -1155,10 +1154,10 @@ function PaymentsPage() {
     <div style={{ display: 'flex', gap: '.5rem' }}>
       <div style={{ flex: 1 }}><label className="label">Montante (Kz) *</label>
       <input className="input" type="number" min="1" value={cAmount} onChange={e => setCAmount(e.target.value)} placeholder="100" /></div>
-      <div style={{ flex: 1 }}><label className="label">Método</label>
-      <select className="select" value={cMethod} onChange={e => setCMethod(e.target.value)}><option value="mcx_express">M. Express</option><option value="referencia">Referência</option></select></div>
+      <div style={{ flex: 1 }}><label className="label">Pagamento</label>
+      <div style={{ fontSize: '.78rem', fontWeight: 600, padding: '.55rem 0' }}>Multicaixa na página</div></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Telefone {cMethod === 'mcx_express' ? '*' : '(opcional)'}</label>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Telefone *</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Nome (p/ SamoraFit Workout)</label>
