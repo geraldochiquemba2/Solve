@@ -1,5 +1,19 @@
 # Pagamentos — estados, regras e operação
 
+## Gateway atual: WiPay (docs: https://developer.wipay.ao/)
+Fluxo 100% hospedado: `POST /v1/credentials/token` (scope `payment`, 1h)
+→ `POST /v1/hosts/payments` (303 → página `pay.wiza.ao`) → cliente escolhe o
+método e paga → callback assinado (HMAC, chave = token scope `signature`).
+**Não há push automático para o Express** — o cliente abre sempre o link.
+- Código: `standalone-server/index.js` (`getWipayToken`, `fireWipayCharge`,
+  `POST /webhooks/wipay`, sync 5min); widget mostra botão "Pagar agora".
+- Env: `WIPAY_CLIENT_ID` + `WIPAY_CLIENT_SECRET` (Render). Sem elas, cai no
+  GPO É-kwanza legado.
+- Sandbox vs produção: mesmo host, credenciais diferentes (portal
+  https://portal.wipay.ao). Números de teste (sandbox): `900000000` aceite,
+  `900002004` timeout, `900003000` rejeitado pelo utilizador.
+- Suporte técnico: Unidade de Integração e Tecnologia (UIT) da WiPay.
+
 ## Criar cobrança
 `Pagamentos → Nova cobrança`: montante, método (**M. Express** precisa telefone
 `9XXXXXXXX`; **Referência** gera entidade+número), nome + email do aluno

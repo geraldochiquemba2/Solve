@@ -228,7 +228,11 @@ app.use(cors({
   origin: CORS_ORIGIN.split(",").map(s => s.trim()).filter(Boolean),
   credentials: true,
 }));
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "100kb",
+  // Guarda o corpo raw para verificação HMAC do webhook WiPay (a doc exige
+  // assinar o payload raw, não o JSON re-serializado).
+  verify: (req, _res, buf) => { if (req.path === "/webhooks/wipay") req.rawBody = buf; },
+}));
 app.use(rateLimit(200));
 
 app.get("/healthz", (_req, res) => {
@@ -1397,9 +1401,10 @@ app.post("/webhooks/wipay", rateLimit(60), async (req, res) => {
     try {
       const signKey = await getWipayToken("signature");
       const sig = req.headers["signature"];
-      if (sig) {
-        const h = crypto.createHmac("sha256", signKey).update(JSON.stringify(req.body)).digest("hex");
+      if (sig && req.rawBody) {
+        const h = crypto.createHmac("sha256", signKey).update(req.rawBody).digest("hex");
         if (h !== String(sig)) console.log(`[WIPAY-WEBHOOK] ${code}: assinatura divergente (segue p/ confirmação oficial)`);
+        else console.log(`[WIPAY-WEBHOOK] ${code}: assinatura OK`);
       }
     } catch {}
     const mapped = await applyWipayConfirm(code, wid);
