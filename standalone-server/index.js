@@ -3290,6 +3290,38 @@ if (existsSync(staticDir)) {
 
 const port = Number(process.env.PORT || 3000);
 
+// Webhook Supabase (fit90_leads INSERT -> CRM, automático, sem chaves novas).
+// TEM de ficar antes do 404 catch-all abaixo, senão nunca é alcançado.
+// Configurar no dashboard Supabase: Database -> Webhooks -> POST
+// https://solve-sqoh.onrender.com/api/v1/leads/fit90-hook com header
+// X-API-Key = API_KEY do Solve. Idempotente por external_id.
+app.post("/api/v1/leads/fit90-hook", rateLimit(60), async (req, res) => {
+  try {
+    const key = req.headers["x-api-key"];
+    if (!apiKeyMatches(String(key || ""), API_KEY)) return res.status(401).json({ error: "não autorizado" });
+    const rec = req.body?.record || req.body || {};
+    if (req.body?.type && req.body.type !== "INSERT") return res.json({ ok: true, skipped: req.body.type });
+    const name = String(rec.name || "").trim();
+    if (name.length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
+    const extId = String(rec.id || rec.external_id || "");
+    if (extId) {
+      const dup = await pool.query("SELECT id FROM leads WHERE external_id = $1", [extId]);
+      if (dup.rows[0]) return res.json({ ok: true, dedup: true, id: dup.rows[0].id });
+    }
+    const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
+    const r = await pool.query(
+      `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
+       VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING id`,
+      [code, name, rec.email || null, rec.phone || null, rec.company || null,
+       rec.source || "fit90_landing", 0, rec.notes || null, extId || null]);
+    console.log(`[FIT90-HOOK] ${name} -> lead ${r.rows[0].id}`);
+    res.status(201).json({ ok: true, id: r.rows[0].id, code });
+  } catch (err) {
+    console.error("[FIT90-HOOK]", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
 // VULN-13: erros genéricos em produção (sem stacks/mensagens internas).
 // Tem de vir depois das rotas e do fallback do SPA.
 app.use((req, res) => {
@@ -3405,37 +3437,6 @@ setInterval(async () => {
     _autoSyncRunning = false;
   }
 }, AUTOSYNC_INTERVAL_MS);
-
-// Webhook Supabase (fit90_leads INSERT -> CRM, automático, sem chaves novas).
-// Configurar no dashboard Supabase: Database -> Webhooks -> POST
-// https://solve-sqoh.onrender.com/api/v1/leads/fit90-hook com header
-// X-API-Key = API_KEY do Solve. Idempotente por external_id.
-app.post("/api/v1/leads/fit90-hook", rateLimit(60), async (req, res) => {
-  try {
-    const key = req.headers["x-api-key"];
-    if (!apiKeyMatches(String(key || ""), API_KEY)) return res.status(401).json({ error: "não autorizado" });
-    const rec = req.body?.record || req.body || {};
-    if (req.body?.type && req.body.type !== "INSERT") return res.json({ ok: true, skipped: req.body.type });
-    const name = String(rec.name || "").trim();
-    if (name.length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
-    const extId = String(rec.id || rec.external_id || "");
-    if (extId) {
-      const dup = await pool.query("SELECT id FROM leads WHERE external_id = $1", [extId]);
-      if (dup.rows[0]) return res.json({ ok: true, dedup: true, id: dup.rows[0].id });
-    }
-    const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
-    const r = await pool.query(
-      `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
-       VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING id`,
-      [code, name, rec.email || null, rec.phone || null, rec.company || null,
-       rec.source || "fit90_landing", 0, rec.notes || null, extId || null]);
-    console.log(`[FIT90-HOOK] ${name} -> lead ${r.rows[0].id}`);
-    res.status(201).json({ ok: true, id: r.rows[0].id, code });
-  } catch (err) {
-    console.error("[FIT90-HOOK]", err?.message || err);
-    res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
 
 // Varrimento Fit90 (landing -> CRM): 5min — override via FIT90_SYNC_INTERVAL_MS.
 // A landing grava direto em fit90_leads (Supabase) contornando a Edge Function;
