@@ -3079,12 +3079,25 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, 
         return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "CANCELLED_BY_USER", currentStatus: payment.status, newStatus: payment.status, changed: false });
       }
     } catch {}
-    const token = await getEkwanzaToken();
+    // URL hospedada WiPay (se existir) sai em todas as respostas — mesmo
+    // que a consulta É-kwanza falhe (ex. credenciais antigas mortas).
+    let hosted = null;
+    try {
+      const mm0 = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {});
+      hosted = mm0.hosted_url || null;
+    } catch {}
+    let token = null;
+    try { token = await getEkwanzaToken(); } catch { token = null; }
+    if (!token) {
+      // Sem É-kwanza: responde estado atual + link WiPay (se houver).
+      // Pendentes WiPay confirmam-se pelo webhook / sync automático.
+      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "QUERY_FAILED", currentStatus: payment.status, hosted_url: hosted });
+    }
     const chargeResp = await fetch(`https://gwy-api.appypay.co.ao/v2.0/charges?merchantTransactionId=${encodeURIComponent(payment.code)}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     });
     if (!chargeResp.ok) {
-      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "QUERY_FAILED", currentStatus: payment.status });
+      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "QUERY_FAILED", currentStatus: payment.status, hosted_url: hosted });
     }
     const chargeData = await chargeResp.json();
     const charge = chargeData.payments?.[0] || chargeData.payment || chargeData.data || null;
@@ -3099,9 +3112,9 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, 
           code: payment.code, paymentId: payment.id, amt: Number(payment.amount),
           m: "referencia", customer_phone: meta0.phone || null, description: meta0.description || null,
         }).catch(() => {}));
-        return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "GENERATING", currentStatus: payment.status });
+        return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "GENERATING", currentStatus: payment.status, hosted_url: hosted });
       }
-      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "NOT_FOUND", currentStatus: payment.status });
+      return res.json({ paymentId: id, code: payment.code, ekwanzaStatus: "NOT_FOUND", currentStatus: payment.status, hosted_url: hosted });
     }
     const rawChargeStatus = String(charge.status ?? charge.paymentStatus ?? charge.state ?? "").toLowerCase();
     const statusMap = { success: "confirmado", successful: "confirmado", paid: "confirmado", confirmado: "confirmado", completed: "confirmado", pending: "pendente", pendente: "pendente", failed: "rejeitado", fail: "rejeitado", cancelled: "rejeitado", canceled: "rejeitado", expired: "rejeitado", rejected: "rejeitado", error: "rejeitado" };
