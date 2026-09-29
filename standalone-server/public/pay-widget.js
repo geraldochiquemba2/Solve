@@ -485,7 +485,7 @@
       var r = await h(API + "/api/v1/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi" })
+        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi", return_url: String((window.location && window.location.href) || "").slice(0, 300) })
       });
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);

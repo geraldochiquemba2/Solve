@@ -1021,6 +1021,7 @@ function PaymentsPage() {
   };
   const [cDesc, setCDesc] = useState('');
   const [cMsg, setCMsg] = useState('');
+  const [cLink, setCLink] = useState<string | null>(null);
   const [charging, setCharging] = useState(false);
   // Entregas reais (slugs da Cademi) para o seletor de conteúdo.
   useEffect(() => {
@@ -1039,14 +1040,13 @@ function PaymentsPage() {
     const amt = parseFloat(cAmount);
     if (!amt || amt <= 0) { setCMsg('Indica um montante válido'); return; }
     if (cMethod === 'mcx_express' && !cPhone.trim()) { setCMsg('Express precisa do número de telefone'); return; }
-    // Snapshot dos campos + FECHO IMEDIATO (optimista).
-    // O POST corre em background: o modal fecha sempre, mesmo que o
-    // servidor demore (É-kwanza) ou esteja na versão antiga.
+    // Snapshot dos campos. O modal fica aberto a mostrar o link WiPay
+    // (igual ao widget): o método escolhe-se na página hospedada.
     const payload = { amount: amt, method: cMethod, customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined };
     const snap = { amount: cAmount, method: cMethod, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc };
-    setChargeOpen(false);
-    setCAmount(''); setCPhone(''); setCEmail(''); setCName(''); setCProduto(''); setCDesc(''); setCMsg('');
-    setCharging(false);
+    setCharging(true);
+    setCLink(null);
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
     try {
       const apiBase3 = import.meta.env.VITE_API_URL || '';
       const ctrl = new AbortController();
@@ -1062,14 +1062,29 @@ function PaymentsPage() {
       } finally { clearTimeout(timer); }
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || res.statusText);
+      const code = json?.data?.code || json?.code || '';
+      setCMsg(`Cobrança ${code} criada. A gerar link…`);
+      // Poll do link hospedado (gerado em background em segundos).
+      for (let i = 0; i < 12; i++) {
+        await sleep(5000);
+        try {
+          const st = await fetch(`${apiBase3}/api/v1/payments/ekwanza/check-status/${encodeURIComponent(code)}`, { credentials: 'include' });
+          const sj = await st.json().catch(() => null);
+          const s = sj?.newStatus || sj?.currentStatus;
+          if (sj?.hosted_url) { setCLink(sj.hosted_url); setCMsg(`Link pronto (${code}).`); break; }
+          if (s === 'confirmado' || s === 'rejeitado') break;
+        } catch { /* tenta de novo */ }
+      }
       const rows = await fetchPayments();
-      // Re-verifica o estado na É-kwanza aos 15s/45s/90s (o cliente aprova no telefone).
+      // Re-verifica o estado aos 15s/45s/90s (o cliente paga na página hospedada).
       [15000, 45000, 90000].forEach(dt => setTimeout(() => { syncPendentes(rows || undefined); }, dt));
+      setCharging(false);
     } catch (e: any) {
       // Falhou: reabre o modal com os valores e o erro.
       setCAmount(snap.amount); setCMethod(snap.method); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCProduto(snap.produto); setCDesc(snap.desc);
       setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
       setChargeOpen(true);
+      setCharging(false);
     }
   };
   const syncNow = async () => {
@@ -1126,7 +1141,7 @@ function PaymentsPage() {
     if (dateTo && p.date && p.date > dateTo + 'T23:59:59') return false;
     return true;
   });
-  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-primary" onClick={() => { setCMsg(''); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
+  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
   <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', flexWrap: 'wrap' }}>
     <input className="input" placeholder="Pesquisar cliente ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
     <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '140px' }} />
@@ -1136,7 +1151,7 @@ function PaymentsPage() {
   <Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option><option>Reembolsado</option></select>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }} title={p.id}>{p.id.length > 14 ? p.id.slice(0, 14) + '…' : p.id}</td><td><div style={{ fontWeight: 700 }}>{p.customer}</div>{p.customerPhone && <div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{p.customerPhone}</div>}</td><td>{p.methodLabel}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Pendente' ? 'pending' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>{p.dateFmt}</td><td>{p.state === 'Confirmado' && <span className="text-good" style={{ fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)} aria-label="Ver detalhes da transação"><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}
   {chargeOpen && <div className="modal-backdrop" onClick={() => setChargeOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Nova cobrança</h3>
-    <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente de imediato; Express dispara para o telefone.</div>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente e gera o link de pagamento (o método escolhe-se na página).</div>
     <div style={{ display: 'flex', gap: '.5rem' }}>
       <div style={{ flex: 1 }}><label className="label">Montante (Kz) *</label>
       <input className="input" type="number" min="1" value={cAmount} onChange={e => setCAmount(e.target.value)} placeholder="100" /></div>
@@ -1159,8 +1174,15 @@ function PaymentsPage() {
     <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
     {cMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cMsg}</div>}
+    {cLink && <div style={{ marginTop: '.6rem', padding: '.7rem', background: '#f4f4f5', borderRadius: '8px' }}>
+      <div style={{ fontSize: '.75rem', fontWeight: 700, marginBottom: '.4rem' }}>Link de pagamento</div>
+      <div style={{ display: 'flex', gap: '.4rem' }}>
+        <a href={cLink} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}>Abrir</a>
+        <button className="btn-secondary" style={{ flex: 1 }} onClick={() => { try { navigator.clipboard.writeText(cLink); setCMsg('Link copiado.'); } catch { setCMsg(cLink); } }}>Copiar</button>
+      </div>
+    </div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
-      <button className="btn-secondary" onClick={() => setChargeOpen(false)} style={{ flex: 1 }}>Fechar</button>
+      <button className="btn-secondary" onClick={() => { setChargeOpen(false); setCLink(null); setCMsg(''); }} style={{ flex: 1 }}>Fechar</button>
       <button className="btn-primary" onClick={createCharge} disabled={charging} style={{ flex: 1 }}><Check size={14} /> {charging ? 'A gerar…' : 'Gerar'}</button>
     </div>
   </div></div>}</>;

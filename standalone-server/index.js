@@ -1318,7 +1318,10 @@ async function applyWipayConfirm(code, wipayId) {
   return mapped;
 }
 // Cria pagamento WiPay e guarda id + URL hospedada nos metadata.
-async function fireWipayCharge({ code, amt, customer_phone, description }) {
+// return_url (opcional, ex. página Cademi onde o widget vive): a WiPay
+// redireciona para lá após sucesso/falha. Sem ele, fica na página WiPay
+// (evita arrastar o aluno para o CRM em caso de erro).
+async function fireWipayCharge({ code, amt, customer_phone, description, return_url }) {
   try {
     const tok = await getWipayToken("payment");
     const phone = String(customer_phone || "").replace(/\D/g, "");
@@ -1333,7 +1336,7 @@ async function fireWipayCharge({ code, amt, customer_phone, description }) {
         body: JSON.stringify({
           amount: Number(amt).toFixed(2), currency: "aoa",
           customer: phone, reference_id: code,
-          success_url: `${base}/conta/pagamentos`, failure_url: `${base}/conta/pagamentos`,
+          ...(return_url ? { success_url: return_url, failure_url: return_url } : {}),
           callback_url: `${base}/webhooks/wipay`,
         }),
         signal: ctrl.signal,
@@ -1720,7 +1723,7 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
 // O preço é revalidado no servidor contra settings@cademi_entregas (anti-tamper do widget).
 app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
   try {
-    const { amount, method, customer_id, customer_phone: raw_phone, customer_email, customer_name, cademi_produto, description, reference_code } = req.body || {};
+    const { amount, method, customer_id, customer_phone: raw_phone, customer_email, customer_name, cademi_produto, description, reference_code, return_url } = req.body || {};
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
     // Preço oficial do conteúdo (se configurado): bloqueia underpay via widget adulterado.
@@ -1799,7 +1802,7 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     //   senão cobrança push É-kwanza (GPO_...) como antes.
     // - referencia → gera entidade + número de referência (REF_...).
     if ((m === "mcx_express" && customer_phone) || m === "referencia") {
-      const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null };
+      const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null, return_url: typeof return_url === "string" && /^https?:\/\//.test(return_url) ? return_url.slice(0, 300) : null };
       setImmediate(async () => {
         try {
           if (m === "mcx_express" && await wipayReady()) {
