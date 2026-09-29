@@ -78,7 +78,7 @@
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
-      "<div><label class='spw-label'>Método</label><div class='spw-methods'><button type='button' id='spw-m-exp' class='on'>Express</button><button type='button' id='spw-m-ref'>Referência</button></div></div></div>" +
+      "<div><label class='spw-label'>Pagamento</label><div style='font-size:.78rem;font-weight:600;padding:.55rem 0'>Multicaixa na página seguinte</div></div></div>" +
       "<div id='spw-tempo' style='font-size:.72rem;color:#666;margin-top:.35rem'></div>" +
       "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
@@ -111,29 +111,13 @@
     sel.addEventListener("change", syncAmt);
     syncAmt();
 
-    var method = "express";
-    var bExp = m.querySelector("#spw-m-exp"), bRef = m.querySelector("#spw-m-ref");
+    var method = "express"; // único fluxo: link WiPay (o método escolhe-se na página)
     var phoneInput = m.querySelector("#spw-phone"), phoneLabel = m.querySelector("#spw-phone-label");
-    function setMethod(md) {
-      method = md;
-      var isExp = md === "express";
-      bExp.className = isExp ? "on" : "";
-      bRef.className = isExp ? "" : "on";
-      // Referência não precisa de telefone: esconde o campo.
-      phoneInput.style.display = isExp ? "" : "none";
-      phoneLabel.style.display = isExp ? "" : "none";
-      phoneLabel.textContent = "Telefone *";
-      // Aviso do tempo de cada método.
-      var tempoEl = m.querySelector("#spw-tempo");
-      if (tempoEl) {
-        tempoEl.textContent = isExp
-          ? "Express: o pedido chega ao telemóvel em segundos. Após aprovares, o pagamento reflete-se dentro de ~2 min."
-          : "Referência: o número pode demorar ~1 min a ser gerado. Depois de pagares, pode demorar até ~5 min a refletir.";
-      }
+    phoneLabel.textContent = "Telefone *";
+    var tempoEl = m.querySelector("#spw-tempo");
+    if (tempoEl) {
+      tempoEl.textContent = "Geras o link e pagas na página seguinte (Multicaixa Express ou referência).";
     }
-    bExp.addEventListener("click", function () { setMethod("express"); });
-    bRef.addEventListener("click", function () { setMethod("referencia"); });
-    setMethod("express");
     m.querySelector("#spw-cancel").addEventListener("click", closeModal);
     back.addEventListener("click", function (e) { if (e.target === back) closeModal(); });
     autodetect(m);
@@ -501,7 +485,7 @@
       var r = await h(API + "/api/v1/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt, method: method === "express" ? "mcx_express" : "referencia", customer_phone: phone, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi" })
+        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi" })
       });
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);
@@ -511,96 +495,40 @@
       // corre em fundo só a atualizar a mensagem (evita botão preso em "A gerar...").
       btn.disabled = false;
       btn.textContent = "Pagar";
-      if (method === "express") {
-        msg(m, "A gerar link de pagamento (" + code + ")...");
-        var payUrl = null;
-        for (var w = 0; w < 12; w++) {
-          await sleep(5000);
-          var stw = await checkStatus(code);
-          if (stw && stw.hosted_url) { payUrl = stw.hosted_url; break; }
-          var s0 = stw && (stw.newStatus || stw.currentStatus);
-          if (s0 === "confirmado" || s0 === "rejeitado") break;
-        }
-        var box2 = m.querySelector("#spw-ref");
-        if (payUrl) {
-          box2.innerHTML = "<div class='spw-ref'>"
-            + "<div style='margin-bottom:.4rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
-            + "<a href='" + payUrl + "' target='_blank' rel='noopener' style='display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:.6rem;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:.4rem'>Pagar agora no Multicaixa</a>"
-            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Abre o link, escolhe Multicaixa Express e confirma no teu telemóvel.</div>"
-            + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
-            + "</div>";
-          msg(m, "Link pronto. Paga e volta aqui.");
-          var cancelBtn = box2.querySelector("#spw-cancelref");
-          if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });
-        } else {
-          msg(m, "Pedido enviado para " + phone + " (" + code + "). Aprova no Multicaixa...");
-        }
-        for (var i = 0; i < 24; i++) {
-          await sleep(5000);
-          var st = await checkStatus(code);
-          var s = st && (st.newStatus || st.currentStatus);
-          if (st && st.hosted_url && !payUrl) {
-            payUrl = st.hosted_url;
-            msg(m, "Link pronto. Paga e volta aqui.");
-          }
-          if (s === "confirmado") { msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas."); break; }
-          if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
-        }
+      // Fluxo único: link WiPay (o método escolhe-se na página hospedada).
+      msg(m, "A gerar link de pagamento (" + code + ")...");
+      var payUrl = null;
+      for (var w = 0; w < 12; w++) {
+        await sleep(5000);
+        var stw = await checkStatus(code);
+        if (stw && stw.hosted_url) { payUrl = stw.hosted_url; break; }
+        var s0 = stw && (stw.newStatus || stw.currentStatus);
+        if (s0 === "confirmado" || s0 === "rejeitado") break;
+      }
+      var box2 = m.querySelector("#spw-ref");
+      if (payUrl) {
+        box2.innerHTML = "<div class='spw-ref'>"
+          + "<div style='margin-bottom:.4rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
+          + "<a href='" + payUrl + "' target='_blank' rel='noopener' style='display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:.6rem;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:.4rem'>Pagar agora no Multicaixa</a>"
+          + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Abre o link, escolhe o método e confirma no teu telemóvel.</div>"
+          + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
+          + "</div>";
+        msg(m, "Link pronto. Paga e volta aqui.");
+        var cancelBtn = box2.querySelector("#spw-cancelref");
+        if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });
       } else {
-        msg(m, "A gerar referência (" + code + ")...");
-        var ref = null;
-        for (var k = 0; k < 12; k++) {
-          await sleep(5000);
-          var st2 = await checkStatus(code);
-          if (st2 && st2.reference && st2.reference.referenceNumber) { ref = st2.reference; break; }
-          // Fallback: referência já gravada na BD (histórico).
-          try {
-            var hq = histParams(m);
-            if (hq) {
-              var hr = await h(API + "/api/v1/payments/minha-historico?" + hq);
-              var hj = await hr.json().catch(function () { return {}; });
-              var hlist = (hj && Array.isArray(hj.data)) ? hj.data : [];
-              for (var hi2 = 0; hi2 < hlist.length; hi2++) {
-                if (hlist[hi2].code === code && hlist[hi2].reference_code && hlist[hi2].reference_code !== code) {
-                  ref = { referenceNumber: hlist[hi2].reference_code, entity: hlist[hi2].entity };
-                  break;
-                }
-              }
-              if (ref) break;
-            }
-          } catch (eH) {}
-          if (st2 && st2.ekwanzaStatus === "GENERATING") { msg(m, "A gerar referência (" + code + ")..."); }
+        msg(m, "Link ainda a gerar (" + code + "). Aguarda ou tenta de novo.", true);
+      }
+      for (var i = 0; i < 24; i++) {
+        await sleep(5000);
+        var st = await checkStatus(code);
+        var s = st && (st.newStatus || st.currentStatus);
+        if (st && st.hosted_url && !payUrl) {
+          payUrl = st.hosted_url;
+          msg(m, "Link pronto. Paga e volta aqui.");
         }
-        var box = m.querySelector("#spw-ref");
-        if (ref) {
-          box.innerHTML = "<div class='spw-ref'>"
-            + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Entidade: <b>" + (ref.entity || "—") + "</b></span></div>"
-            + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem'><span>Referência: <b>" + ref.referenceNumber + "</b></span><button id='spw-copyref' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.3rem .6rem;font-size:.72rem;cursor:pointer'>Copiar referência</button></div>"
-            + "<div style='margin-bottom:.3rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
-            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Paga no ATM/MCX. Após confirmação, faz logout e entra de novo (login) para teres acesso às aulas.</div>"
-            + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
-            + "</div>";
-          msg(m, "Referência gerada.");
-          var copyBtn = box.querySelector("#spw-copyref");
-          if (copyBtn) copyBtn.addEventListener("click", function () {
-            var txt = String(ref.referenceNumber);
-            function done() { copyBtn.textContent = "Copiado!"; setTimeout(function () { copyBtn.textContent = "Copiar referência"; }, 1800); }
-            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
-            else {
-              var ta = document.createElement("textarea");
-              ta.value = txt;
-              document.body.appendChild(ta);
-              ta.select();
-              try { document.execCommand("copy"); } catch (e) {}
-              document.body.removeChild(ta);
-              done();
-            }
-          });
-          var cancelBtn = box.querySelector("#spw-cancelref");
-          if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });
-        } else {
-          msg(m, "Referência criada (" + code + "). Se os dados não aparecerem, fala connosco.", true);
-        }
+        if (s === "confirmado") { msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas."); break; }
+        if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
       }
     } catch (e) {
       msg(m, "Erro: " + (e.message || "falha"), true);
