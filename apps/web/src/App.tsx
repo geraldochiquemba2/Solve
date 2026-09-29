@@ -10,7 +10,7 @@ import {
   FileClock, FileKey2, Filter, HeartPulse, History, KeyRound, LayoutDashboard,
   LifeBuoy, Link2, ListFilter, LockKeyhole, LogOut, Menu, MessageCircle, MoreHorizontal,
   Package, Pause, PhoneCall, Play, Plus, RefreshCw, Search, Settings, ShieldCheck,
-  SlidersHorizontal, Sparkles, Target, ToggleLeft, ToggleRight, Trash2,
+  SlidersHorizontal, Smartphone, Sparkles, Target, ToggleLeft, ToggleRight, Trash2,
   TrendingUp, Upload, UserRound, Users, WalletCards, Webhook, X, Zap
 } from 'lucide-react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
@@ -221,7 +221,7 @@ function mapApiCustomer(c: any): Customer {
 
 const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
-  { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
+  { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }, { href: '/admin/fit90-leads', label: 'Leads Fit90', icon: Smartphone }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
    { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
 ];
@@ -507,6 +507,41 @@ function LeadModal({ initial, onClose, onSave, userName }: { initial: Lead | nul
   const [phone, setPhone] = useState(initial?.phone ?? ''); const [zap, setZap] = useState(initial?.whatsapp ?? ''); const [produto, setProduto] = useState(initial?.produtoInteresse ?? '');
   const [estado, setEstado] = useState(TRACK_PT[(initial as any)?.statusApi ?? ''] || initial?.status || TRACK_FICHA_OPTS[0]);
   return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x}>{x}</option>)}</select></label><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={!name || !company} onClick={() => onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name, company, email, source, status: estado, owner: initial?.owner ?? (userName || 'Utilizador'), value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' })}><Check size={14} /> Guardar lead</button></div></div></Modal>;
+}
+
+function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () => void }) {
+  const [q, setQ] = useState('');
+  const [pend, setPend] = useState<{ configured: boolean; rows: any[] }>({ configured: false, rows: [] });
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+  const updateMut = useUpdateLead();
+  const loadPend = async () => {
+    try { const j = await leadFetch('/api/v1/leads/fit90-pendentes'); setPend(j.data || { configured: false, rows: [] }); } catch {}
+  };
+  useEffect(() => { loadPend(); }, []);
+  const doSync = async () => {
+    setSyncing(true); setSyncMsg('');
+    try {
+      const j = await leadFetch('/api/v1/leads/fit90-sync', { method: 'POST' });
+      const n = j?.data?.pushed ?? 0;
+      setSyncMsg(j?.data?.skipped ? 'Sincronização desligada (falta chave Supabase no servidor).' : `${n} lead(s) empurrada(s) para o CRM.`);
+      await loadPend(); onChanged?.();
+    } catch { setSyncMsg('Erro ao sincronizar.'); }
+    setSyncing(false);
+  };
+  const move = (lead: Lead) => updateMut.mutate({ id: lead.id, data: { status: 'contacto' as any } }, { onSuccess: () => onChanged?.() });
+  const fitTrack = (l: Lead) => TRACK_PT[(l as any).statusApi || ''] || l.status;
+  const wa = (phone: string) => { const d = phone.replace(/[^\d]/g, ''); return d.length >= 9 ? `https://wa.me/${d}` : ''; };
+  const crm = leads.filter(l => (l.source || '') === 'fit90_landing' || (l.source || '').toLowerCase().includes('fit90'));
+  const filtered = crm.filter(l => (l.name + l.phone + l.email + l.code).toLowerCase().includes(q.toLowerCase()));
+  return <><PageHeader eyebrow="Comercial · Captação" title="Leads Fit90" subtitle="Landing Fit90: presas + no CRM" action={<button className="btn-primary" onClick={doSync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar agora'}</button>} />
+  {syncMsg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.78rem' }}>{syncMsg}</div>}
+  <Section title="Presas na landing" note={pend.configured ? `${pend.rows.length} por empurrar` : 'Ligação Supabase por configurar (o webhook trata das novas)'}>
+    {!pend.configured && pend.rows.length === 0 ? <div className="section-note">Sem acesso direto à Supabase — as novas entram pelo webhook; usa "Sincronizar agora" como rede.</div> : null}
+    {pend.rows.length === 0 ? <div className="section-note">Nada preso. Todas as leads da landing já estão no CRM.</div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Data</th></tr></thead><tbody>{pend.rows.map((p: any) => <tr key={p.id}><td style={{ fontWeight: 600 }}>{p.name || '—'}</td><td>{p.phone ? <a href={wa(p.phone)} target="_blank" rel="noreferrer" className="btn-quiet"><MessageCircle size={13} style={{ verticalAlign: 'middle' }} /> {p.phone}</a> : '—'}</td><td style={{ fontSize: '.75rem' }}>{p.email || '—'}</td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{p.created_at ? new Date(p.created_at).toLocaleString('pt-AO') : '—'}</td></tr>)}</tbody></table></div>}
+  </Section>
+  <div className="card" style={{ padding: '.7rem', marginBottom: '.8rem', display: 'flex', gap: '.55rem', alignItems: 'center', flexWrap: 'wrap' }}><div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar por nome, WhatsApp, email ou código" value={q} onChange={e => setQ(e.target.value)} data-testid="input-search-fit90" /></div></div>
+  <Section title="No CRM (Fit90)" note={`${filtered.length} registos`}>{filtered.length === 0 ? <EmptyState title={q ? 'Sem resultados' : 'Nenhum cadastro Fit90'} text={q ? 'Tenta outra pesquisa.' : 'Os leads submetidos na landing Fit90 aparecerão aqui automaticamente.'} /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Valor estimado</th><th>Etapa</th><th /></tr></thead><tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-fit90-${l.id}`}><td className="mono" style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{l.code || '—'}</td><td style={{ fontWeight: 600 }}>{l.name || '—'}</td><td>{l.phone ? <a href={wa(l.phone)} target="_blank" rel="noreferrer" className="btn-quiet" data-testid={`link-whatsapp-${l.id}`}><MessageCircle size={13} style={{ verticalAlign: 'middle' }} /> {l.phone}</a> : '—'}</td><td style={{ fontSize: '.75rem' }}>{l.email || '—'}</td><td className="mono" style={{ fontSize: '.75rem' }}>{l.value ? money(l.value) : '—'}</td><td><Status tone={fitTrack(l) === 'Convertida' ? 'good' : fitTrack(l) === 'Perdida' ? 'danger' : 'neutral'}>{fitTrack(l)}</Status></td><td>{fitTrack(l) === 'Nova' ? <button className="btn-quiet" data-testid={`button-contactar-${l.id}`} onClick={() => move(l)}><PhoneCall size={13} style={{ verticalAlign: 'middle' }} /> Marcar contacto</button> : <span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>Em acompanhamento</span>}</td></tr>)}</tbody></table></div>}</Section></>;
 }
 
 function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?: string; onChanged?: () => void }) {
@@ -1857,7 +1892,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (

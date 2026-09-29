@@ -3290,6 +3290,33 @@ if (existsSync(staticDir)) {
 
 const port = Number(process.env.PORT || 3000);
 
+// Presas na landing (Supabase) para a página Fit90 + botão sincronizar.
+// (Antes do 404 catch-all — rotas depois dele nunca são alcançadas.)
+app.get("/api/v1/leads/fit90-pendentes", requireAuth, async (req, res) => {
+  try {
+    const sbUrl = String(process.env.SUPABASE_URL || "https://fslrkrhuatzfqxbzilnd.supabase.co").replace(/\/$/, "");
+    const sbKey = String(process.env.SUPABASE_SERVICE_KEY || "");
+    if (!sbKey) return res.json({ data: { configured: false, rows: [] } });
+    const r = await fetch(`${sbUrl}/rest/v1/fit90_leads?pushed=eq.false&select=id,name,email,phone,source,created_at&order=created_at.desc&limit=100`,
+      { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } });
+    const rows = await r.json().catch(() => []);
+    res.json({ data: { configured: true, rows: Array.isArray(rows) ? rows : [] } });
+  } catch (err) {
+    console.error("[FIT90-PEND]", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+app.post("/api/v1/leads/fit90-sync", requireAuth, async (req, res) => {
+  try {
+    const r = await syncFit90Leads();
+    if (r?.skipped) return res.json({ data: { pushed: 0, skipped: true } });
+    res.json({ data: { pushed: r?.pushed || 0 } });
+  } catch (err) {
+    console.error("[FIT90-SYNC] manual:", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
 // Webhook Supabase (fit90_leads INSERT -> CRM, automático, sem chaves novas).
 // TEM de ficar antes do 404 catch-all abaixo, senão nunca é alcançado.
 // Configurar no dashboard Supabase: Database -> Webhooks -> POST
