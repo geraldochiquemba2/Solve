@@ -395,6 +395,7 @@
         + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + fmtKz(p.amount) + " Kz</span>"
         + "<span style='color:#666'>" + statusLabel(p.status) + ref + pendingRef + "</span>"
         + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
+        + ((p.status === "pendente" && p.hosted_url) ? "<a href='" + p.hosted_url + "' target='_blank' rel='noopener' style='border:1px solid #16a34a;background:#16a34a;color:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;text-decoration:none;font-weight:700'>Pagar</a>" : "")
         + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
         + "</div>";
     });
@@ -511,11 +512,37 @@
       btn.disabled = false;
       btn.textContent = "Pagar";
       if (method === "express") {
-        msg(m, "Pedido enviado para " + phone + " (" + code + "). Aprova no Multicaixa...");
+        msg(m, "A gerar link de pagamento (" + code + ")...");
+        var payUrl = null;
+        for (var w = 0; w < 12; w++) {
+          await sleep(5000);
+          var stw = await checkStatus(code);
+          if (stw && stw.hosted_url) { payUrl = stw.hosted_url; break; }
+          var s0 = stw && (stw.newStatus || stw.currentStatus);
+          if (s0 === "confirmado" || s0 === "rejeitado") break;
+        }
+        var box2 = m.querySelector("#spw-ref");
+        if (payUrl) {
+          box2.innerHTML = "<div class='spw-ref'>"
+            + "<div style='margin-bottom:.4rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
+            + "<a href='" + payUrl + "' target='_blank' rel='noopener' style='display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:.6rem;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:.4rem'>Pagar agora no Multicaixa</a>"
+            + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Abre o link, escolhe Multicaixa Express e confirma no teu telemóvel.</div>"
+            + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
+            + "</div>";
+          msg(m, "Link pronto. Paga e volta aqui.");
+          var cancelBtn = box2.querySelector("#spw-cancelref");
+          if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });
+        } else {
+          msg(m, "Pedido enviado para " + phone + " (" + code + "). Aprova no Multicaixa...");
+        }
         for (var i = 0; i < 24; i++) {
           await sleep(5000);
           var st = await checkStatus(code);
           var s = st && (st.newStatus || st.currentStatus);
+          if (st && st.hosted_url && !payUrl) {
+            payUrl = st.hosted_url;
+            msg(m, "Link pronto. Paga e volta aqui.");
+          }
           if (s === "confirmado") { msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas."); break; }
           if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
         }

@@ -1257,6 +1257,159 @@ async function getEkwanzaToken() {
   return data.access_token;
 }
 
+// ─── WiPay (gateway novo; fluxo 100% hospedado) ─────────────────────────────
+// Docs: https://developer.wipay.ao/ — token scope=payment (1h) / scope=signature
+// (24h, chave HMAC dos callbacks). Criar pagamento devolve 303 com a página
+// hospedada (location); o cliente escolhe o método e paga lá.
+const WIPAY_HOST = "https://api.wipay.ao";
+const _wipayTok = {};
+async function getWipayToken(scope) {
+  const c = _wipayTok[scope];
+  if (c && Date.now() < c.exp) return c.tok;
+  const cid = String(await cfg("wipay_client_id", process.env.WIPAY_CLIENT_ID || "")).trim();
+  const sec = String(await cfg("wipay_client_secret", process.env.WIPAY_CLIENT_SECRET || "")).trim();
+  if (!cid || !sec) throw new Error("WiPay por configurar (wipay_client_id/secret)");
+  const r = await fetch(`${WIPAY_HOST}/v1/credentials/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ grant_type: "client_credentials", client_id: cid, client_secret: sec, scope }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.access_token) throw new Error(`WiPay token falhou: ${r.status}`);
+  _wipayTok[scope] = { tok: j.access_token, exp: Date.now() + ((j.expires_in || 3600) - 120) * 1000 };
+  return _wipayTok[scope].tok;
+}
+async function wipayReady() {
+  try { await getWipayToken("payment"); return true; }
+  catch { return false; }
+}
+function wipayBase() {
+  return (process.env.FRONTEND_URL || "https://solve-sqoh.onrender.com").replace(/\/$/, "");
+}
+// Estado WiPay -> interno. accepted=confirmado; falhas explicitas=rejeitado;
+// resto (requested/...) mantem pendente.
+function mapWipayStatus(s) {
+  const v = String(s || "").toLowerCase();
+  if (["accepted", "success", "successful", "paid", "completed"].includes(v)) return "confirmado";
+  if (["rejected", "failed", "fail", "cancelled", "canceled", "expired", "error"].includes(v)) return "rejeitado";
+  return null;
+}
+async function applyWipayConfirm(code, wipayId) {
+  const tok = await getWipayToken("payment");
+  const r = await fetch(`${WIPAY_HOST}/v1/hosts/payments/${encodeURIComponent(wipayId)}`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${tok}` },
+  });
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => null);
+  const mapped = mapWipayStatus(j?.status);
+  if (!mapped) return j?.status || null;
+  if (mapped === "confirmado") {
+    await pool.query("UPDATE payments SET status='confirmado', paid_at=NOW(), reconciled_at=NOW(), updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+  } else {
+    await pool.query("UPDATE payments SET status='rejeitado', updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+  }
+  broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
+  console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${j?.status})`);
+  if (mapped === "confirmado") setImmediate(() => sendCademiDelivery(code));
+  return mapped;
+}
+// Cria pagamento WiPay e guarda id + URL hospedada nos metadata.
+async function fireWipayCharge({ code, amt, customer_phone, description }) {
+  try {
+    const tok = await getWipayToken("payment");
+    const phone = String(customer_phone || "").replace(/\D/g, "");
+    const base = wipayBase();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    let loc = null;
+    try {
+      const resp = await fetch(`${WIPAY_HOST}/v1/hosts/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({
+          amount: Number(amt).toFixed(2), currency: "aoa",
+          customer: phone, reference_id: code,
+          success_url: `${base}/conta/pagamentos`, failure_url: `${base}/conta/pagamentos`,
+          callback_url: `${base}/webhooks/wipay`,
+        }),
+        signal: ctrl.signal,
+        redirect: "manual",
+      });
+      loc = resp.headers.get("location");
+      if (resp.status !== 303 || !loc) {
+        const txt = await resp.text().catch(() => "");
+        throw new Error(`WiPay criar falhou: ${resp.status} ${txt.slice(0, 150)}`);
+      }
+    } finally { clearTimeout(timer); }
+    const wid = (loc.match(/[?&]id=([^&]+)/) || [])[1] || null;
+    const cur = await pool.query("SELECT metadata FROM payments WHERE code = $1", [code]);
+    let meta = {};
+    try {
+      const cm = cur.rows[0]?.metadata;
+      meta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
+    } catch {}
+    meta.wipay_id = wid;
+    meta.hosted_url = loc;
+    meta.phone = phone || meta.phone || null;
+    meta.description = description || meta.description || null;
+    delete meta.ekwanza_error;
+    await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), code]);
+    broadcastPaymentUpdate({ type: "payment_updated", code, status: "pendente", hosted_url: loc });
+    console.log(`[WIPAY] ${code}: pagamento ${wid} -> ${loc.slice(0, 60)}...`);
+    return { ok: true, id: wid, hosted_url: loc };
+  } catch (e) {
+    console.error(`[WIPAY] ${code}:`, e.message);
+    try {
+      const cur = await pool.query("SELECT metadata FROM payments WHERE code = $1", [code]);
+      let meta = {};
+      try {
+        const cm = cur.rows[0]?.metadata;
+        meta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
+      } catch {}
+      meta.ekwanza_error = String(e.message).slice(0, 300);
+      meta.ekwanza_error_at = new Date().toISOString();
+      await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), code]);
+    } catch {}
+    return { ok: false, error: e.message };
+  }
+}
+
+// Webhook WiPay: confirmação autoritativa via GET (igual ao padrão É-kwanza).
+// A assinatura HMAC (chave = token scope=signature) é verificada quando o
+// header `signature` vem; sem ele, confirma-se na mesma pelo estado oficial.
+app.post("/webhooks/wipay", rateLimit(60), async (req, res) => {
+  try {
+    const { id, reference_id, status } = req.body || {};
+    if (!reference_id && !id) return res.json({ received: true, verified: false });
+    const prow = await pool.query(
+      "SELECT code, metadata FROM payments WHERE code = $1 OR metadata->>'wipay_id' = $2 LIMIT 1",
+      [reference_id || null, id || null]
+    );
+    if (!prow.rows.length) return res.json({ received: true, verified: false });
+    const code = prow.rows[0].code;
+    let meta = {};
+    try {
+      const cm = prow.rows[0].metadata;
+      meta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
+    } catch {}
+    const wid = meta.wipay_id || id;
+    if (!wid) return res.json({ received: true, verified: false });
+    try {
+      const signKey = await getWipayToken("signature");
+      const sig = req.headers["signature"];
+      if (sig) {
+        const h = crypto.createHmac("sha256", signKey).update(JSON.stringify(req.body)).digest("hex");
+        if (h !== String(sig)) console.log(`[WIPAY-WEBHOOK] ${code}: assinatura divergente (segue p/ confirmação oficial)`);
+      }
+    } catch {}
+    const mapped = await applyWipayConfirm(code, wid);
+    return res.json({ received: true, verified: !!mapped, status: mapped || status || null });
+  } catch (err) {
+    console.error("[WIPAY-WEBHOOK] Erro:", err.message);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
 // ─── Payments ──────────────────────────────────────────────────────────────
 
 app.get("/api/v1/payments", requireAuth, async (req, res) => {
@@ -1325,7 +1478,7 @@ app.get("/api/v1/payments/minha-historico", rateLimit(60), async (req, res) => {
     if (digits) { conds.push(`RIGHT(REGEXP_REPLACE(COALESCE(p.metadata->>'phone',''), '[^0-9]', '', 'g'), 9) = $${params.length + 1}`); params.push(digits); }
     const r = await pool.query(
       `SELECT p.code, p.amount, p.method, p.status, p.reference_code, p.entity, p.ekwanza_code, p.created_at, p.expires_at, p.paid_at,
-              p.metadata->>'cademi_produto' AS cademi_produto
+              p.metadata->>'cademi_produto' AS cademi_produto, p.metadata->>'hosted_url' AS hosted_url
        FROM payments p WHERE (${conds.join(" OR ")}) ORDER BY p.created_at DESC LIMIT 20`, params);
     res.json({ data: r.rows });
   } catch (err) {
@@ -1636,12 +1789,22 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     broadcastPaymentUpdate({ type: "payment_created", code, status: "pendente" });
     res.status(201).json({ data: payment });
 
-    // Background: dispara cobrança/referência Ekwanza sem bloquear a resposta.
-    // - mcx_express + telefone → cobrança push (GPO_...)
-    // - referencia → gera entidade + número de referência (REF_...)
+    // Background: dispara cobrança/referência sem bloquear a resposta.
+    // - mcx_express + telefone → WiPay (página hospedada) se configurado,
+    //   senão cobrança push É-kwanza (GPO_...) como antes.
+    // - referencia → gera entidade + número de referência (REF_...).
     if ((m === "mcx_express" && customer_phone) || m === "referencia") {
       const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null };
-      setImmediate(() => fireEkwanzaCharge(bg).catch(e => console.error("[PAYMENTS] bg:", e.message)));
+      setImmediate(async () => {
+        try {
+          if (m === "mcx_express" && await wipayReady()) {
+            const r = await fireWipayCharge(bg);
+            if (!r.ok) console.error("[PAYMENTS] bg wipay:", r.error);
+          } else {
+            await fireEkwanzaCharge(bg);
+          }
+        } catch (e) { console.error("[PAYMENTS] bg:", e.message); }
+      });
     }
   } catch (err) {
     if (!res.headersSent) console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -2978,6 +3141,10 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, 
       createdDate: charge.createdDate,
       updatedDate: charge.updatedDate,
       reference: charge.reference,
+      hosted_url: (() => { try {
+        const mm = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {});
+        return mm.hosted_url || null;
+      } catch { return null; } })(),
     });
   } catch (err) {
     console.error("[CHECK-STATUS] Error:", err.message);
@@ -3168,14 +3335,25 @@ setInterval(async () => {
   _autoSyncRunning = true;
   try {
     const pend = await pool.query(
-      "SELECT code FROM payments WHERE status = 'pendente' AND created_at > NOW() - INTERVAL '48 hours' ORDER BY created_at DESC LIMIT 15"
+      "SELECT code, metadata FROM payments WHERE status = 'pendente' AND created_at > NOW() - INTERVAL '48 hours' ORDER BY created_at DESC LIMIT 15"
     );
     if (pend.rows.length === 0) return;
     let token = null;
-    try { token = await getEkwanzaToken(); } catch (e) { console.error("[AUTO-SYNC] token falhou:", e.message); return; }
-    if (!token) return;
+    try { token = await getEkwanzaToken(); } catch (e) { console.error("[AUTO-SYNC] token falhou:", e.message); }
     const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
-    for (const { code } of pend.rows) {
+    for (const { code, metadata } of pend.rows) {
+      // Pendentes WiPay confirmam-se na API WiPay.
+      let wid = null;
+      try {
+        const cm = typeof metadata === "string" ? JSON.parse(metadata) : (metadata || {});
+        wid = cm?.wipay_id || null;
+      } catch {}
+      if (wid) {
+        try { await applyWipayConfirm(code, wid); } catch (e) { console.error(`[AUTO-SYNC] ${code} (wipay):`, e.message); }
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+      if (!token) continue;
       try {
         const cr = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(code)}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "Mozilla/5.0" },

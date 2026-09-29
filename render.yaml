@@ -30,7 +30,23 @@ services:
         sync: false
       - key: EKWANZA_CLIENT_SECRET
         sync: false
+      - key: EKWANZA_RESOURCE
+        sync: false
       - key: EKWANZA_GPO_URL
+        sync: false
+      - key: EKWANZA_GPO_API_KEY
+        sync: false
+      - key: EKWANZA_GPR_API_KEY
+        sync: false
+      - key: EKWANZA_GPO_PAYMENT_METHOD
+        sync: false
+      - key: EKWANZA_REF_PAYMENT_METHOD
+        sync: false
+      - key: EKWANZA_ACCOUNT_NUMBER
+        sync: false
+      - key: WIPAY_CLIENT_ID
+        sync: false
+      - key: WIPAY_CLIENT_SECRET
         sync: false
       - key: EKWANZA_ACCOUNT
         value: 06100363
