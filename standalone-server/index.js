@@ -3405,3 +3405,50 @@ setInterval(async () => {
     _autoSyncRunning = false;
   }
 }, AUTOSYNC_INTERVAL_MS);
+
+// Varrimento Fit90 (landing -> CRM): 5min — override via FIT90_SYNC_INTERVAL_MS.
+// A landing grava direto em fit90_leads (Supabase) contornando a Edge Function;
+// este job empurra as linhas pushed=false para leads (idempotente por
+// external_id) e marca pushed=true. Sem SUPABASE_SERVICE_KEY, fica desligado.
+const FIT90_SYNC_INTERVAL_MS = Number(process.env.FIT90_SYNC_INTERVAL_MS || 5 * 60 * 1000);
+let _fit90Running = false;
+async function syncFit90Leads() {
+  const sbUrl = String(process.env.SUPABASE_URL || "https://fslrkrhuatzfqxbzilnd.supabase.co").replace(/\/$/, "");
+  const sbKey = String(process.env.SUPABASE_SERVICE_KEY || "");
+  if (!sbKey) return { skipped: true };
+  const H = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
+  const get = async (path) => (await (await fetch(`${sbUrl}/rest/v1/${path}`, { headers: H })).json());
+  const patch = async (path, body) => (await fetch(`${sbUrl}/rest/v1/${path}`, { method: "PATCH", headers: { ...H, Prefer: "return=representation" }, body: JSON.stringify(body) }));
+  const rows = await get("fit90_leads?pushed=eq.false&select=id,name,email,phone,company,source,notes&order=created_at&limit=50");
+  if (!Array.isArray(rows) || rows.length === 0) return { pushed: 0 };
+  let pushed = 0;
+  for (const row of rows) {
+    try {
+      const name = String(row.name || "").trim();
+      if (name.length < 2) continue;
+      const extId = String(row.id);
+      const exists = await pool.query("SELECT id FROM leads WHERE external_id = $1", [extId]);
+      let cid = exists.rows[0]?.id || null;
+      if (!cid) {
+        const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
+        const r = await pool.query(
+          `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING id`,
+          [code, name, row.email || null, row.phone || null, row.company || null,
+           row.source || "fit90_landing", 0, row.notes || null, extId]);
+        cid = r.rows[0].id;
+      }
+      await patch(`fit90_leads?id=eq.${row.id}`, { pushed: true, pushed_at: new Date().toISOString(), crm_lead_id: String(cid) });
+      pushed++;
+    } catch (e) { console.error(`[FIT90-SYNC] ${row.id}:`, e.message); }
+  }
+  if (pushed) console.log(`[FIT90-SYNC] ${pushed} leads landing -> CRM`);
+  return { pushed };
+}
+setInterval(async () => {
+  if (_fit90Running) return;
+  _fit90Running = true;
+  try { await syncFit90Leads(); }
+  catch (err) { console.error("[FIT90-SYNC] Error:", err.message); }
+  finally { _fit90Running = false; }
+}, FIT90_SYNC_INTERVAL_MS);

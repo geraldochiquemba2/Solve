@@ -48,6 +48,10 @@ services:
         sync: false
       - key: WIPAY_CLIENT_SECRET
         sync: false
+      - key: SUPABASE_URL
+        value: https://fslrkrhuatzfqxbzilnd.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
       - key: EKWANZA_ACCOUNT
         value: 06100363
       - key: CADEMI_API_URL
