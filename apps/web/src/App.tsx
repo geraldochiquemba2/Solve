@@ -1010,6 +1010,16 @@ function PaymentsPage() {
   const [cPhone, setCPhone] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cName, setCName] = useState('');
+  const [cAlunos, setCAlunos] = useState<Array<{ id: string; name: string; email?: string | null; phone?: string | null }>>([]);
+  const [cAlunoBusca, setCAlunoBusca] = useState('');
+  const pickAluno = (id: string) => {
+    const a = cAlunos.find(o => o.id === id);
+    if (!a) return;
+    // Preenche nome + email + telefone (editáveis a seguir).
+    if (a.name) setCName(a.name);
+    if (a.email) setCEmail(a.email);
+    if (a.phone) setCPhone(a.phone);
+  };
   const [cEntregas, setCEntregas] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
   const [cProduto, setCProduto] = useState('');
   const pickProduto = (id: string) => {
@@ -1022,7 +1032,8 @@ function PaymentsPage() {
   const [cMsg, setCMsg] = useState('');
   const [cLink, setCLink] = useState<string | null>(null);
   const [charging, setCharging] = useState(false);
-  // Entregas reais (slugs da Cademi) para o seletor de conteúdo.
+  // Entregas reais (slugs da Cademi) para o seletor de conteúdo,
+  // + lista de alunos para o seletor (preenche nome/email/telefone).
   useEffect(() => {
     if (!chargeOpen) return;
     const apiBase = import.meta.env.VITE_API_URL || '';
@@ -1032,6 +1043,13 @@ function PaymentsPage() {
         const list = Array.isArray(j.data) ? j.data : [];
         setCEntregas(list);
         if (!cProduto && list.length > 0) setCProduto(list[0].id);
+      })
+      .catch(() => {});
+    fetch(`${apiBase}/api/v1/customers`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(j => {
+        const list = Array.isArray(j.data) ? j.data : [];
+        setCAlunos(list.map((a: any) => ({ id: String(a.id), name: a.name || '', email: a.email || null, phone: a.phone || null })));
       })
       .catch(() => {});
   }, [chargeOpen]);
@@ -1159,6 +1177,12 @@ function PaymentsPage() {
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Telefone *</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
+    <div style={{ marginTop: '.6rem' }}><label className="label">Aluno (preenche nome, email e telefone)</label>
+    <input className="input" value={cAlunoBusca} onChange={e => setCAlunoBusca(e.target.value)} placeholder="Pesquisar aluno…" style={{ width: '100%', marginBottom: '.35rem' }} />
+    <select className="select" value="" onChange={e => { if (e.target.value) pickAluno(e.target.value); e.target.value = ''; }} style={{ width: '100%' }}>
+      <option value="">Selecionar aluno… ({cAlunos.length})</option>
+      {cAlunos.filter(a => { const q = cAlunoBusca.trim().toLowerCase(); if (!q) return true; return (a.name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q); }).slice(0, 150).map(a => <option key={a.id} value={a.id}>{a.name}{a.phone ? ` · ${a.phone}` : ''}</option>)}
+    </select></div>
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Nome (p/ SamoraFit Workout)</label>
       <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="Nome do aluno" style={{ width: '100%' }} /></div>
