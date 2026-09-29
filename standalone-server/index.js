@@ -2830,7 +2830,7 @@ app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
       COUNT(*) FILTER (WHERE status = 'convertido') AS convertidas,
       COUNT(*) FILTER (WHERE status = 'perdido') AS perdidas,
       COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS contactadas,
-      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS pendentes
+      COUNT(*) FILTER (WHERE status NOT IN ('convertido', 'perdido') AND NOT EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS pendentes
       FROM leads`);
     const row = r.rows[0] || {};
     const num = (v) => Number(v ?? 0);

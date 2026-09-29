@@ -477,7 +477,7 @@ function LeadsPage({ leads, userName, onChanged }: { leads: Lead[]; userName?: s
     const t = trackOf(l);
     if (filtro === 'novas') return t === 'Nova';
     if (filtro === 'contactadas') return t === 'Contactada';
-    if (filtro === 'pendentes') return (l.contactosTotal ?? 0) === 0;
+    if (filtro === 'pendentes') return (l.contactosTotal ?? 0) === 0 && t !== 'Convertida' && t !== 'Perdida';
     if (filtro === 'emAcomp') return t === 'Em acompanhamento';
     if (filtro === 'convertidas') return t === 'Convertida';
     if (filtro === 'perdidas') return t === 'Perdida';
