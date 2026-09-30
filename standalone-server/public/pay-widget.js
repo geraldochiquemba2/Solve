@@ -259,6 +259,9 @@
   }
 
   // Acessos ativos do aluno: mostra tempo restante junto às opções.
+  // Pago sem acesso: confirmado no histórico mas sem acesso na Cademi
+  // (nem ativo nem expirado) → marca "Pago · a ativar acesso" e bloqueia
+  // nova compra do mesmo conteúdo (evita pagar 2x).
   async function refreshAccess(m, entregas) {
     try {
       var em = (m.querySelector("#spw-email").value || "").trim();
@@ -266,9 +269,11 @@
       var r = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(em));
       var j = await r.json().catch(function () { return {}; });
       var list = (j && Array.isArray(j.data)) ? j.data : [];
-      if (!list.length) return;
       var sel = m.querySelector("#spw-prod");
       var notes = [];
+      var paidNotes = [];
+      var matched = {};
+      if (list.length) {
       for (var i = 0; i < sel.options.length; i++) {
         var op = sel.options[i];
         if (!op.value) continue;
@@ -280,6 +285,7 @@
           var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
           if (!pn) continue;
           if (slug === op.value || pn === base.toLowerCase().trim()) {
+            matched[op.value] = true;
             var hasPrice = false;
             var priceTxt = "";
             entregas.forEach(function (o) { if (o.id === op.value && o.preco) { hasPrice = true; priceTxt = " · " + fmtKz(o.preco) + " Kz"; } });
@@ -297,7 +303,29 @@
           }
         }
       }
-      if (notes.length) m.querySelector("#spw-acessos").textContent = "Já tens acesso: " + notes.join(" · ");
+      } // fim if (list.length)
+      // Pago sem acesso: confirmado no histórico, sem acesso (nem expirado) na
+      // Cademi → "Pago · a ativar acesso" e bloqueia recompra.
+      try {
+        var hist2 = await fetchHist(m);
+        var paidSlugs = {};
+        hist2.forEach(function (p) {
+          if (p.status === "confirmado" && p.cademi_produto) paidSlugs[p.cademi_produto] = true;
+        });
+        for (var k2 = 0; k2 < sel.options.length; k2++) {
+          var op2 = sel.options[k2];
+          if (!op2.value || op2.disabled || matched[op2.value] || !paidSlugs[op2.value]) continue;
+          var base2 = op2.textContent.split(" — ")[0];
+          op2.textContent = base2 + " — Pago · a ativar acesso";
+          op2.disabled = true;
+          paidNotes.push(base2);
+        }
+      } catch (e2) {}
+      var accEl = m.querySelector("#spw-acessos");
+      var parts = [];
+      if (notes.length) parts.push("Já tens acesso: " + notes.join(" · "));
+      if (paidNotes.length) parts.push("Pago · a ativar acesso: " + paidNotes.join(" · "));
+      if (parts.length && accEl) accEl.textContent = parts.join(" | ");
     } catch (e) {}
   }
 
@@ -361,7 +389,7 @@
       var acc = m.querySelector("#spw-acessos");
       var txt = (acc && acc.textContent) || "";
       var hasPaid = list.some(function (p) { return p.status === "confirmado"; });
-      var hasAccess = /Já tens acesso/.test(txt);
+      var hasAccess = /Já tens acesso|Pago · a ativar|Pago a ativar/.test(txt);
       var warned = /ainda a ativar/.test(txt);
       if (hasPaid && !hasAccess && !warned && acc) {
         acc.textContent = (txt ? txt + " " : "") + "Pagamento recebido, acesso ainda a ativar — faz logout e entra de novo (login); se não aparecer, fala connosco.";
@@ -477,11 +505,13 @@
         var ar = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(email));
         var aj = await ar.json().catch(function () { return {}; });
         var alist = (aj && Array.isArray(aj.data)) ? aj.data : [];
+        var sameAny = false;
         for (var ai = 0; ai < alist.length; ai++) {
           var ac = alist[ai];
           var pn = String(ac.produto_nome || "").toLowerCase().trim();
           var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
           var same = pn && (slug === prod || pn === String(chosen.nome || "").toLowerCase().trim());
+          if (same) sameAny = true;
           if (same && !ac.encerrado) {
             msg(m, "Já tens acesso ativo a este conteúdo.", true);
             btn.disabled = false;
@@ -489,6 +519,22 @@
             refreshAccess(m, entregas || []);
             return;
           }
+        }
+        // Já pago mas sem acesso (nem expirado)? Não deixa pagar 2x pelo mesmo
+        // conteúdo — orienta para logout/login e suporte.
+        var paidSame = false;
+        try {
+          var hlist2 = hist || [];
+          for (var hi2 = 0; hi2 < hlist2.length; hi2++) {
+            if (hlist2[hi2].status === "confirmado" && hlist2[hi2].cademi_produto === prod) { paidSame = true; break; }
+          }
+        } catch (eH) {}
+        if (paidSame && !sameAny) {
+          msg(m, "Já pagaste este conteúdo — o acesso está a ativar. Faz logout e entra de novo; se não aparecer, fala connosco.", true);
+          btn.disabled = false;
+          btn.textContent = "Pagar";
+          refreshAccess(m, entregas || []);
+          return;
         }
       }
     } catch (eVerify) {}

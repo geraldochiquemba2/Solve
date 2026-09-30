@@ -1549,6 +1549,33 @@ async function cademiActiveAccess(email, produtoSlug) {
   return null;
 }
 
+// Estado do acesso a um conteúdo: 'active' | 'expired' | 'none' | 'unknown'.
+// 'unknown' = Cademi inacessível ou aluno fora da 1ª página da busca (a busca
+// /usuario não filtra por email) → fail-open: nunca bloqueia venda por dúvida.
+async function cademiAccessState(email, produtoSlug) {
+  try {
+    if (!email || !produtoSlug) return 'unknown';
+    const sl = String(produtoSlug).trim();
+    const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
+    const users = u.data?.usuario || [];
+    const found = users.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase());
+    if (!found?.id) return 'unknown';
+    const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
+    let seen = false;
+    const now = Date.now();
+    for (const ac of (a.data?.acesso || [])) {
+      const pn = String(ac.produto?.nome || "").toLowerCase().trim();
+      const slug = slugify(ac.produto?.nome || "");
+      if (!pn) continue;
+      if (slug !== sl && pn !== sl.toLowerCase()) continue;
+      seen = true;
+      const fim = ac.encerra_em ? new Date(ac.encerra_em).getTime() : null;
+      if (!ac.encerrado && (ac.duracao_tipo === "vitalicio" || !fim || fim > now)) return 'active';
+    }
+    return seen ? 'expired' : 'none';
+  } catch { return 'unknown'; }
+}
+
 // Normaliza telefone AO: tira espaços, +, 00 e prefixo 244 → 9XXXXXXXX.
 function normPhone(p) {
   let d = String(p || "").replace(/\D/g, "");
@@ -1787,6 +1814,24 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     if (customer_email && cademi_produto) {
       const has = await cademiActiveAccess(String(customer_email), String(cademi_produto));
       if (has) return res.status(409).json({ error: `Já tens acesso ativo a este conteúdo (${has}).` });
+    }
+    // Trava: já pago sem acesso? Não deixa pagar 2x pelo mesmo conteúdo.
+    // (Com acesso expirado permite renovar; em dúvida ('unknown') deixa passar.)
+    if (customer_email && cademi_produto) {
+      try {
+        const em2 = String(customer_email).toLowerCase().trim();
+        const sl2 = String(cademi_produto).trim();
+        const paid = await pool.query(
+          `SELECT code, COALESCE(metadata->>'cademi_produto','') AS prod FROM payments
+           WHERE status = 'confirmado' AND LOWER(COALESCE(metadata->>'email','')) = $1`, [em2]);
+        const dup = paid.rows.find(r => slugify(r.prod) === slugify(sl2));
+        if (dup) {
+          const st = await cademiAccessState(String(customer_email), sl2);
+          if (st === 'active' || st === 'none') {
+            return res.status(409).json({ error: `Este conteúdo já foi pago (${dup.code}) — o acesso está a ativar. Faz logout e entra de novo; se não aparecer, fala connosco.`, code: dup.code });
+          }
+        }
+      } catch (e2) { console.error("[PAYMENTS] trava pago-sem-acesso:", e2.message); }
     }
     const r = await pool.query(
       `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
