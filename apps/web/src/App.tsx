@@ -2,7 +2,6 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
-import { ToastAction } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BookOpen, Boxes,
@@ -16,7 +15,6 @@ import {
 } from 'lucide-react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
-import { useToast } from '@/hooks/use-toast';
 import '@/lib/api';
 
 // Landing page
@@ -54,20 +52,11 @@ const queryClient = new QueryClient({
   },
 });
 
-type Lead = { id: string; name: string; company: string; source: string; status: string; statusApi?: string; owner: string; value: number; last: string; email: string; phone: string; notes: string; code: string; createdAt: string; whatsapp?: string | null; produtoInteresse?: string | null; proximoContato?: string | null; motivoPerda?: string | null; contactosTotal?: number | null; ultimoContactoAt?: string | null; ultimoResultado?: string | null; ultimoStaff?: string | null; externalId?: string | null; campanhas?: Array<{ source: string; produtoInteresse?: string | null; createdAt?: string | null }> | null };
+type Lead = { id: string; name: string; company: string; source: string; status: string; statusApi?: string; owner: string; value: number; last: string; email: string; phone: string; notes: string; code: string; createdAt: string; whatsapp?: string | null; produtoInteresse?: string | null; proximoContato?: string | null; motivoPerda?: string | null; contactosTotal?: number | null; ultimoContactoAt?: string | null; ultimoResultado?: string | null; ultimoStaff?: string | null; externalId?: string | null };
 type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; nif?: string | null; club?: string | null; ovgId?: string | null; cademiId?: string | null; entryDate?: string | null; lessonsLeft?: number | null; lessonsLimit?: number | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
 
-// ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
-// As etapas "Proposta" e "Negociação" deixaram de existir: o acompanhamento é
-// um passo só — "Em acompanhamento". As leads já guardadas com os estados antigos
-// (vêm da base/migração) são lidas como "Em acompanhamento", nunca como um
-// passo à parte, para não desaparecerem de nenhum filtro, KPI ou funil. É o
-// mesmo para `contacto`: quem já foi contactado está em acompanhamento, por isso
-// "Contactada" deixou de existir como etapa.
-const ETAPA_ACOMPANHAMENTO_API = ['qualificado', 'proposta', 'negociacao', 'contacto'];
-const canonEtapa = (api?: string | null) => (ETAPA_ACOMPANHAMENTO_API.includes(String(api)) ? 'qualificado' : String(api ?? ''));
-const LEAD_API_TO_PT: Record<string, string> = { novo_lead: 'Nova', contacto: 'Em acompanhamento', qualificado: 'Em acompanhamento', proposta: 'Em acompanhamento', negociacao: 'Em acompanhamento', convertido: 'Convertida', perdido: 'Perdida' };
-const LEAD_PT_TO_API: Record<string, string> = { 'Nova': 'novo_lead', 'Em acompanhamento': 'qualificado', 'Convertida': 'convertido', 'Perdida': 'perdido' };
+const LEAD_API_TO_PT: Record<string, string> = { novo_lead: 'Novo Lead', contacto: 'Novo Lead', qualificado: 'Qualificação', proposta: 'Proposta', negociacao: 'Negociação', convertido: 'Convertido', perdido: 'Perdido' };
+const LEAD_PT_TO_API: Record<string, string> = { 'Novo Lead': 'novo_lead', 'Qualificação': 'qualificado', 'Proposta': 'proposta', 'Negociação': 'negociacao', 'Convertido': 'convertido', 'Perdido': 'perdido' };
 
 function mapApiLead(l: ApiLead): Lead {
   return {
@@ -84,7 +73,7 @@ function mapApiLead(l: ApiLead): Lead {
     notes: l.notes ?? '',
     code: l.code ?? '',
     createdAt: l.createdAt ?? '',
-    statusApi: canonEtapa(l.status),
+    statusApi: l.status ?? '',
     whatsapp: (l as any).whatsapp ?? null,
     produtoInteresse: (l as any).produtoInteresse ?? null,
     proximoContato: (l as any).proximoContato ?? null,
@@ -94,16 +83,13 @@ function mapApiLead(l: ApiLead): Lead {
     ultimoResultado: (l as any).ultimoResultado ?? null,
     ultimoStaff: (l as any).ultimoStaff ?? null,
     externalId: (l as any).externalId ?? null,
-    campanhas: (l as any).campanhas ?? null,
   };
 }
 
 // Seguimento de leads: rótulos curtos (ficha) e valores API.
-// Só 4 etapas. "Nova" é a entrada e não um destino: quem já saiu, não volta
-// (regra garantida pelo servidor — ver a guarda no PATCH).
-const TRACK_PT: Record<string, string> = { novo_lead: 'Nova', contacto: 'Em acompanhamento', qualificado: 'Em acompanhamento', proposta: 'Em acompanhamento', negociacao: 'Em acompanhamento', convertido: 'Convertida', perdido: 'Perdida' };
-const TRACK_LABEL_TO_API: Record<string, string> = { 'Nova': 'novo_lead', 'Em acompanhamento': 'qualificado', 'Convertida': 'convertido', 'Perdida': 'perdido' };
-const TRACK_FICHA_OPTS = ['Nova', 'Em acompanhamento', 'Convertida', 'Perdida'];
+const TRACK_PT: Record<string, string> = { novo_lead: 'Nova', contacto: 'Contactada', qualificado: 'Em acompanhamento', proposta: 'Proposta', negociacao: 'Negociação', convertido: 'Convertida', perdido: 'Perdida' };
+const TRACK_LABEL_TO_API: Record<string, string> = { 'Nova': 'novo_lead', 'Contactada': 'contacto', 'Em acompanhamento': 'qualificado', 'Proposta': 'proposta', 'Negociação': 'negociacao', 'Convertida': 'convertido', 'Perdida': 'perdido' };
+const TRACK_FICHA_OPTS = ['Nova', 'Contactada', 'Em acompanhamento', 'Proposta', 'Negociação', 'Convertida', 'Perdida'];
 const LEAD_CANAIS = ['WhatsApp', 'Telefone', 'SMS', 'Presencial', 'E-mail'];
 const LEAD_RESULTADOS = ['Não respondeu', 'Interessado', 'Pediu mais informações', 'Pediu para contactar depois', 'Não tem interesse', 'Converteu', 'Número inválido'];
 const LEAD_PASSOS = ['Contactar amanhã', 'Contactar em 3 dias', 'Contactar em 7 dias', 'Sem próximo contacto', 'Agendar visita'];
@@ -156,18 +142,13 @@ function authHeaders(extra: HeadersInit = {}): HeadersInit {
 }
 
 // Telefone → wa.me (AO: 9 dígitos ganham 244) e tel:.
-// Também aceita grafias angolanas comuns: 0 inicial (0900123456), 00244, 0024, 0244.
 const waDigits = (p?: string | null) => {
-  let d = String(p || '').replace(/\D/g, '');
-  d = d.replace(/^(00244|0024|0244)/, '');
-  if (d.startsWith('0')) d = d.replace(/^0+/, '');
+  const d = String(p || '').replace(/\D/g, '');
   if (d.length === 9) return '244' + d;
+  if (d.length === 12 && d.startsWith('244')) return d;
   return d.length >= 9 ? d : '';
 };
 const waLink = (p?: string | null) => { const d = waDigits(p); return d ? `https://wa.me/${d}` : ''; };
-// Ligação directa: mantém só o que é válido num telefone e abre o dialledor do
-// aparelho, para ligar ao interessado sem sair do ecrã.
-const telHref = (p?: string | null) => { const d = String(p || '').replace(/[^\d+]/g, ''); return d ? `tel:${d}` : ''; };
 const fmtDateShort = (d?: string | null) => { if (!d) return '—'; try { return new Date(d.length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short' }); } catch { return d; } };
 const passoParaDataLocal = (passo: string) => {
   const d = new Date();
@@ -284,13 +265,8 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 function PageHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle?: string; action?: ReactNode }) {
   return <div className="section-header" style={{ marginBottom: '.9rem' }}><div><div className="eyebrow">{eyebrow}</div><h1 className="page-title">{title}</h1>{subtitle && <p className="page-subtitle">{subtitle}</p>}</div>{action}</div>;
 }
-function Metric({ label, value, note, trend, negative = false, onClick, active = false, loading = false, testId }: { label: string; value: string; note: string; trend?: string; negative?: boolean; onClick?: () => void; active?: boolean; loading?: boolean; testId?: string }) {
-  // Sem clique é um cartão informative; com clique é um botão de filtro: `<div
-  // onClick>` não recebe foco nem é anunciável, e estes KPIs são o filtro
-  // principal da página de leads (WCAG 2.1.1 / 4.1.2).
-  const conteudo = loading ? <><div className="skeleton" style={{ width: '55%', height: '.66rem' }} /><div className="skeleton" style={{ width: '85%', height: '1.45rem', marginTop: '.35rem' }} /><div className="skeleton" style={{ width: '75%', height: '.7rem', marginTop: '.32rem' }} /></> : <><div className="eyebrow">{label}</div><div className="metric-value">{value}</div><div className={`metric-note${trend ? (negative ? ' text-bad' : ' text-good') : ''}`}>{trend && (negative ? <ArrowDownRight size={12} style={{ verticalAlign: 'middle' }} /> : <ArrowUpRight size={12} style={{ verticalAlign: 'middle' }} />)} {trend}{trend && ' · '}{note}</div></>;
-  if (!onClick) return <div className="card metric" data-testid={testId}>{conteudo}</div>;
-  return <button type="button" className="card metric" data-testid={testId} aria-pressed={active} onClick={onClick} style={{ textAlign: 'left', font: 'inherit', color: 'inherit', ...(active ? { backgroundColor: 'hsl(var(--accent) / .1)' } : {}) }}>{conteudo}</button>;
+function Metric({ label, value, note, trend, negative = false, onClick, active = false, loading = false }: { label: string; value: string; note: string; trend?: string; negative?: boolean; onClick?: () => void; active?: boolean; loading?: boolean }) {
+  return <div className="card metric" onClick={onClick} style={{ ...(onClick ? { cursor: 'pointer' } : {}), ...(active ? { outline: '2px solid hsl(var(--accent))', outlineOffset: '-2px' } : {}) }}>{loading ? <><div className="skeleton" style={{ width: '55%', height: '.66rem' }} /><div className="skeleton" style={{ width: '85%', height: '1.45rem', marginTop: '.35rem' }} /><div className="skeleton" style={{ width: '75%', height: '.7rem', marginTop: '.32rem' }} /></> : <><div className="eyebrow">{label}</div><div className="metric-value">{value}</div><div className={`metric-note${trend ? (negative ? ' text-bad' : ' text-good') : ''}`}>{trend && (negative ? <ArrowDownRight size={12} style={{ verticalAlign: 'middle' }} /> : <ArrowUpRight size={12} style={{ verticalAlign: 'middle' }} />)} {trend}{trend && ' · '}{note}</div></>}</div>;
 }
 function Section({ title, note, action, children, className = '' }: { title: string; note?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return <section className={`card ${className}`} style={{ padding: '1.1rem' }}><div className="section-header"><div><h2 className="section-title">{title}</h2>{note && <p className="section-note">{note}</p>}</div>{action}</div>{children}</section>;
@@ -299,16 +275,7 @@ function EmptyState({ title, text, action }: { title: string; text: string; acti
   return <div style={{ padding: '2.6rem 1rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}><Boxes size={25} style={{ margin: '0 auto .7rem', opacity: .55 }} /><div style={{ color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: '.85rem' }}>{title}</div><p style={{ fontSize: '.75rem', margin: '.35rem auto 1rem', maxWidth: 330 }}>{text}</p>{action}</div>;
 }
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
-  const caixa = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', tecla);
-    const overflowAnterior = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    caixa.current?.focus();
-    return () => { document.removeEventListener('keydown', tecla); document.body.style.overflow = overflowAnterior; };
-  }, [onClose]);
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className="modal" ref={caixa} tabIndex={-1}><div className="modal-head"><div><div className="section-title">{title}</div>{subtitle && <div className="section-note">{subtitle}</div>}</div><IconButton label="fechar" onClick={onClose}><X size={16} /></IconButton></div><div className="modal-body">{children}</div></div></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><div className="modal-head"><div><div className="section-title">{title}</div>{subtitle && <div className="section-note">{subtitle}</div>}</div><IconButton label="fechar" onClick={onClose}><X size={16} /></IconButton></div><div className="modal-body">{children}</div></div></div>;
 }
 function FormField({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
   return <label><span className="form-label">{label}</span><input className="input" type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} /></label>;
@@ -355,33 +322,21 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   const pendTotal = ov?.pendingPaymentsTotal ?? 0;
   const lateCount = ov?.latePaymentsCount ?? overview?.latePayments ?? 0;
   const lateTotal = ov?.latePaymentsTotal ?? 0;
-  const convRate = Number(chartsData?.conversionRate ?? 0) || (leads.length > 0 ? Math.round((leads.filter(l => etapaDe(l) === 'convertido').length / leads.length) * 100) : 0);
+  const convRate = Number(chartsData?.conversionRate ?? 0) || (leads.length > 0 ? Math.round((leads.filter(l => l.status === 'Convertido').length / leads.length) * 100) : 0);
   const newLeads7 = leads.filter(l => { try { return Date.now() - new Date(l.createdAt).getTime() < 7 * 86400000; } catch { return false; } }).length;
-  // Funil por etapa (Módulo 6): as 4 etapas do funil são exatamente as 4 etapas
-  // do ficheiro. A API já devolve "proposta"/"negociacao"/"contacto" somados em
-  // qualificado, porque todos esses valores significam "já contactada".
-  const funnelStages = ['novo_lead', 'qualificado', 'convertido', 'perdido'];
+  // Funil por etapa: API devolve mapa {novo_lead: n, ...}; fallback calcula das leads carregadas.
+  const funnelStages = ['novo_lead', 'qualificado', 'proposta', 'negociacao', 'convertido', 'perdido'];
   const funnelRaw: any = (statsQuery.data?.data as any)?.leadsByStatus;
   let funnel: Array<{ key: string; label: string; count: number }> = [];
   if (Array.isArray(funnelRaw)) {
-    const normFunil: Record<string, number> = {};
-    for (const r of funnelRaw as any[]) {
-      const k = canonEtapa(r.status);
-      normFunil[k] = (normFunil[k] ?? 0) + Number(r.count ?? 0);
-    }
-    funnel = funnelStages.map(k => ({ key: k, label: LEAD_API_TO_PT[k] ?? k, count: normFunil[k] ?? 0 }));
+    funnel = funnelStages.map(k => { const f = funnelRaw.find((r: any) => r.status === k); return { key: k, label: LEAD_API_TO_PT[k] ?? k, count: Number(f?.count ?? 0) }; });
   } else if (funnelRaw && typeof funnelRaw === 'object') {
-    const normFunil: Record<string, number> = {};
-    for (const [k, v] of Object.entries(funnelRaw as Record<string, unknown>)) {
-      const key = canonEtapa(k);
-      normFunil[key] = (normFunil[key] ?? 0) + Number(v ?? 0);
-    }
-    funnel = funnelStages.map(k => ({ key: k, label: LEAD_API_TO_PT[k] ?? k, count: normFunil[k] ?? 0 }));
+    funnel = funnelStages.map(k => ({ key: k, label: LEAD_API_TO_PT[k] ?? k, count: Number(funnelRaw[k] ?? 0) + (k === 'novo_lead' ? Number(funnelRaw['contacto'] ?? 0) : 0) }));
   }
   if (funnel.every(f => !f.count) && leads.length > 0) {
-    const byEtapa: Record<string, number> = {};
-    leads.forEach(l => { const k = etapaDe(l); byEtapa[k] = (byEtapa[k] ?? 0) + 1; });
-    funnel = funnelStages.map(k => ({ key: k, label: LEAD_API_TO_PT[k] ?? k, count: byEtapa[k] ?? 0 }));
+    const byStatus: Record<string, number> = {};
+    leads.forEach(l => { byStatus[l.status] = (byStatus[l.status] ?? 0) + 1; });
+    funnel = ['Novo Lead', 'Qualificação', 'Proposta', 'Negociação', 'Convertido', 'Perdido'].map(label => ({ key: label, label, count: byStatus[label] ?? 0 }));
   }
   const sources: Array<{ source: string; count: number }> = ((chartsData?.leadsBySource ?? []) as any[]).map((s: any) => ({ source: String(s.source ?? '—'), count: Number(s.count ?? 0) })).slice(0, 6);
   const payMethods: Array<{ method: string; count: number; total: number }> = ((chartsData?.paymentMethods ?? []) as any[]).map((m: any) => ({ method: String(m.method ?? '—'), count: Number(m.count ?? 0), total: Number(m.total ?? 0) })).slice(0, 5);
@@ -404,7 +359,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
     <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
   </Section>
   <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: '.8rem', marginBottom: '.8rem' }}><Section title="Ritmo comercial" note="Receita confirmada por mês" action={<button className="btn-quiet" onClick={() => setChartRange(chartRange === 'mes' ? 'tudo' : 'mes')}>{chartRange === 'mes' ? 'Este mês' : 'Período total'} <ChevronDown size={13} /></button>}><div style={{ height: 165, display: 'flex', alignItems: 'end', gap: 'clamp(.4rem, 2.4vw, 1rem)', padding: '1rem .2rem .2rem', borderBottom: '1px solid hsl(var(--border))' }}>{dashLoading ? <div style={{ display: 'flex', gap: '.5rem', alignItems: 'end', flex: 1, width: '100%' }}><div className="skeleton" style={{ height: 60, flex: 1 }} /><div className="skeleton" style={{ height: 100, flex: 1 }} /><div className="skeleton" style={{ height: 80, flex: 1 }} /><div className="skeleton" style={{ height: 120, flex: 1 }} /></div> : (revenueShown.length > 0 ? revenueShown : []).map((d, i, arr) => { const max = Math.max(...arr.map(x => x.value ?? 0), 1); const pct = ((d.value ?? 0) / max) * 100; return <div key={i} style={{ flex: 1, height: `${Math.max(pct, 5)}%`, position: 'relative', minWidth: 7, background: i === arr.length - 1 ? 'hsl(var(--accent))' : 'hsl(var(--chart-2) / .72)', borderRadius: '3px 3px 0 0' }} title={`${d.value ?? 0} Kz`} />; })}</div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'hsl(var(--muted-foreground))', fontSize: '.65rem', paddingTop: '.45rem' }}>{dashLoading ? <span>A verificar…</span> : revenueShown.length > 0 ? revenueShown.map((d, i) => <span key={i}>{monthLabel(d.month) || `M${i + 1}`}</span>) : <span>Sem receita ainda — cria uma cobrança em Pagamentos</span>}</div></Section><Section title="Saúde do ecossistema" note={dashLoading ? 'A verificar…' : integrations.length > 0 ? `${integrations.length} canais` : 'Sem canais ligados'}><div style={{ display: 'grid', gap: '.72rem' }}>{integrations.length > 0 ? integrations.map((ig, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.72rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}><div style={{ width: 7, height: 7, borderRadius: '50%', background: ig.status === 'operacional' ? 'hsl(155 41% 43%)' : 'hsl(38 80% 50%)' }} />{ig.name}</div><Status tone={ig.status === 'operacional' ? 'good' : 'warn'}>{ig.status === 'operacional' ? 'Operacional' : ig.status}</Status></div>) : <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem dados de integração</div>}</div></Section></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}><Section title="Leads recentes" note="Últimas captações"><div style={{ display: 'grid', gap: '.5rem' }}>{(leads.length > 0 ? leads.slice(0, 5) : []).map(l => <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div><Status tone={l.status === 'Convertido' ? 'good' : l.status === 'Perdido' ? 'danger' : 'neutral'}>{l.status}</Status></div>)}</div></Section><Section title="Clientes activos" note="Estado das contas"><div style={{ display: 'grid', gap: '.5rem' }}>{(customers.length > 0 ? customers.slice(0, 5) : []).map(c => <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{c.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{c.company}</div></div><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></div>)}</div></Section></div><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}>
-<Section title="Funil de leads" note={`${totalLeads} oportunidades · ${convRate}% conversão`}><div style={{ display: 'grid', gap: '.55rem' }}>{dashLoading ? <><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /></> : funnel.map(f => { const max = Math.max(...funnel.map(x => x.count), 1); const isConv = f.key === 'convertido'; const isLost = f.key === 'perdido'; return <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600 }}>{f.label}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${f.count > 0 ? Math.max((f.count / max) * 100, 5) : 0}%`, background: isConv ? 'hsl(155 41% 43%)' : isLost ? 'hsl(0 84% 60%)' : 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{f.count}</span></div>; })}{!dashLoading && funnel.every(f => !f.count) && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem leads ainda — cria o primeiro em Leads</div>}</div></Section>
+<Section title="Funil de leads" note={`${totalLeads} oportunidades · ${convRate}% conversão`}><div style={{ display: 'grid', gap: '.55rem' }}>{dashLoading ? <><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /></> : funnel.map(f => { const max = Math.max(...funnel.map(x => x.count), 1); const isConv = f.label === 'Convertido'; const isLost = f.label === 'Perdido'; return <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600 }}>{f.label}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${f.count > 0 ? Math.max((f.count / max) * 100, 5) : 0}%`, background: isConv ? 'hsl(155 41% 43%)' : isLost ? 'hsl(0 84% 60%)' : 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{f.count}</span></div>; })}{!dashLoading && funnel.every(f => !f.count) && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem leads ainda — cria o primeiro em Leads</div>}</div></Section>
 <Section title="Origens de leads" note="De onde vêm as oportunidades"><div style={{ display: 'grid', gap: '.55rem' }}>{!dashLoading && sources.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Nada ainda — regista um lead para ver as origens</div>}{dashLoading ? <><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /></> : sources.map(s => { const max = Math.max(...sources.map(x => x.count), 1); return <div key={s.source} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srcLabel(s.source)}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${s.count > 0 ? Math.max((s.count / max) * 100, 5) : 0}%`, background: 'hsl(var(--chart-2) / .8)', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{s.count}</span></div>; })}</div></Section>
 <Section title="Métodos de pagamento" note="Transações por método"><div style={{ display: 'grid', gap: '.2rem' }}>{!dashLoading && payMethods.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Nada ainda — confirma uma transação para ver os métodos</div>}{dashLoading ? <><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /></> : payMethods.map(m => <div key={m.method} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{m.method}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{m.count} transações</div></div><span className="mono" style={{ fontWeight: 700 }}>{money(m.total)}</span></div>)}</div></Section>
 </div></>;
@@ -446,12 +401,8 @@ function StaffSelect({ value, onChange, staff, onStaffCreated }: { value: string
     {nMsg ? <div style={{ fontSize: '.72rem' }}>{nMsg}</div> : null}
   </div>;
 }
-
 function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated }: { lead: Lead; staff: Array<{ id: string; name: string }>; onClose: () => void; onChanged?: () => void; onStaffCreated?: () => void | Promise<void> }) {
   const apiEstado = (TRACK_LABEL_TO_API[lead.status] || LEAD_PT_TO_API[lead.status] || lead.statusApi || 'novo_lead');
-  // "Nova" só existe para quem ainda não saiu dela (regra de sentido único, ver
-  // também a guarda do servidor no PATCH).
-  const podeVoltar = canonEtapa(apiEstado) === 'novo_lead';
   const [fResp, setFResp] = useState(lead.owner || '');
   const [fEstado, setFEstado] = useState(TRACK_PT[apiEstado] ?? lead.status);
   const [fProd, setFProd] = useState(lead.produtoInteresse || '');
@@ -513,15 +464,11 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated }: { lead: 
         {lead.company ? <div>Empresa: {lead.company}</div> : null}
         <div>Produto de interesse: {lead.produtoInteresse || '—'}</div>
       </div>
-      {(lead.campanhas && lead.campanhas.length > 0) ? <div>
-        <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Campanhas / interesses</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>{[{ source: lead.source, produtoInteresse: lead.produtoInteresse } as any, ...lead.campanhas].map((c: any, i: number) => <span key={i} className="lead-cmp-chip" style={{ background: 'hsl(var(--secondary) / .5)' }}>{c.source}{c.produtoInteresse ? ` · ${c.produtoInteresse}` : ''}</span>)}</div>
-      </div> : null}
       <div>
         <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Ficha</div>
         <div className="form-grid">
           <StaffSelect value={fResp} onChange={setFResp} staff={staff} onStaffCreated={onStaffCreated} />
-          <label><span className="form-label">Estado</span><select className="select" data-testid="select-ficha-status" style={{ width: '100%' }} value={fEstado} onChange={(e) => setFEstado(e.target.value)} title={podeVoltar ? 'Muda a etapa da lead' : 'Uma lead que já saiu de «Nova» não volta atrás. Registe o contacto.'}>{TRACK_FICHA_OPTS.map((o) => <option key={o} disabled={o === 'Nova' && !podeVoltar}>{o}</option>)}</select></label>
+          <label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={fEstado} onChange={(e) => setFEstado(e.target.value)}>{TRACK_FICHA_OPTS.map((o) => <option key={o}>{o}</option>)}</select></label>
           <FormField label="Produto / serviço de interesse" value={fProd} onChange={setFProd} placeholder="Ex.: Plano Mensal" />
           <label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={fProx} onChange={(e) => setFProx(e.target.value)} /></label>
           {fEstado === 'Perdida' ? <FormField label="Motivo (perdida)" value={fMotivo} onChange={setFMotivo} placeholder="Ex.: sem interesse neste momento" /> : null}
@@ -549,135 +496,7 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated }: { lead: 
   </Modal>;
 }
 
-// Observações editáveis na linha da tabela de leads. Mesmo contrato de gravação da
-// coluna Etapa: update optimista na query + PATCH, e refetch no fim (onSettled) para
-// a linha reflectir o servidor tanto no sucesso como no erro. Enquanto o campo está
-// em foco não reescreve o rascunho (um refetch de fundo não pode apagar o que o
-// utilizador está a escrever).
-// `servidor` é o valor confirmado em cache: depois do update optimista `lead.notes`
-// já é o rascunho, por isso o valor do servidor só existe aqui — é o que permite
-// repor o campo quando o PATCH falha, em vez de deixar texto que nunca foi gravado.
-// `cancelar` distingue "o utilizador saiu" de "o utilizador carregou em Escape", para
-// que o blur do Escape não dispare a gravação do rascunho que se quer abandonar.
-type NotasEstado = 'idle' | 'a-guardar' | 'guardado' | 'erro';
-function LeadNotesCell({ lead, updateMut, onSaved }: { lead: Lead; updateMut: ReturnType<typeof useUpdateLead>; onSaved: () => void }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [rascunho, setRascunho] = useState(lead.notes ?? '');
-  const [estado, setEstado] = useState<NotasEstado>('idle');
-  const aEditar = useRef(false);
-  const cancelar = useRef(false);
-  const servidor = useRef(lead.notes ?? '');
-  useEffect(() => { if (!aEditar.current) { servidor.current = lead.notes ?? ''; setRascunho(servidor.current); } }, [lead.notes]);
-  useEffect(() => { if (estado !== 'guardado') return; const t = setTimeout(() => setEstado('idle'), 1600); return () => clearTimeout(t); }, [estado]);
-  const guardar = () => {
-    const valor = rascunho.trim();
-    setRascunho(valor);
-    const anterior = servidor.current;
-    if (valor === anterior) { setEstado('idle'); return; }
-    servidor.current = valor;
-    qc.setQueryData<any>(['/api/v1/leads'], (old: any) => (old?.data ? { ...old, data: old.data.map((x: any) => (x.id === lead.id ? { ...x, notes: valor } : x)) } : old));
-    setEstado('a-guardar');
-    updateMut.mutate({ id: lead.id, data: { notes: valor } }, {
-      onSuccess: () => setEstado('guardado'),
-      onError: (e: any) => {
-        servidor.current = anterior;
-        setRascunho(anterior);
-        setEstado('erro');
-        toast({ title: 'Observações não guardadas', description: `${lead.name}: ${e?.message || 'falha ao gravar'} — a nota anterior foi reposta.`, variant: 'destructive' });
-      },
-      onSettled: onSaved,
-    });
-  };
-  return <span className="cell-notes-wrap">
-    <input
-      className={'input cell-notes' + (estado === 'erro' ? ' is-error' : '')}
-      data-testid={`input-lead-notes-${lead.id}`}
-      aria-label={`Observações de ${lead.name}`}
-      aria-invalid={estado === 'erro' || undefined}
-      aria-busy={estado === 'a-guardar' || undefined}
-      title={rascunho || undefined}
-      value={rascunho}
-      placeholder="Sem observações"
-      onFocus={() => { aEditar.current = true; setEstado('idle'); }}
-      onChange={e => setRascunho(e.target.value)}
-      onBlur={() => { aEditar.current = false; if (cancelar.current) { cancelar.current = false; return; } guardar(); }}
-      onKeyDown={e => {
-        if (e.key === 'Escape') { e.preventDefault(); cancelar.current = true; setRascunho(servidor.current); setEstado('idle'); (e.target as HTMLInputElement).blur(); return; }
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-          const proxima = e.currentTarget.closest('tr')?.nextElementSibling?.querySelector<HTMLInputElement>('.cell-notes');
-          proxima?.focus();
-        }
-      }}
-    />
-    {estado !== 'idle' ? <span role="status" className={'cell-notes-flag ' + estado}>{estado === 'a-guardar' ? '…' : estado === 'guardado' ? '✓' : '!'}</span> : null}
-  </span>;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MÓDULO DE LEADS — base central + pastas por etapa
-//
-// Invariante do módulo: existe UMA base (`leads`, carregada pelo CRM). Leads
-// Totais mostra a base inteira e nunca é recortada por etapa; cada pasta de etapa
-// é apenas um recorte em memória dessa mesma base, escolhido pela URL. Daí a
-// consequência pedida: mudar a etapa de uma lead realoca-a dentro de Leads Totais,
-// nunca a remove. As contagens das pastas e o total do cabeçalho saem sempre do
-// mesmo array que alimenta a tabela, para não poderem divergir das linhas.
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// Módulo 6: as pastas por etapa saíram da navegação. O cabeçalho e a tabela
-// mostram a base inteira com a etapa, o responsável e as datas já à vista, e
-// filtrar por etapa faz-se nos KPIs/acima da tabela. `LEAD_ETAPAS` continua a
-// ser a lista canónica de etapas (usada nas contagens e no funil) e o URL
-// /admin/leads/:etapa continua a responder para links antigos, mas já não é
-// oferecido como card de navegação.
-// ─────────────────────────────────────────────────────────────────────────────
-const LEAD_ETAPAS = ['novo_lead', 'qualificado', 'convertido', 'perdido'];
-// Segmento de URL da vista "Leads Totais" (a base completa). Tem rota própria para
-// não ser a mesma coisa que a pasta "Nova": sem esta distinção, abrir Leads Totais
-// e abrir Novas seriam o mesmo ecrã com nomes diferentes. Entrar em Leads sem rota
-// mostra "Novas" (a pasta de entrada); os totais vivem em /admin/leads/total.
-const LEAD_TOTAL = 'total';
-// Etapa canónica: o valor API (`statusApi`) manda; o rótulo é apenas apresentação.
-const etapaDe = (l: Lead) => canonEtapa(l.statusApi || LEAD_PT_TO_API[l.status] || TRACK_LABEL_TO_API[l.status] || 'novo_lead');
-const etapaNome = (api: string) => TRACK_PT[api] ?? api;
-
-/** Base de leads: o botão que abre Leads Totais (a base sem grupo activo). */
-function LeadsPastas({ total, activo }: { total: number; activo: boolean }) {
-  return (
-    <nav className="lead-pastas" aria-label="Base de leads">
-      <Link href={`/admin/leads/${LEAD_TOTAL}`} className={'lead-pasta' + (activo ? ' is-active' : '')} data-testid="pasta-leads-totais">
-        <span className="lead-pasta-name">Leads Totais</span>
-        <span className="lead-pasta-n">{total}</span>
-      </Link>
-    </nav>
-  );
-}
-
-/** Estados sem resultados — cada um diz o que fazer a seguir. */
-function LeadsVazio({ tipo, pasta, onLimpar, onNovo }: { tipo: 'base' | 'pasta' | 'filtros' | 'kpi'; pasta?: string | null; onLimpar: () => void; onNovo: () => void }) {
-  if (tipo === 'base') return <EmptyState title="A base ainda não tem leads" text="Leads Totais é a base central do módulo: todos os leads criados aparecem aqui, em qualquer etapa." action={<button className="btn-primary" onClick={onNovo} data-testid="button-add-lead-vazio"><Plus size={15} /> Criar o primeiro lead</button>} />;
-  if (tipo === 'pasta') return <EmptyState title={`Nenhum lead em “${pasta}”`} text="A pasta está vazia, mas os leads continuam todos em Leads Totais: mudar de etapa nunca os remove da base." action={<Link href={`/admin/leads/${LEAD_TOTAL}`} className="btn-secondary">Ver Leads Totais</Link>} />;
-  if (tipo === 'kpi') return <EmptyState title="Nenhum lead neste grupo" text="Não há leads que correspondam a este cruzamento de etapas." action={<button className="btn-secondary" onClick={onLimpar}>Limpar filtros</button>} />;
-  return <EmptyState title="Nenhum lead corresponde aos filtros" text="Ajuste a pesquisa, a origem, o responsável ou o acompanhamento para ver resultados." action={<button className="btn-secondary" onClick={onLimpar} data-testid="button-limpar-filtros">Limpar filtros</button>} />;
-}
-
-function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { leads: Lead[]; userName?: string; onChanged?: () => void; loading?: boolean; erro?: boolean; onRetry?: () => void }) {
-  // A vista é sempre a base (o workflow de sempre: research, filtros, KPIs e as
-  // pastas de etapa trocáveis). O que muda é onde se entra:
-  //   - sem rota (/admin/leads)   → base com o grupo "Novas"activo
-  //   - "total" (/admin/leads/total) → Leads Totais: a base sem grupo, o botão
-  // "Nova" NÃO é uma pasta fixa — os KPIs e o filtro de etapa ficam disponíveis
-  // para trocar de grupo a qualquer momento, como antes.
-  const { etapa: etapaUrl } = useParams<{ etapa?: string }>();
-  const { toast } = useToast();
-  const ehTotal = etapaUrl === LEAD_TOTAL;
-  // Pasta de etapa continua a ser a URL (`/admin/leads/:etapa`), para links
-  // profundos e para o botão de cada pasta; sem rota e "total" mostram a base.
-  const pasta = etapaUrl && LEAD_ETAPAS.includes(etapaUrl) ? etapaUrl : null;
-  const trackOf = (l: Lead) => etapaNome(etapaDe(l));
+function LeadsPage({ leads, userName, onChanged }: { leads: Lead[]; userName?: string; onChanged?: () => void }) {
   const [q, setQ] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).q || ''; } catch { return ''; } });
   const [status, setStatus] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).status || 'Todos'; } catch { return 'Todos'; } });
   const [source, setSource] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).source || 'Todas'; } catch { return 'Todas'; } });
@@ -686,159 +505,57 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
   const [viewMsg, setViewMsg] = useState('');
   const [acomp, setAcomp] = useState('Todos');
   const [canal, setCanal] = useState('Todos');
-  // Grupo inicial: entrar em Leads mostra as Novas (é por onde o trabalho começa);
-  // Leads Totais é a base sem este grupo. Em qualquer rota de pasta o grupo é
-  // ignorado (a pasta já é o recorte) e os KPIs não aparecem.
-  const filtroInicial = ehTotal ? 'todos' : 'novas';
-  const [filtro, setFiltro] = useState(filtroInicial);
-  // Mudar de rota é escolher onde se está, não filtrar a lista: o grupo segue a
-  // rota (Novas na entrada, todos em Leads Totais) para nunca abrir já filtrado
-  // sem o gestor o ter pedido.
-  useEffect(() => { setFiltro(filtroInicial); }, [filtroInicial]);
+  const [filtro, setFiltro] = useState('todos');
   const toggleFiltro = (f: string) => setFiltro((cur) => (cur === f ? 'todos' : f));
   const [ficha, setFicha] = useState<Lead | null>(null);
   const [resumo, setResumo] = useState<any>(null);
   const [follows, setFollows] = useState<any[]>([]);
-  // ─── Animação da lead que chega (Módulo 6) ──────────────────────────────────
-  // A lead não é anunciada fora da lista: o próprio card é que se destaca quando
-  // entra na base, venha de onde vier (formulário, importação ou outro
-  // utilizador). A primeira carga não anima nada (é a base que já existia), cada
-  // lead é animada uma única vez e o destaque some sozinho para não ficar preso.
-  const vistasRef = useRef<Set<string> | null>(null);
-  const [aRecem, setARecem] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    if (!leads.length) return;
-    const vistas = vistasRef.current;
-    if (!vistas) { vistasRef.current = new Set(leads.map((l) => l.id)); return; }
-    const entradas = leads.filter((l) => !vistas.has(l.id));
-    if (!entradas.length) return;
-    entradas.forEach((l) => vistas.add(l.id));
-    setARecem((atual) => new Set([...atual, ...entradas.map((l) => l.id)]));
-    const t = setTimeout(() => setARecem((atual) => {
-      const seguinte = new Set(atual);
-      entradas.forEach((l) => seguinte.delete(l.id));
-      return seguinte;
-    }), 4000);
-    return () => clearTimeout(t);
-  }, [leads]);
-  const chegouAgora = (l: Lead) => aRecem.has(l.id);
   const createMut = useCreateLead(); const updateMut = useUpdateLead();
   const qc = useQueryClient();
-  const { user: me } = useAuth();
-  const meId = (me as any)?.id as string | undefined;
   const usersQ = useListUsersAll();
   const staff: Array<{ id: string; name: string }> = ((usersQ.data as any)?.data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
-  if (meId && !staff.some((s) => s.id === meId)) staff.push({ id: meId, name: userName || 'Eu' });
   const staffName = (id: string) => staff.find((s) => s.id === id)?.name || id || '—';
+  const trackOf = (l: Lead) => TRACK_PT[l.statusApi || LEAD_PT_TO_API[l.status] || ''] || l.status;
   const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const semAcomp = (l: Lead) => (l.contactosTotal ?? 0) === 0 || (!!l.proximoContato && l.proximoContato < hojeISO());
-  // Rótulos dos grupos de KPI: o chip de filtro activo mostra o nome que o
-  // utilizador lê no cartão, nunca a chave interna (`emAcomp`, `novas`, ...).
-  const KPI_ROTULO: Record<string, string> = { novas: 'Novas', emAcomp: 'Em acompanhamento', convertidas: 'Convertidas', perdidas: 'Perdidas' };
   // Filtro KPI — só dados reais da API (status + contactosTotal calculado no backend)
-  const kpiMatch = (l: Lead, f: string) => {
-    if (f === 'todos') return true;
+  const kpiMatch = (l: Lead) => {
+    if (filtro === 'todos') return true;
     const t = trackOf(l);
-    if (f === 'novas') return t === 'Nova';
-    // "Pendentes" cruza etapas (ainda sem contacto e em aberto) - do PROD, mantido.
-    if (f === 'pendentes') return (l.contactosTotal ?? 0) === 0 && t !== 'Convertida' && t !== 'Perdida';
-    if (f === 'emAcomp') return t === 'Em acompanhamento';
-    if (f === 'convertidas') return t === 'Convertida';
-    if (f === 'perdidas') return t === 'Perdida';
+    if (filtro === 'novas') return t === 'Nova';
+    if (filtro === 'contactadas') return t === 'Contactada';
+    if (filtro === 'pendentes') return (l.contactosTotal ?? 0) === 0 && t !== 'Convertida' && t !== 'Perdida';
+    if (filtro === 'emAcomp') return t === 'Em acompanhamento';
+    if (filtro === 'convertidas') return t === 'Convertida';
+    if (filtro === 'perdidas') return t === 'Perdida';
     return true;
   };
   const refreshTrack = async () => {
     try { const j = await leadFetch('/api/v1/leads/resumo'); setResumo(j.data); } catch {}
     try { const f = await leadFetch('/api/v1/leads/followups/hoje'); setFollows(f.data || []); } catch {}
   };
-  const resumoTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (resumoTimer.current) clearTimeout(resumoTimer.current); }, []);
   useEffect(() => { refreshTrack(); }, []);
-  // Detecção de chegadas. A animação do card é o aviso de que entrou uma lead, e
-  // um aviso só vale se for atempado: o resumo (contagens, leitura barata) é
-  // perguntado de 30 em 30 segundos e, quando o total sobe, a lista é relida — assim
-  // o card acende sem ninguém ter de mexer em outra lead nem recarregar a página.
-  useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') void refreshTrack(); }, 30000);
-    return () => clearInterval(t);
-  }, []);
-  const totalAnterior = useRef<number | null>(null);
-  useEffect(() => {
-    const total = Number((resumo as any)?.total ?? 0);
-    if (!total) return;
-    const antes = totalAnterior.current;
-    totalAnterior.current = total;
-    if (antes !== null && total > antes) onChanged?.();
-  }, [resumo, onChanged]);
   const reloadAll = () => { onChanged?.(); refreshTrack(); };
   const owners = useMemo(() => Array.from(new Set(leads.map(l => l.owner).filter(Boolean))), [leads]);
   // Origens reais da lista (campanhas) → opções do filtro + rótulos PT.
   const sourceOpts = useMemo(() => Array.from(new Set(leads.map(l => String(l.source || '').trim()).filter(Boolean))), [leads]);
-  // Contagens por etapa: sempre da base inteira, nunca do recorte da pasta — é o
-  // que permite ver, de relance, para onde uma lead foi movida.
-  const contagens = useMemo(() => LEAD_ETAPAS.map((api) => ({ api, n: leads.reduce((acc, l) => (etapaDe(l) === api ? acc + 1 : acc), 0) })), [leads]);
-  // Pasta = recorte da base; Leads Totais = base sem recorte de etapa.
-  const naVista = useMemo(() => (pasta ? leads.filter((l) => etapaDe(l) === pasta) : leads), [leads, pasta]);
-  // Dentro de uma pasta a etapa já está fixada pela URL: o filtro de etapa e os
-  // KPIs (que são cruzamentos de etapa) saem fora para não se contradizerem.
-  const statusVista = pasta ? 'Todos' : status;
-  const kpiVista = pasta ? 'todos' : filtro;
-  const semFiltros = q.trim() === '' && statusVista === 'Todos' && source === 'Todas' && owner === 'Todos' && acomp === 'Todos' && canal === 'Todos' && kpiVista === 'todos';
-  // A pesquisa também atravessa o telefone e o WhatsApp: quando o gestor tem o
-  // número, procura por ele para ligar — não sabe o nome de quem o forneceu.
-  const filtered = naVista.filter(l => kpiMatch(l, kpiVista) && (l.name + ' ' + l.company + ' ' + l.email + ' ' + (l.phone || '') + ' ' + (l.whatsapp || '')).toLowerCase().includes(q.toLowerCase()) && (statusVista === 'Todos' || trackOf(l) === statusVista) && (source === 'Todas' || l.source === source) && (owner === 'Todos' || l.owner === owner) && (acomp === 'Todos' || (acomp === 'Sem acompanhamento' ? semAcomp(l) : !semAcomp(l))) && (canal === 'Todos' || canalOf(l) === canal));
+  const filtered = leads.filter(l => kpiMatch(l) && (l.name + l.company + l.email).toLowerCase().includes(q.toLowerCase()) && (status === 'Todos' || trackOf(l) === status) && (source === 'Todas' || l.source === source) && (owner === 'Todos' || l.owner === owner) && (acomp === 'Todos' || (acomp === 'Sem acompanhamento' ? semAcomp(l) : !semAcomp(l))) && (canal === 'Todos' || canalOf(l) === canal));
   const saveView = () => { try { localStorage.setItem('leads-view', JSON.stringify({ q, status, source })); setViewMsg('Vista guardada'); setTimeout(() => setViewMsg(''), 2000); } catch {} };
   const toApi = (x: Lead) => ({ name: x.name, email: x.email || undefined, phone: x.phone || undefined, whatsapp: x.whatsapp || undefined, produtoInteresse: x.produtoInteresse || undefined, proximoContato: x.proximoContato || undefined, motivoPerda: x.motivoPerda || undefined, company: x.company || undefined, source: x.source || undefined, status: (TRACK_LABEL_TO_API[x.status] || LEAD_PT_TO_API[x.status] || 'novo_lead') as any, ownerId: x.owner || undefined, estimatedValue: x.value || 0 });
-  // O modal fecha sempre: se o servidor recusar (regra da "Nova", lead apagada,
-  // sem rede) a falha aparece num aviso e o ecrã não fica preso aberto.
   const handleSave = (x: Lead) => {
-    if (editing) updateMut.mutate({ id: editing.id, data: toApi(x) }, {
-      onSuccess: () => { setOpen(false); setEditing(null); reloadAll(); },
-      onError: (e: any) => { setOpen(false); setEditing(null); toast({ title: 'Não foi possível guardar a lead', description: e?.response?.data?.error || 'Tenta de novo.' }); },
-    });
-    else createMut.mutate({ data: toApi(x) }, {
-      onSuccess: () => { setOpen(false); reloadAll(); },
-      onError: (e: any) => { setOpen(false); toast({ title: 'Não foi possível criar a lead', description: e?.response?.data?.error || 'Tenta de novo.' }); },
-    });
+    if (editing) updateMut.mutate({ id: editing.id, data: toApi(x) }, { onSuccess: () => { setOpen(false); setEditing(null); reloadAll(); } });
+    else createMut.mutate({ data: toApi(x) }, { onSuccess: () => { setOpen(false); reloadAll(); } });
   };
   const pct = (n: number, t: number) => (t > 0 ? `${Math.round((n / t) * 100)}%` : '—');
-  const limparFiltros = () => { setQ(''); setStatus('Todos'); setSource('Todas'); setOwner('Todos'); setCanal('Todos'); setAcomp('Todos'); setFiltro('todos'); };
-  const abrirNovo = () => { setEditing(null); setOpen(true); };
-  // "Nova" é a entrada do funil, não um destino: só se entra, nunca se volta.
-  // O servidor aplica a mesma regra (PATCH status=novo_lead → 400), portanto a
-  // verificação aqui é para o ecrã não oferecer uma opção que seria recusada.
-  const podeVoltarANova = (l: Lead) => etapaDe(l) === 'novo_lead';
-  const escrever = (l: Lead, status: string) => qc.setQueryData<any>(['/api/v1/leads'], (old: any) => (old?.data ? { ...old, data: old.data.map((x: any) => (x.id === l.id ? { ...x, status } : x)) } : old));
-  // Mudou de etapa sem querer? Há volta atrás numa acção. Não se oferece desfazer
-  // quando a lead saiu de "Nova": desfazer seria recomeçar, que a regra proíbe.
-  const desfazerEtapa = (l: Lead, destino: string, para: string) => {
-    escrever(l, destino);
-    updateMut.mutate({ id: l.id, data: { status: destino as any } }, {
-      onSuccess: () => refreshResumo(),
-      onError: () => {
-        escrever(l, para);
-        toast({ title: 'Não foi possível desfazer', description: `${l.name} continua em "${etapaNome(para)}".`, variant: 'destructive' });
-      },
-    });
-  };
-  const mudarEtapa = (l: Lead, rotulo: string) => {
-    const api = TRACK_LABEL_TO_API[rotulo];
-    const antes = etapaDe(l);
-    if (!api || api === antes) return; // rótulo desconhecido nunca vira "Nova" em silêncio
-    if (api === 'novo_lead' && !podeVoltarANova(l)) {
-      toast({ title: 'Não volta a "Nova"', description: `${l.name} já saiu de "Nova". Registe o contacto em vez de recomeçar.`, variant: 'destructive' });
-      return;
-    }
-  return <><PageHeader eyebrow="Comercial · Captação" title="Leads" subtitle={`${leads.length} registos no espaço de trabalho`} action={<button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-lead"><Plus size={15} /> Novo lead</button>} /><div className="card" style={{ padding: '.5rem .6rem', marginBottom: '.6rem', display: 'flex', gap: '.45rem', alignItems: 'center', flexWrap: 'wrap' }}><div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-leads" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar por nome, empresa ou email" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-lead-status" className="select" value={status} onChange={e => setStatus(e.target.value)}><option>Todos</option>{TRACK_FICHA_OPTS.map(v => <option key={v}>{v}</option>)}</select><select data-testid="select-lead-source" className="select" value={source} onChange={e => setSource(e.target.value)}><option>Todas</option>{sourceOpts.map(v => <option key={v} value={v}>{srcLabel(v)}</option>)}</select><select data-testid="select-lead-owner" className="select" value={owner} onChange={e => setOwner(e.target.value)}><option>Todos</option>{owners.map(v => <option key={v} value={v}>{staffName(v)}</option>)}</select><select data-testid="select-lead-canal" className="select" value={canal} onChange={e => setCanal(e.target.value)}><option>Todos</option><option>CRM</option><option>Integração</option></select><select className="select" value={acomp} onChange={e => setAcomp(e.target.value)}><option>Todos</option><option>Sem acompanhamento</option><option>Em acompanhamento</option></select></div>{resumo ? <div className="metric-compact" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '.5rem', marginBottom: '.6rem' }}><Metric label="Total" value={String(resumo.total)} note="leads · limpar filtro" active={filtro === 'todos'} onClick={() => setFiltro('todos')} /><Metric label="Novas" value={String(resumo.novas)} note={pct(resumo.novas, resumo.total)} active={filtro === 'novas'} onClick={() => toggleFiltro('novas')} /><Metric label="Contactadas" value={String(resumo.contactadas)} note={pct(resumo.contactadas, resumo.total)} active={filtro === 'contactadas'} onClick={() => toggleFiltro('contactadas')} /><Metric label="Pendentes" value={String(resumo.pendentes)} note={pct(resumo.pendentes, resumo.total)} active={filtro === 'pendentes'} onClick={() => toggleFiltro('pendentes')} /><Metric label="Em acompanhamento" value={String(resumo.emAcompanhamento)} note={pct(resumo.emAcompanhamento, resumo.total)} active={filtro === 'emAcomp'} onClick={() => toggleFiltro('emAcomp')} /><Metric label="Convertidas" value={String(resumo.convertidas)} note={pct(resumo.convertidas, resumo.total)} active={filtro === 'convertidas'} onClick={() => toggleFiltro('convertidas')} /><Metric label="Perdidas" value={String(resumo.perdidas)} note={pct(resumo.perdidas, resumo.total)} active={filtro === 'perdidas'} onClick={() => toggleFiltro('perdidas')} /></div> : null}<Section title="Follow-ups de hoje" note={`${follows.length} para contactar`}>{follows.length === 0 ? <div className="section-note">Nada agendado para hoje.</div> : <div style={{ display: 'grid', gap: '.5rem' }}>{follows.map((f: any) => <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.55rem .7rem', background: 'hsl(var(--secondary) / .55)', borderRadius: '.5rem' }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: '.78rem' }}>{f.name}</div><div className="section-note">{f.ownerNome || staffName(f.ownerId || '')}{f.ultimoResultado ? ` · último: ${f.ultimoResultado}` : ''}</div></div>{waLink(f.whatsapp || f.phone) ? <a className="btn-quiet" href={waLink(f.whatsapp || f.phone)} target="_blank" rel="noreferrer" title="Abrir WhatsApp"><MessageCircle size={14} /></a> : null}<button className="btn-secondary" onClick={() => setFicha({ ...(f as Lead), status: LEAD_API_TO_PT[(f as any).status] ?? (f as any).status, statusApi: (f as any).status, owner: (f as any).ownerId || '' } as Lead)}>Abrir ficha</button></div>)}</div>}</Section><Section title="Todos os leads" note={`${filtered.length} resultados${viewMsg ? ` · ${viewMsg}` : ''}`} action={<button className="btn-quiet" onClick={saveView}><Filter size={13} /> Guardar vista</button>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Lead</th><th>WhatsApp</th><th>Origem · Canal</th><th>Etapa</th><th>Responsável</th><th>Próx. contacto</th><th>Último contacto</th><th>Valor estimado</th><th /></tr></thead><tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-lead-${l.id}`}><td><div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{l.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{l.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div></div></td><td>{waLink(l.whatsapp || l.phone) ? <a className="btn-quiet" href={waLink(l.whatsapp || l.phone)} target="_blank" rel="noreferrer" title="Abrir WhatsApp"><MessageCircle size={14} /></a> : <span className="section-note">—</span>}</td><td>{srcLabel(l.source)}<div style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))' }}>{canalOf(l)}</div></td><td><select className="select" data-testid={`select-lead-row-status-${l.id}`} style={{ padding: '.15rem .5rem', fontSize: '.68rem', width: 'auto' }} value={trackOf(l)} onChange={e => { const s = e.target.value; const st = TRACK_LABEL_TO_API[s] || 'novo_lead'; qc.setQueryData<any>(['/api/v1/leads'], (old: any) => (old?.data ? { ...old, data: old.data.map((x: any) => (x.id === l.id ? { ...x, status: st } : x)) } : old)); updateMut.mutate({ id: l.id, data: { status: st as any } }, { onSuccess: () => reloadAll() }); }}>{TRACK_FICHA_OPTS.map(v => <option key={v}>{v}</option>)}</select></td><td>{staffName(l.owner)}</td><td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(l.proximoContato)}</td><td style={{ whiteSpace: 'nowrap' }}>{l.ultimoContactoAt ? fmtDateShort(l.ultimoContactoAt) : '—'}</td><td className="mono" style={{ fontSize: '.68rem' }}>{money(l.value)}</td><td><div style={{ display: 'flex', gap: '.25rem' }}><IconButton label="ficha lead" onClick={() => setFicha(l)}><Eye size={14} /></IconButton><IconButton label="editar lead" onClick={() => { setEditing(l); setOpen(true); }}><Edit3 size={14} /></IconButton></div></td></tr>)}</tbody></table></div></Section>{ficha && <LeadFicha lead={ficha} staff={staff} onClose={() => setFicha(null)} onChanged={reloadAll} onStaffCreated={() => { usersQ.refetch(); }} />}{open && <LeadModal initial={editing} onClose={() => setOpen(false)} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} currentUserId={meId} />}</>;
+  return <><PageHeader eyebrow="Comercial · Captação" title="Leads" subtitle={`${leads.length} registos no espaço de trabalho`} action={<button className="btn-primary" onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-lead"><Plus size={15} /> Novo lead</button>} /><div className="card" style={{ padding: '.5rem .6rem', marginBottom: '.6rem', display: 'flex', gap: '.45rem', alignItems: 'center', flexWrap: 'wrap' }}><div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-leads" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar por nome, empresa ou email" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-lead-status" className="select" value={status} onChange={e => setStatus(e.target.value)}><option>Todos</option>{TRACK_FICHA_OPTS.map(v => <option key={v}>{v}</option>)}</select><select data-testid="select-lead-source" className="select" value={source} onChange={e => setSource(e.target.value)}><option>Todas</option>{sourceOpts.map(v => <option key={v} value={v}>{srcLabel(v)}</option>)}</select><select data-testid="select-lead-owner" className="select" value={owner} onChange={e => setOwner(e.target.value)}><option>Todos</option>{owners.map(v => <option key={v} value={v}>{staffName(v)}</option>)}</select><select data-testid="select-lead-canal" className="select" value={canal} onChange={e => setCanal(e.target.value)}><option>Todos</option><option>CRM</option><option>Integração</option></select><select className="select" value={acomp} onChange={e => setAcomp(e.target.value)}><option>Todos</option><option>Sem acompanhamento</option><option>Em acompanhamento</option></select></div>{resumo ? <div className="metric-compact" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '.5rem', marginBottom: '.6rem' }}><Metric label="Total" value={String(resumo.total)} note="leads · limpar filtro" active={filtro === 'todos'} onClick={() => setFiltro('todos')} /><Metric label="Novas" value={String(resumo.novas)} note={pct(resumo.novas, resumo.total)} active={filtro === 'novas'} onClick={() => toggleFiltro('novas')} /><Metric label="Contactadas" value={String(resumo.contactadas)} note={pct(resumo.contactadas, resumo.total)} active={filtro === 'contactadas'} onClick={() => toggleFiltro('contactadas')} /><Metric label="Pendentes" value={String(resumo.pendentes)} note={pct(resumo.pendentes, resumo.total)} active={filtro === 'pendentes'} onClick={() => toggleFiltro('pendentes')} /><Metric label="Em acompanhamento" value={String(resumo.emAcompanhamento)} note={pct(resumo.emAcompanhamento, resumo.total)} active={filtro === 'emAcomp'} onClick={() => toggleFiltro('emAcomp')} /><Metric label="Convertidas" value={String(resumo.convertidas)} note={pct(resumo.convertidas, resumo.total)} active={filtro === 'convertidas'} onClick={() => toggleFiltro('convertidas')} /><Metric label="Perdidas" value={String(resumo.perdidas)} note={pct(resumo.perdidas, resumo.total)} active={filtro === 'perdidas'} onClick={() => toggleFiltro('perdidas')} /></div> : null}<Section title="Follow-ups de hoje" note={`${follows.length} para contactar`}>{follows.length === 0 ? <div className="section-note">Nada agendado para hoje.</div> : <div style={{ display: 'grid', gap: '.5rem' }}>{follows.map((f: any) => <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.55rem .7rem', background: 'hsl(var(--secondary) / .55)', borderRadius: '.5rem' }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: '.78rem' }}>{f.name}</div><div className="section-note">{f.ownerNome || staffName(f.ownerId || '')}{f.ultimoResultado ? ` · último: ${f.ultimoResultado}` : ''}</div></div>{waLink(f.whatsapp || f.phone) ? <a className="btn-quiet" href={waLink(f.whatsapp || f.phone)} target="_blank" rel="noreferrer" title="Abrir WhatsApp"><MessageCircle size={14} /></a> : null}<button className="btn-secondary" onClick={() => setFicha({ ...(f as Lead), status: LEAD_API_TO_PT[(f as any).status] ?? (f as any).status, statusApi: (f as any).status, owner: (f as any).ownerId || '' } as Lead)}>Abrir ficha</button></div>)}</div>}</Section><Section title="Todos os leads" note={`${filtered.length} resultados${viewMsg ? ` · ${viewMsg}` : ''}`} action={<button className="btn-quiet" onClick={saveView}><Filter size={13} /> Guardar vista</button>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Lead</th><th>WhatsApp</th><th>Origem · Canal</th><th>Etapa</th><th>Responsável</th><th>Próx. contacto</th><th>Último contacto</th><th>Valor estimado</th><th /></tr></thead><tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-lead-${l.id}`}><td><div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{l.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{l.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div></div></td><td>{waLink(l.whatsapp || l.phone) ? <a className="btn-quiet" href={waLink(l.whatsapp || l.phone)} target="_blank" rel="noreferrer" title="Abrir WhatsApp"><MessageCircle size={14} /></a> : <span className="section-note">—</span>}</td><td>{srcLabel(l.source)}<div style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))' }}>{canalOf(l)}</div></td><td><select className="select" data-testid={`select-lead-row-status-${l.id}`} style={{ padding: '.15rem .5rem', fontSize: '.68rem', width: 'auto' }} value={trackOf(l)} onChange={e => { const s = e.target.value; const st = TRACK_LABEL_TO_API[s] || 'novo_lead'; qc.setQueryData<any>(['/api/v1/leads'], (old: any) => (old?.data ? { ...old, data: old.data.map((x: any) => (x.id === l.id ? { ...x, status: st } : x)) } : old)); updateMut.mutate({ id: l.id, data: { status: st as any } }, { onSuccess: () => reloadAll() }); }}>{TRACK_FICHA_OPTS.map(v => <option key={v}>{v}</option>)}</select></td><td>{staffName(l.owner)}</td><td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(l.proximoContato)}</td><td style={{ whiteSpace: 'nowrap' }}>{l.ultimoContactoAt ? fmtDateShort(l.ultimoContactoAt) : '—'}</td><td className="mono" style={{ fontSize: '.68rem' }}>{money(l.value)}</td><td><div style={{ display: 'flex', gap: '.25rem' }}><IconButton label="ficha lead" onClick={() => setFicha(l)}><Eye size={14} /></IconButton><IconButton label="editar lead" onClick={() => { setEditing(l); setOpen(true); }}><Edit3 size={14} /></IconButton></div></td></tr>)}</tbody></table></div></Section>{ficha && <LeadFicha lead={ficha} staff={staff} onClose={() => setFicha(null)} onChanged={reloadAll} onStaffCreated={() => { usersQ.refetch(); }} />}{open && <LeadModal initial={editing} onClose={() => setOpen(false)} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} />}</>;
 }
-function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated, currentUserId }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void>; currentUserId?: string }) {
+function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void> }) {
   const [name, setName] = useState(initial?.name ?? ''); const [company, setCompany] = useState(initial?.company ?? ''); const [email, setEmail] = useState(initial?.email ?? ''); const [source, setSource] = useState(initial?.source ?? 'Website');
   const [phone, setPhone] = useState(initial?.phone ?? ''); const [zap, setZap] = useState(initial?.whatsapp ?? ''); const [produto, setProduto] = useState(initial?.produtoInteresse ?? '');
   const [estado, setEstado] = useState(TRACK_PT[(initial as any)?.statusApi ?? ''] || initial?.status || TRACK_FICHA_OPTS[0]);
-  const [resp, setResp] = useState(initial?.owner ?? currentUserId ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
+  const [resp, setResp] = useState(initial?.owner ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
   return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={!name || !company} onClick={() => onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name, company, email, source, status: estado, owner: resp || initial?.owner || '', value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, proximoContato: prox || null, motivoPerda: motivo || null, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' })}><Check size={14} /> Guardar lead</button></div></div></Modal>;
 }
-
 
 function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () => void }) {
   const [q, setQ] = useState('');
@@ -875,57 +592,17 @@ function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () =>
   <Section title="No CRM (Fit90)" note={`${filtered.length} registos`}>{filtered.length === 0 ? <EmptyState title={q ? 'Sem resultados' : 'Nenhum cadastro Fit90'} text={q ? 'Tenta outra pesquisa.' : 'Os leads submetidos na landing Fit90 aparecerão aqui automaticamente.'} /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Valor estimado</th><th>Etapa</th><th /></tr></thead><tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-fit90-${l.id}`}><td className="mono" style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{l.code || '—'}</td><td style={{ fontWeight: 600 }}>{l.name || '—'}</td><td>{l.phone ? <a href={wa(l.phone)} target="_blank" rel="noreferrer" className="btn-quiet" data-testid={`link-whatsapp-${l.id}`}><MessageCircle size={13} style={{ verticalAlign: 'middle' }} /> {l.phone}</a> : '—'}</td><td style={{ fontSize: '.75rem' }}>{l.email || '—'}</td><td className="mono" style={{ fontSize: '.75rem' }}>{l.value ? money(l.value) : '—'}</td><td><Status tone={fitTrack(l) === 'Convertida' ? 'good' : fitTrack(l) === 'Perdida' ? 'danger' : 'neutral'}>{fitTrack(l)}</Status></td><td>{fitTrack(l) === 'Nova' ? <button className="btn-quiet" data-testid={`button-contactar-${l.id}`} onClick={() => move(l)}><PhoneCall size={13} style={{ verticalAlign: 'middle' }} /> Marcar contacto</button> : <span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>Em acompanhamento</span>}</td></tr>)}</tbody></table></div>}</Section></>;
 }
 
-function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void> }) {
-  const [name, setName] = useState(initial?.name ?? ''); const [company, setCompany] = useState(initial?.company ?? ''); const [email, setEmail] = useState(initial?.email ?? ''); const [source, setSource] = useState(initial?.source ?? 'Website');
-  const [phone, setPhone] = useState(initial?.phone ?? ''); const [zap, setZap] = useState(initial?.whatsapp ?? ''); const [produto, setProduto] = useState(initial?.produtoInteresse ?? '');
-  const [estado, setEstado] = useState(TRACK_PT[(initial as any)?.statusApi ?? ''] || initial?.status || TRACK_FICHA_OPTS[0]);
-  const [resp, setResp] = useState(initial?.owner ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
-  // "Nova" s\u00f3 fica dispon\u00edvel se a lead ainda l\u00e1 estiver (sentido \u00fanico).
-  const estadoIsNova = !initial || (TRACK_LABEL_TO_API[estado] || LEAD_PT_TO_API[estado]) === 'novo_lead';
-  return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x} disabled={x === 'Nova' && !estadoIsNova}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={!name || !company} onClick={() => onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name, company, email, source, status: estado, owner: resp || initial?.owner || '', value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, proximoContato: prox || null, motivoPerda: motivo || null, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' })}><Check size={14} /> Guardar lead</button></div></div></Modal>;
-}
-
 function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?: string; onChanged?: () => void }) {
-  // Funil (Módulo 6): as 4 colunas são as 4 etapas do ficheiro. Uma lead que
-  // chegou agora é o próprio card que se destaca, sem popup nem aviso à parte.
-  const stages = ['Nova', 'Em acompanhamento', 'Convertida', 'Perdida']; const [selected, setSelected] = useState<Lead | null>(null);
+  const stages = TRACK_FICHA_OPTS; const [selected, setSelected] = useState<Lead | null>(null);
+  const trackOf = (l: Lead) => TRACK_PT[(l as any).statusApi || LEAD_PT_TO_API[l.status] || ''] || l.status;
   const [isNew, setIsNew] = useState(false);
   const [sort, setSort] = useState('Recentes');
   const updateMut = useUpdateLead(); const createMut = useCreateLead();
   const qc = useQueryClient();
-  const { user: me } = useAuth();
-  const meId = (me as any)?.id as string | undefined;
   const usersQ = useListUsersAll();
   const staff: Array<{ id: string; name: string }> = ((usersQ.data as any)?.data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
-  if (meId && !staff.some((s) => s.id === meId)) staff.push({ id: meId, name: userName || 'Eu' });
-  const { toast } = useToast();
-  // Mesma detecção da tabela: só o que entra depois da primeira vez na página.
-  const vistasPipelineRef = useRef<Set<string> | null>(null);
-  const [aRecem, setARecem] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    if (!leads.length) return;
-    const vistas = vistasPipelineRef.current;
-    if (!vistas) { vistasPipelineRef.current = new Set(leads.map((l) => l.id)); return; }
-    const entradas = leads.filter((l) => !vistas.has(l.id));
-    if (!entradas.length) return;
-    entradas.forEach((l) => vistas.add(l.id));
-    setARecem((atual) => new Set([...atual, ...entradas.map((l) => l.id)]));
-    const t = setTimeout(() => setARecem((atual) => {
-      const seguinte = new Set(atual);
-      entradas.forEach((l) => seguinte.delete(l.id));
-      return seguinte;
-    }), 4000);
-    return () => clearTimeout(t);
-  }, [leads]);
-  const chegouAgora = (l: Lead) => aRecem.has(l.id);
-  // "Nova" é a entrada: um card que já saiu da coluna Nova não pode voltar lá.
-  const novaDisponivel = (l: Lead) => etapaDe(l) === 'novo_lead';
   const move = (lead: Lead, stage: string) => {
     const status = (TRACK_LABEL_TO_API[stage] || LEAD_PT_TO_API[stage] || 'novo_lead') as string;
-    if (status === 'novo_lead' && !novaDisponivel(lead)) {
-      toast({ title: 'Não volta a “Nova”', description: `${lead.name} já saiu de “Nova”. Registe o contacto em vez de recomeçar.`, variant: 'destructive' });
-      return;
-    }
     // Optimista: atualiza já o cache partilhado (todas as janelas refletem de imediato) e confirma no servidor.
     qc.setQueryData<any>(['/api/v1/leads'], (old: any) => (old?.data ? { ...old, data: old.data.map((x: any) => (x.id === lead.id ? { ...x, status } : x)) } : old));
     updateMut.mutate({ id: lead.id, data: { status } as any }, { onSettled: () => onChanged?.() });
@@ -937,7 +614,7 @@ function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?
     else createMut.mutate({ data }, { onSuccess: () => { setIsNew(false); onChanged?.(); } });
   };
   const cycleSort = () => setSort(sort === 'Recentes' ? 'Maior valor' : sort === 'Maior valor' ? 'Nome A-Z' : 'Recentes');
-  return <><PageHeader eyebrow="Comercial · Conversão" title="Pipeline" subtitle="Acompanhe cada oportunidade até  à decisão." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={cycleSort}><ListFilter size={14} /> Vista: {sort}</button><button className="btn-primary" onClick={() => { setSelected(null); setIsNew(true); }}><Plus size={14} /> Oportunidade</button></div>} /><div className="card" style={{ padding: '.8rem', marginBottom: '.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.8rem', flexWrap: 'wrap' }}><div><span className="eyebrow">Valor total em aberto</span><div className="mono" style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: '.25rem' }}>{money(leads.reduce((s, l) => s + l.value, 0))}</div></div><div style={{ display: 'flex', gap: '1.2rem', color: 'hsl(var(--muted-foreground))', fontSize: '.7rem' }}><span><strong style={{ color: 'hsl(var(--foreground))' }}>{leads.length}</strong> oportunidades</span><span><strong style={{ color: 'hsl(var(--foreground))' }}>{Math.round((leads.filter(l => etapaDe(l) === 'convertido').length / Math.max(leads.length, 1)) * 100)}%</strong> conversão</span></div></div><div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(180px, 1fr))`, gap: '.65rem', overflowX: 'auto', paddingBottom: '.45rem' }}>{stages.map((stage) => { const cards = sorted(leads.filter(l => l.status === stage)); return <div key={stage} style={{ minHeight: 410, background: 'hsl(var(--secondary) / .55)', border: '1px solid hsl(var(--border))', borderRadius: '.65rem', padding: '.65rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.7rem' }}><div style={{ fontSize: '.7rem', fontWeight: 700 }}>{stage}</div><span style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', borderRadius: 6, background: 'hsl(var(--card))', color: 'hsl(var(--muted-foreground))', fontSize: '.62rem' }}>{cards.length}</span></div><div style={{ display: 'grid', gap: '.5rem' }}>{cards.map(l => <div key={l.id} onClick={() => { setSelected(l); setIsNew(false); }} data-testid={`pipeline-card-${l.id}`} className={chegouAgora(l) ? 'lead-recem lead-recem-card' : undefined} style={{ textAlign: 'left', padding: '.65rem', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.5rem', cursor: 'pointer', boxShadow: 'none' }}><div style={{ fontWeight: 700, fontSize: '.74rem' }}>{l.name}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.15rem' }}>{l.company}</div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.5rem', fontSize: '.64rem' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{srcLabel(l.source)}</span><span className="mono">{money(l.value)}</span></div><select className="select" data-testid={`select-pipeline-stage-${l.id}`} style={{ marginTop: '.5rem', width: '100%', fontSize: '.66rem', padding: '.2rem .45rem' }} value={stage} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); move(l, e.target.value); }}>{stages.map(sOpt => <option key={sOpt} value={sOpt} disabled={sOpt === 'Nova' && !novaDisponivel(l)}>{sOpt}</option>)}</select></div>)}</div></div>; })}</div>{(isNew || selected) && <LeadModal initial={isNew ? null : selected} onClose={() => { setSelected(null); setIsNew(false); }} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} currentUserId={meId} />}</>;
+  return <><PageHeader eyebrow="Comercial · Conversão" title="Pipeline" subtitle="Acompanhe cada oportunidade até  à decisão." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={cycleSort}><ListFilter size={14} /> Vista: {sort}</button><button className="btn-primary" onClick={() => { setSelected(null); setIsNew(true); }}><Plus size={14} /> Oportunidade</button></div>} /><div className="card" style={{ padding: '.8rem', marginBottom: '.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.8rem', flexWrap: 'wrap' }}><div><span className="eyebrow">Valor total em aberto</span><div className="mono" style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: '.25rem' }}>{money(leads.reduce((s, l) => s + l.value, 0))}</div></div><div style={{ display: 'flex', gap: '1.2rem', color: 'hsl(var(--muted-foreground))', fontSize: '.7rem' }}><span><strong style={{ color: 'hsl(var(--foreground))' }}>{leads.length}</strong> oportunidades</span><span><strong style={{ color: 'hsl(var(--foreground))' }}>{Math.round((leads.filter(l => trackOf(l) === 'Convertida').length / Math.max(leads.length, 1)) * 100)}%</strong> conversão</span></div></div><div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(180px, 1fr))`, gap: '.65rem', overflowX: 'auto', paddingBottom: '.45rem' }}>{stages.map((stage) => { const cards = sorted(leads.filter(l => trackOf(l) === stage)); return <div key={stage} style={{ minHeight: 410, background: 'hsl(var(--secondary) / .55)', border: '1px solid hsl(var(--border))', borderRadius: '.65rem', padding: '.65rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.7rem' }}><div style={{ fontSize: '.7rem', fontWeight: 700 }}>{stage}</div><span style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', borderRadius: 6, background: 'hsl(var(--card))', color: 'hsl(var(--muted-foreground))', fontSize: '.62rem' }}>{cards.length}</span></div><div style={{ display: 'grid', gap: '.5rem' }}>{cards.map(l => <div key={l.id} onClick={() => { setSelected(l); setIsNew(false); }} style={{ textAlign: 'left', padding: '.65rem', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.5rem', cursor: 'pointer', boxShadow: 'none' }}><div style={{ fontWeight: 700, fontSize: '.74rem' }}>{l.name}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.15rem' }}>{l.company}</div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.5rem', fontSize: '.64rem' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{srcLabel(l.source)} · {canalOf(l)}</span><span className="mono">{money(l.value)}</span></div><select className="select" data-testid={`select-pipeline-stage-${l.id}`} style={{ marginTop: '.5rem', width: '100%', fontSize: '.66rem', padding: '.2rem .45rem' }} value={stage} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); move(l, e.target.value); }}>{stages.map(sOpt => <option key={sOpt} value={sOpt}>{sOpt}</option>)}</select></div>)}</div></div>; })}</div>{(isNew || selected) && <LeadModal initial={isNew ? null : selected} onClose={() => { setSelected(null); setIsNew(false); }} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} />}</>;
 }
 
 
@@ -2315,7 +1992,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (
