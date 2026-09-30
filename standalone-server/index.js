@@ -2606,9 +2606,10 @@ app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => 
   try {
     const { name, email, role } = req.body;
     if (!name || !email) return res.status(400).json({ error: "Nome e email são obrigatórios" });
-    // VULN-05/06: papel válido obrigatório (só admin chega aqui).
+    // VULN-05/06: papel válido obrigatório (só admin chega aqui). Aceita qualquer capitalização.
     const INVITE_ROLES = ["administrador", "gestor", "comercial", "financeiro", "operacional"];
-    if (role && !INVITE_ROLES.includes(role)) {
+    const roleNorm = String(role || "comercial").toLowerCase();
+    if (!INVITE_ROLES.includes(roleNorm)) {
       return res.status(400).json({ error: "Papel inválido" });
     }
     const cols = await usersColumns();
@@ -2619,7 +2620,7 @@ app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => 
     const extra = hasRole ? ", role" : "";
     const extraVal = hasRole ? ", $4" : "";
     const params = [name, email, hash];
-    if (hasRole) params.push(role || 'Operacional');
+    if (hasRole) params.push(roleNorm);
     let row;
     if (hasPass) {
       const r = await pool.query(
@@ -2630,7 +2631,7 @@ app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => 
     } else {
       const r = await pool.query(
         `INSERT INTO users (name, email${extra}) VALUES ($1, $2${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}`,
-        hasRole ? [name, email, role || 'Operacional'] : [name, email]
+        hasRole ? [name, email, roleNorm] : [name, email]
       );
       row = r.rows[0];
     }

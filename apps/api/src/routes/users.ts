@@ -6,6 +6,8 @@ import { eq, desc } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -99,6 +101,40 @@ router.patch("/users/:id/toggle", authenticate, authorize("administrador"), asyn
 
     const { passwordHash, ...safeUser } = user;
     res.json({ data: safeUser });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Invite user — cria acesso com password temporária (paridade com standalone-server)
+router.post("/users/invite", authenticate, authorize("administrador"), validate(z.object({
+  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  email: z.string().email("Email inválido"),
+  role: z.preprocess(
+    (v) => (typeof v === "string" ? v.toLowerCase() : v),
+    z.enum(["administrador", "gestor", "comercial", "financeiro", "operacional"]).default("comercial")
+  ),
+})), async (req, res, next) => {
+  try {
+    const existing = await db.query.usersTable.findFirst({
+      where: eq(usersTable.email, req.body.email),
+    });
+    if (existing) {
+      throw new AppError(409, "Email já registado");
+    }
+    const tempPassword = crypto.randomBytes(6).toString("hex");
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const [user] = await db
+      .insert(usersTable)
+      .values({
+        name: req.body.name,
+        email: req.body.email,
+        passwordHash,
+        role: req.body.role ?? "comercial",
+      } as any)
+      .returning();
+    const { passwordHash: _ph, ...safeUser } = user;
+    res.status(201).json({ data: { ...safeUser, tempPassword } });
   } catch (err) {
     next(err);
   }
