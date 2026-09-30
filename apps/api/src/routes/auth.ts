@@ -82,6 +82,7 @@ router.post("/auth/login", validate(loginSchema), async (req, res, next) => {
       userId: user.id,
       role: user.role,
       email: user.email,
+      name: user.name,
     };
 
     const token = generateToken(payload);
@@ -152,6 +153,7 @@ router.post("/auth/register", validate(registerSchema), async (req, res, next) =
       userId: user.id,
       role: user.role,
       email: user.email,
+      name: user.name,
     };
 
     const token = generateToken(payload);

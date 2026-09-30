@@ -35,6 +35,7 @@ export interface AuthPayload {
   userId: string;
   role: string;
   email: string;
+  name?: string;
 }
 
 declare global {

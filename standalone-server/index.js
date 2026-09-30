@@ -990,7 +990,7 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
 
-    const payload = { userId: user.id, role: user.role, email: user.email };
+    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.cookie("token", token, {
@@ -1045,7 +1045,7 @@ app.post("/api/v1/auth/register", rateLimit(20), async (req, res) => {
     );
     const user = result.rows[0];
 
-    const payload = { userId: user.id, role: user.role, email: user.email };
+    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({ token, user });

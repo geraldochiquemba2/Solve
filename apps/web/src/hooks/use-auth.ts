@@ -22,9 +22,9 @@ function getUserFromToken(token: string): User | null {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
   return {
-    id: payload.sub as string,
-    name: payload.name as string,
-    email: payload.email as string,
+    id: (payload.sub ?? payload.userId ?? '') as string,
+    name: (payload.name ?? '') as string,
+    email: (payload.email ?? '') as string,
     role: payload.role as User['role'],
   };
 }
