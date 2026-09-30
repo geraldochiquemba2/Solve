@@ -308,6 +308,8 @@ pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`).ca
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS produto_interesse VARCHAR(255)`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
+// Equipa: contador de acessos por utilizador (quem acedeu mais)
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0`).catch(() => {});
 // Leads da landing são permanentes — passam a viver no funil; sem cleanup.
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
@@ -1001,7 +1003,7 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
       path: "/",
     });
 
-    await pool.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+    await pool.query("UPDATE users SET last_login_at = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1", [user.id]);
 
     res.json({
       token,
@@ -2588,12 +2590,13 @@ async function usersColumns() {
 app.get("/api/v1/users", requireAuth, async (req, res) => {
   try {
     const cols = await usersColumns();
-    const sel = ["id", "name", "email", "role", "active", "created_at"].filter(c => cols.has(c));
+    const sel = ["id", "name", "email", "role", "active", "created_at", "phone", "last_login_at", "login_count"].filter(c => cols.has(c));
     const r = await pool.query(`SELECT ${sel.join(", ")} FROM users ORDER BY created_at DESC`);
     const data = r.rows.map(u => ({
-      id: u.id, name: u.name, email: u.email,
+      id: u.id, name: u.name, email: u.email, phone: u.phone || null,
       role: u.role || 'Operacional', active: u.active !== false,
-      createdAt: u.created_at || null,
+      createdAt: u.created_at || null, lastLoginAt: u.last_login_at || null,
+      loginCount: u.login_count ?? 0,
     }));
     res.json({ data, total: data.length });
   } catch (err) {

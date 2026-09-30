@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable, settingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { validate } from "../middlewares/validate";
 import { generateToken, type AuthPayload } from "../middlewares/auth";
 import { AppError } from "../middlewares/error";
@@ -97,6 +97,10 @@ router.post("/auth/login", validate(loginSchema), async (req, res, next) => {
     });
 
     await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
+    // Contador de acessos (nunca bloqueia o login se a migração ainda não correu)
+    try {
+      await db.execute(sql`UPDATE users SET login_count = COALESCE(login_count, 0) + 1 WHERE id = ${user.id}`);
+    } catch { /* migração 0003 pendente */ }
 
     res.json({
       token,

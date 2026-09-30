@@ -187,6 +187,7 @@ export interface User {
   phone: string | null;
   active: boolean;
   lastLoginAt: string | null;
+  loginCount?: number | null;
   createdAt: string;
   updatedAt: string;
 }

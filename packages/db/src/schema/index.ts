@@ -20,6 +20,7 @@ export const usersTable = pgTable("users", {
   phone: varchar("phone", { length: 50 }),
   active: boolean("active").notNull().default(true),
   lastLoginAt: timestamp("last_login_at"),
+  loginCount: integer("login_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
