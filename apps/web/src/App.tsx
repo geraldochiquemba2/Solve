@@ -534,7 +534,7 @@ function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () =>
   const wa = (phone: string) => { const d = phone.replace(/[^\d]/g, ''); return d.length >= 9 ? `https://wa.me/${d}` : ''; };
   const crm = leads.filter(l => (l.source || '') === 'fit90_landing' || (l.source || '').toLowerCase().includes('fit90'));
   const filtered = crm.filter(l => (l.name + l.phone + l.email + l.code).toLowerCase().includes(q.toLowerCase()));
-  return <><PageHeader eyebrow="Comercial · Captação" title="Leads Fit90" subtitle="Landing Fit90: presas + no CRM" action={<button className="btn-primary" onClick={doSync} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar agora'}</button>} />
+  return <><PageHeader eyebrow="Comercial · Captação" title="Leads Fit90" subtitle="Landing Fit90: presas + no CRM" />
   {syncMsg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.78rem' }}>{syncMsg}</div>}
   <Section title="Presas na landing" note={pend.configured ? `${pend.rows.length} por empurrar` : 'Ligação Supabase por configurar (o webhook trata das novas)'}>
     {!pend.configured && pend.rows.length === 0 ? <div className="section-note">Sem acesso direto à Supabase — as novas entram pelo webhook; usa "Sincronizar agora" como rede.</div> : null}
