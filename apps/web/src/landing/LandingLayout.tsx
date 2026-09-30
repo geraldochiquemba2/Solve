@@ -6,6 +6,7 @@ import { CMSProvider } from './context/CMSContext'
 import { OrderProvider } from './context/OrderContext'
 import { CartProvider } from './context/CartContext'
 import Header from './layout/Header'
+import { solveAtivo } from '@/lib/marca'
 import Footer from './layout/Footer'
 import CookieBanner from './ui/CookieBanner'
 import FormModal from './ui/FormModal'
@@ -27,6 +28,7 @@ function LandingInner({ children }: { children: ReactNode }) {
 
   const isBackoffice = location.startsWith('/admin')
   const isAuthPage = location === '/login' || location === '/' || location === '/conta/login'
+  const isSolveLogin = solveAtivo && (location === '/login' || location === '/')
 
   useEffect(() => {
     const handleOpenModal = (e: Event) => {
@@ -80,7 +82,11 @@ function LandingInner({ children }: { children: ReactNode }) {
           </LegalModal>
         </>
       )}
-      {!isBackoffice && <Header />}
+      {isSolveLogin ? (
+        <header style={{ display: 'flex', justifyContent: 'center', padding: '1rem 1rem 0' }}>
+          <img src="/solve-corporate-logo.png" alt="Solve Corporate" style={{ height: 30, width: 'auto', objectFit: 'contain', ...(isDark ? { filter: 'brightness(0) invert(1)' } : null) }} />
+        </header>
+      ) : (!isBackoffice && <Header />)}
       <div className="flex-grow">
         {children}
       </div>
