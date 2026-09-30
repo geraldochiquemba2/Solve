@@ -45,6 +45,10 @@ import {
 } from '@workspace/api-client-react';
 import type { Lead as ApiLead, Plan as ApiPlan, Payment as ApiPayment, Integration as ApiIntegration, User as ApiUser } from '@workspace/api-client-react';
 
+// Modo Solve escondido: ativa uma única vez via ?marca=solve e dura até ao
+// refresh (o parâmetro é apagado do URL ao abrir). Vale para todas as páginas.
+let solveAtivo = false;
+try { if (new URLSearchParams(window.location.search).get('marca') === 'solve') solveAtivo = true; } catch {}
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -318,16 +322,15 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: { lab
 function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClose: () => void; auditCount?: number; userRole?: string }) {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const [solveMode] = useState(() => { try { return new URLSearchParams(window.location.search).get('marca') === 'solve'; } catch { return false; } });
   useEffect(() => {
-    if (!solveMode) return;
     try {
       const url = new URL(window.location.href);
+      if (!url.searchParams.has('marca')) return;
       url.searchParams.delete('marca');
       window.history.replaceState(null, '', url.pathname + url.search + url.hash);
     } catch {}
-  }, [solveMode]);
-  const isSolve = solveMode;
+  }, []);
+  const isSolve = solveAtivo;
   // Comercial vê só o seu painel + Clientes + Leads; Governação só admin/gestor.
   const COMERCIAL_HREFS = ['/admin/meu-progresso', '/admin/leads', '/admin/pipeline', '/admin/clientes'];
   const visibleGroups = navGroups
@@ -335,7 +338,7 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
     .map((g) => ({ ...g, items: userRole === 'comercial' ? g.items.filter((i) => COMERCIAL_HREFS.includes(i.href)) : g.items }))
     .filter((g) => g.items.length > 0);
   return <><aside className={`sidebar ${open ? 'open' : ''}`} style={{ width: 238, minHeight: '100dvh', padding: '1.25rem .8rem', position: 'fixed', inset: '0 auto 0 0', zIndex: 40, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', padding: '.15rem .55rem .3rem' }}>{isSolve ? <img src="/solve-access-logo.jpeg" alt="Solve Access" style={{ height: 40, width: 'auto', maxWidth: '100%', objectFit: 'contain', background: '#fff', borderRadius: 6, padding: '2px 6px' }} /> : <img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} />}</div>
+    {isSolve ? <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><img src="/solve-access-logo.png" alt="Solve Access" style={{ height: 32, width: 'auto', maxWidth: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} /></div> : <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>}
     <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{visibleGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
     <button onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }} className="sidebar-link" style={{ marginTop: 'auto', padding: '.55rem .7rem', borderRadius: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.75rem', color: 'hsl(3 67% 55%)', cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left' }}><LogOut size={15} /><span>Sair da sessão</span></button>
   </aside>{open && <div className="mobile-overlay" onClick={onClose} />}</>;
@@ -481,6 +484,7 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   };
   const [chartRange, setChartRange] = useState<'mes' | 'tudo'>('mes');
   const revenueShown = chartRange === 'mes' ? revenueData.slice(-4) : revenueData;
+  if (solveAtivo) return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita 30 dias" value="0 Kz" note="sem dados" /><Metric label="A receber" value="0 Kz" note="sem dados" /><Metric label="Em atraso" value="0 Kz" note="sem dados" /><Metric label="Leads" value="0" note="sem dados" /></div><Section title="Relatório do dia" note="Bloco de notas da operação"><div className="section-note">Sem dados para mostrar.</div></Section></>;
   return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita 30 dias" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="pagamentos confirmados" loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="A receber" value={money(pendTotal)} note={`${pendCount} transações pendentes`} loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /><Metric label="Em atraso" value={money(lateTotal)} note={`${lateCount} em atenção`} negative loading={dashLoading} onClick={() => setLocation('/admin/pagamentos')} /><Metric label="Leads" value={String(totalLeads)} note={`${convRate}% conversão · ${newLeads7} novos 7d`} loading={dashLoading} onClick={() => setLocation('/admin/pipeline')} /></div>
   <Section title="Relatório do dia" note="Bloco de notas da operação" action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => gerarRelatorioGeral('excel')} disabled={gerandoRelatorio}><FileSpreadsheet size={14} /> {gerandoRelatorio ? 'A gerar...' : 'Excel'}</button><button className="btn-secondary" onClick={() => gerarRelatorioGeral('pdf')} disabled={gerandoRelatorio}><FileText size={14} /> PDF</button><button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado!' : 'Copiar'}</button></div>}>
     <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
@@ -2543,9 +2547,9 @@ function AccessPage() {
       unlockMutation.mutate(tipo);
     }
   };
-  const [solveBanner] = useState(() => { try { return new URLSearchParams(window.location.search).get('marca') === 'solve'; } catch { return false; } });
+  const solveBanner = solveAtivo;
 
-  return <>{solveBanner && <div className="card" style={{ padding: '.7rem 1rem', display: 'flex', gap: '.8rem', alignItems: 'center', marginBottom: '.8rem' }}><img src="/solve-access-logo.jpeg" alt="Solve Access" style={{ height: 38, width: 'auto', borderRadius: 8, background: '#fff', padding: '4px 8px' }} /><div style={{ fontWeight: 700, fontSize: '.85rem' }}>Solve Access</div></div>}<PageHeader eyebrow="Controlo de Acesso · Solve Access" title="Acesso Físico" subtitle={`Solve Access: ${isConnected ? 'Conectado' : 'Desconectado'} · ${solveHealth.data?.source ?? '—'}`} action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><Status tone={connected ? 'live' : 'danger'}>{connected ? '● Live' : '○ Offline'}</Status><button className="btn-secondary" onClick={syncAccess} disabled={syncingAccess}><RefreshCw size={14} className={syncingAccess ? 'animate-spin' : ''} /> {syncingAccess ? 'A sincronizar…' : 'Sincronizar'}</button></div>} />
+  return <>{solveBanner && <div className="card" style={{ padding: '.7rem 1rem', display: 'flex', gap: '.8rem', alignItems: 'center', marginBottom: '.8rem' }}><img src="/solve-access-logo.png" alt="Solve Access" style={{ height: 38, width: 'auto', objectFit: 'contain' }} /><div style={{ fontWeight: 700, fontSize: '.85rem' }}>Solve Access</div></div>}<PageHeader eyebrow="Controlo de Acesso · Solve Access" title="Acesso Físico" subtitle={`Solve Access: ${isConnected ? 'Conectado' : 'Desconectado'} · ${solveHealth.data?.source ?? '—'}`} action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><Status tone={connected ? 'live' : 'danger'}>{connected ? '● Live' : '○ Offline'}</Status><button className="btn-secondary" onClick={syncAccess} disabled={syncingAccess}><RefreshCw size={14} className={syncingAccess ? 'animate-spin' : ''} /> {syncingAccess ? 'A sincronizar…' : 'Sincronizar'}</button></div>} />
   <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}>
     <Metric label="Clientes activos" value={access?.clients.active?.toString() ?? '—'} note={`${access?.clients.total ?? 0} total`} />
     <Metric label="Terminais online" value={terminals?.online ? '1' : '0'} note={terminals?.online ? (terminals.nome_terminal || 'Terminal') : 'Nenhum online'} />
