@@ -355,6 +355,18 @@
     if (btn) btn.textContent = "Os meus pagamentos (" + list.length + ")";
     var open = document.querySelector(".spw-back2 #spw-hist2");
     if (open) renderHist(m, open, list);
+    // Pagamento confirmado mas sem acesso ativo na Cademi? Não finge que está
+    // tudo bem: avisa para sair/entrar e falar connosco se não aparecer.
+    try {
+      var acc = m.querySelector("#spw-acessos");
+      var txt = (acc && acc.textContent) || "";
+      var hasPaid = list.some(function (p) { return p.status === "confirmado"; });
+      var hasAccess = /Já tens acesso/.test(txt);
+      var warned = /ainda a ativar/.test(txt);
+      if (hasPaid && !hasAccess && !warned && acc) {
+        acc.textContent = (txt ? txt + " " : "") + "Pagamento recebido, acesso ainda a ativar — faz logout e entra de novo (login); se não aparecer, fala connosco.";
+      }
+    } catch (e) {}
     return list;
   }
 

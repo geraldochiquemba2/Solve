@@ -19,6 +19,20 @@ Sem email, não envia ("sem email"). Idempotente (`cademi_delivery=sent`).
 ## Botão manual
 Detalhe do pagamento → **Enviar Cademi** (backfill/teste). Erros típicos:
 "por configurar", "sem email", mensagem da Cademi.
+Reenvio forçado (pagamento já marcado): `POST
+/api/v1/payments/:code/cademi-delivery?force=1` (auth admin).
+
+## Quando o pagamento está Pago mas o acesso não aparece
+A entrega só conta como feita se o acesso existir mesmo na Cademi
+(`metadata.cademi_verified=true`). Se ficar `sent_unverified`, a Cademi
+aceitou o `/entrega/enviar` (Carga processada) mas não criou acesso:
+1. Cademi → Vendas: procurar o `codigo` (ex. `SCMUOE7GZM`) — está Processado?
+2. Cademi → entrega `#268060`: regra ativa? produto certo? envio ligado?
+3. No CRM: detalhe do pagamento → **Enviar SamoraFit Workout** (reenvia e
+   volta a verificar). A resposta crua fica em `metadata.cademi_resp`.
+No widget, quem pagou sem acesso ativo vê: "Pagamento recebido, acesso
+ainda a ativar — faz logout e entra de novo; se não aparecer, fala
+connosco" (em vez de só voltar a oferecer Pagar).
 
 ## Controlo de pagamentos × Alunos
 Alternador **Ver pagamentos / Ver alunos** (sem scroll). Tabela: pagos, total,

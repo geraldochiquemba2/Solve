@@ -2161,7 +2161,7 @@ app.post("/api/v1/cademi/sync", requireAuth, requireManager, async (req, res) =>
 // body: { codigo, status: "aprovado", produto_id, cliente_nome, cliente_email, token }
 // Config (tabela settings, editável no CRM > Academia):
 //   cademi_auto_delivery = "1"  +  cademi_produto_id = "<id do produto/entrega>"
-async function sendCademiDelivery(paymentCode) {
+async function sendCademiDelivery(paymentCode, force = false) {
   try {
     const auto = String(await cfg("cademi_auto_delivery", "")).trim();
     const defProduto = String(await cfg("cademi_produto_id", "")).trim();
@@ -2171,7 +2171,7 @@ async function sendCademiDelivery(paymentCode) {
     if (payment.status !== "confirmado") return { ok: false, skipped: `estado ${payment.status}` };
     let meta = {};
     try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
-    if (meta.cademi_delivery === "sent") return { ok: false, skipped: "já enviado" };
+    if (meta.cademi_delivery === "sent" && !force) return { ok: false, skipped: "já enviado" };
     // Entrega do pagamento (seletor) ou padrão da Academia.
     const produtoId = String(meta.cademi_produto || defProduto).trim();
     if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto por configurar (Academia)" };
@@ -2204,10 +2204,40 @@ async function sendCademiDelivery(paymentCode) {
       }),
     });
     if (!r.success) return { ok: false, skipped: `Cademi: ${r.error}` };
-    meta.cademi_delivery = "sent";
+    // Guarda a resposta crua da Cademi (truncada) para diagnóstico.
+    try { meta.cademi_resp = JSON.stringify(r.data ?? r).slice(0, 500); } catch {}
+    // Verificação: a entrega só conta como "sent" se o acesso existir mesmo na
+    // Cademi (a API pode responder sucesso sem criar acesso — ex. slug errado
+    // ou regra de entrega inativa). Sem acesso confirmado, marca
+    // "sent_unverified" para permitir nova tentativa e sinalizar no admin.
+    let verified = false, acessosCount = 0;
+    try {
+      const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
+      const users = u.data?.usuario || [];
+      const found = users.find(x => String(x.email || "").toLowerCase() === String(email).toLowerCase());
+      if (found?.id) {
+        const a = await cademiFetch(`/usuario/acesso/${encodeURIComponent(found.id)}`);
+        const acessos = a.data?.acesso || [];
+        acessosCount = acessos.length;
+        verified = acessos.some(ac => {
+          if (ac.encerrado) return false;
+          const slug = slugify(ac.produto?.nome);
+          return slug === produtoId || String(ac.produto?.id ?? "") === produtoId;
+        });
+      }
+    } catch (e) { console.error(`[CADEMI] ${payment.code}: falha a verificar acesso:`, e.message); }
+    meta.cademi_verified = verified;
+    meta.cademi_acessos = acessosCount;
+    meta.cademi_checked_at = new Date().toISOString();
     meta.cademi_delivery_at = new Date().toISOString();
+    if (verified) {
+      meta.cademi_delivery = "sent";
+    } else {
+      meta.cademi_delivery = "sent_unverified";
+    }
     await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]);
-    console.log(`[CADEMI] Acesso enviado: ${payment.code} → ${email} (produto ${produtoId})`);
+    console.log(`[CADEMI] Acesso enviado: ${payment.code} → ${email} (produto ${produtoId}) verificado=${verified} acessos=${acessosCount}`);
+    if (!verified) return { ok: false, skipped: "entrega aceite pela Cademi mas acesso não confirmado (ver painel Cademi > Vendas e a regra de entrega)" };
     return { ok: true, email };
   } catch (e) { return { ok: false, skipped: e.message }; }
 }
@@ -2306,9 +2336,9 @@ app.get("/api/v1/cademi/acesso", rateLimit(60), async (req, res) => {
   }
 });
 
-// Manual: (re)enviar acesso à Cademi — backfill e teste
+// Manual: (re)enviar acesso à Cademi — backfill e teste (?force=1 reenvia mesmo se já enviado)
 app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res) => {
-  const r = await sendCademiDelivery(req.params.code);
+  const r = await sendCademiDelivery(req.params.code, req.query.force === "1");
   if (r.ok) return res.json({ ok: true, email: r.email });
   res.status(400).json({ ok: false, error: r.skipped });
 });
