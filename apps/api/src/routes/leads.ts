@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { leadsTable, leadContactsTable, usersTable, customersTable } from "@workspace/db/schema";
-import { eq, like, or, desc, and, sql } from "drizzle-orm";
+import { leadsTable, leadContactsTable, leadCampaignsTable, usersTable, customersTable } from "@workspace/db/schema";
+import { eq, like, or, desc, and, sql, inArray } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
@@ -10,6 +10,23 @@ import { AppError } from "../middlewares/error";
 const router = Router();
 
 const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"] as const;
+// ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
+// Existem 4 etapas: nova_lead, qualificado, convertido, perdido.
+// "Proposta", "Negociação" e "Contactada" deixaram de ser etapas: quem já foi
+// contactado está em acompanhamento. O enum do PostgreSQL mantém os valores
+// antigos (migração não destrutiva), mas a API nunca os volta a gravar nem a os
+// conta à parte — quem chega com um valor antigo é normalizado para qualificado.
+//Leitura: "em acompanhamento" = já foi contactada e está a ser trabalhada.
+// Inclui `contacto` porque a migração ainda pode não ter corrido em todas as
+// bases; `canonStatus` garante que a partir de agora nada é gravado assim.
+const ETAPAS_EM_ACOMPANHAMENTO = ["qualificado", "proposta", "negociacao", "contacto"] as const;
+// "Contactada" deixou de ser uma etapa: quem já foi contactado está em
+// acompanhamento. O que já vinha gravado continua aceite na leitura, mas passa a
+// "Em acompanhamento", para que as 4 etapas existam em todo o lado.
+const canonStatus = (s: unknown): any => (s === "proposta" || s === "negociacao" || s === "contacto" ? "qualificado" : s);
+// "Nova" é um ponto de entrada, não um destino: depois de sair, não se volta atrás.
+const REGRA_SEM_RETORNO = "Uma lead que já saiu de \"Nova\" não pode voltar a \"Nova\". Registe o contacto em vez de recomeçar.";
+
 // Selects fixos — funcionário seleciona, não digita (paridade standalone-server + App.tsx)
 export const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail", "Sistema"] as const;
 export const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido", "Mudança de etapa"] as const;
@@ -32,6 +49,7 @@ const leadSchema = z.object({
   whatsapp: z.string().max(50).nullish(),
   produtoInteresse: z.string().max(255).nullish(),
   proximoContato: dateStr.nullish(),
+  ultimoContactoAt: dateStr.nullish(),
   motivoPerda: z.string().max(255).nullish(),
 });
 
@@ -70,13 +88,59 @@ async function withStats(lead: any) {
     return {
       ...lead,
       contactosTotal: contactos.length,
-      ultimoContactoAt: ultimo?.createdAt ?? null,
+      // Fonte única do "último contacto": a coluna editável no calendário; só quando
+      // nunca foi preenchida (lead antiga) se recorre ao último registo do histórico.
+      ultimoContactoAt: (lead as any).ultimoContatoAt ?? ultimo?.createdAt ?? null,
       ultimoResultado: ultimo?.resultado ?? null,
       ultimoStaff,
     };
   } catch {
     return { ...lead, contactosTotal: 0, ultimoContactoAt: null, ultimoResultado: null, ultimoStaff: null };
   }
+}
+
+// ─── Identidade de cliente (deduplicação) ────────────────────────────────────
+// Uma pessoa é a MESMA em várias campanhas se partilhar um identificador forte:
+// email (normalizado) OU whatsapp/telefone (dígitos, com e sem +244). O nome
+// NUNCA é usado para fundir — duas pessoas com o mesmo nome e identificadores
+// diferentes continuam pessoas distintas (nunca se fundem incorretamente).
+// Sem nenhum identificador, cria-se uma lead nova de cada vez (impossível provar
+// que é a mesma pessoa).
+const normEmail = (e?: string | null) => (e ?? "").trim().toLowerCase() || undefined;
+const contactKeys = (w?: string | null, p?: string | null): string[] => {
+  const raw = String(w || p || "").replace(/\D+/g, "");
+  if (!raw) return [];
+  const keys = [raw];
+  const noCc = raw.replace(/^(00244|0024|0244|244)/, "");
+  if (noCc && noCc !== raw) keys.push(noCc);
+  return [...new Set(keys)];
+};
+
+async function findLeadByIdentity(body: { email?: string; phone?: string; whatsapp?: string | null }) {
+  const email = normEmail(body.email);
+  const keys = contactKeys(body.whatsapp as any, body.phone as any);
+  if (!email && !keys.length) return null;
+  const conds: any[] = [];
+  if (email) conds.push(sql`lower(${leadsTable.email}) = ${email}`);
+  for (const k of keys) {
+    conds.push(eq(leadsTable.whatsapp, k), eq(leadsTable.phone, k));
+  }
+  return db.query.leadsTable.findFirst({ where: or(...conds) });
+}
+
+// Campanhas/interesses secundários de cada lead (a principal é `lead.source`).
+async function withCampanhas(leads: any[]): Promise<any[]> {
+  if (!leads.length) return leads;
+  const byLead = new Map<string, any[]>();
+  try {
+    const rows: any[] = await db.select().from(leadCampaignsTable).where(inArray(leadCampaignsTable.leadId, leads.map((l) => l.id)));
+    for (const r of rows) {
+      const arr = byLead.get(r.leadId) ?? [];
+      arr.push({ source: r.source, produtoInteresse: r.produtoInteresse, externalId: r.externalId, createdAt: r.createdAt });
+      byLead.set(r.leadId, arr);
+    }
+  } catch { /* mocks/base indisponível */ }
+  return leads.map((l) => ({ ...l, campanhas: byLead.get(l.id) ?? [] }));
 }
 
 // List all leads with filters — enriquecida com contactosTotal + último contacto (quem/quando/resultado)
@@ -100,7 +164,10 @@ router.get("/leads", authenticate, async (req, res, next) => {
     }
 
     if (status && typeof status === "string" && status !== "Todos") {
-      conditions.push(eq(leadsTable.status, status as any));
+      // "Em acompanhamento" traz também as linhas ainda marcadas com as etapas
+      // antigas, para o filtro nunca esconder uma lead que o gestor vê no funil.
+      if (status === "qualificado") conditions.push(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]) as any);
+      else conditions.push(eq(leadsTable.status, canonStatus(status) as any));
     }
 
     if (source && typeof source === "string" && source !== "Todas") {
@@ -120,7 +187,7 @@ router.get("/leads", authenticate, async (req, res, next) => {
       .orderBy(desc(leadsTable.createdAt))
       .limit(500);
 
-    const enriched = await Promise.all(leads.map(withStats));
+    const enriched = await withCampanhas(await Promise.all(leads.map(withStats)));
     res.json({ data: enriched, total: enriched.length });
   } catch (err) {
     next(err);
@@ -139,7 +206,7 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
     const novas = await countBy(eq(leadsTable.status, "novo_lead"));
     const convertidas = await countBy(eq(leadsTable.status, "convertido"));
     const perdidas = await countBy(eq(leadsTable.status, "perdido"));
-    const emAcompanhamento = await countBy(eq(leadsTable.status, "qualificado"));
+    const emAcompanhamento = await countBy(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]));
     // contactadas = têm ≥1 registo em lead_contacts; pendentes = nunca contactadas
     const contactadasRows = await db.select({ leadId: leadContactsTable.leadId }).from(leadContactsTable).groupBy(leadContactsTable.leadId);
     const contactadas = contactadasRows.length;
@@ -213,13 +280,14 @@ router.post("/leads/:id/contacts", authenticate, authorize("administrador", "ges
       proximoPasso: passo, proximoContato: proxData as any, observacao: req.body.observacao ?? null,
     } as any).returning();
 
-    const update: any = { proximoContato: proxData, updatedAt: new Date() };
+    const update: any = { proximoContato: proxData, ultimoContatoAt: new Date().toISOString().slice(0, 10), updatedAt: new Date() };
     if (req.body.resultado === "Converteu" && (lead as any).status !== "convertido") {
       update.status = "convertido";
       update.convertedAt = new Date();
     } else if ((lead as any).status === "novo_lead") {
-      // Estado nunca diverge do histórico: 1º contacto registado ⇒ Contactada
-      update.status = "contacto";
+      // Estado nunca diverge do histórico: o 1º contacto regista a entrada em
+      // acompanhamento. Não volta a "Nova" — essa é a regra de sentido único.
+      update.status = "qualificado";
     }
     const [leadUpd] = await db.update(leadsTable).set(update).where(eq(leadsTable.id, req.params.id as string)).returning();
     res.status(201).json({ data: c, lead: await withStats(leadUpd) });
@@ -239,7 +307,7 @@ router.get("/leads/:id", authenticate, async (req, res, next) => {
       throw new AppError(404, "Lead não encontrado");
     }
 
-    res.json({ data: await withStats(lead) });
+    res.json({ data: (await withCampanhas([await withStats(lead)]))[0] });
   } catch (err) {
     next(err);
   }
@@ -276,6 +344,43 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
       }
     }
 
+    // Deduplicação por identidade (Módulo 3): a MESMA pessoa noutra campanha não
+    // é outra lead. Se partilha email OU whatsapp OU telefone, reaproveita a lead:
+    // regista a nova campanha/interesse e preserva todo o histórico (contactos,
+    // observações, etapa, enquanto continuar em Leads Totais).
+    const existingByIdentity = await findLeadByIdentity(req.body as any);
+    if (existingByIdentity) {
+      const novoInteresse: any = {
+        leadId: existingByIdentity.id,
+        source: req.body.source ?? undefined,
+        produtoInteresse: req.body.produtoInteresse ?? undefined,
+        externalId: externalId ?? undefined,
+      };
+      if (novoInteresse.source && novoInteresse.source !== (existingByIdentity as any).source) {
+        try {
+          await db
+            .insert(leadCampaignsTable)
+            .values(novoInteresse)
+            .onConflictDoNothing({ target: [leadCampaignsTable.leadId, leadCampaignsTable.source] });
+        } catch { /* corrida: o índice único garante que não duplica */ }
+      }
+      // Atualiza unicamente os identificadores para o valor mais recente.
+      const refresh: Record<string, unknown> = { updatedAt: new Date() };
+      const emailNorm = normEmail(req.body.email);
+      if (emailNorm) refresh.email = emailNorm;
+      if (req.body.whatsapp !== undefined) refresh.whatsapp = req.body.whatsapp;
+      if (req.body.phone !== undefined) refresh.phone = req.body.phone;
+      if (req.body.name) refresh.name = req.body.name;
+      if (req.body.company !== undefined) refresh.company = req.body.company;
+      const [lead] = await db
+        .update(leadsTable)
+        .set(refresh)
+        .where(eq(leadsTable.id, existingByIdentity.id))
+        .returning();
+      res.json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: true, reconciliado: true });
+      return;
+    }
+
     const count = await db.$count(leadsTable);
     const code = `LED-${String(1000 + count + 1).padStart(4, "0")}`;
 
@@ -287,7 +392,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         phone: req.body.phone ?? null,
         company: req.body.company ?? null,
         source: req.body.source ?? null,
-        status: req.body.status ?? "novo_lead",
+        status: canonStatus(req.body.status ?? "novo_lead"),
         owner_id: req.body.ownerId ?? null,
         estimatedValue: req.body.estimatedValue ?? 0,
         notes: req.body.notes ?? null,
@@ -296,12 +401,13 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         whatsapp: req.body.whatsapp ?? null,
         produtoInteresse: req.body.produtoInteresse ?? null,
         proximoContato: req.body.proximoContato ?? null,
+        ultimoContatoAt: req.body.ultimoContactoAt ?? null,
         motivoPerda: req.body.motivoPerda ?? null,
         code,
       } as any)
       .returning();
 
-    res.status(201).json({ data: await withStats(lead) });
+    res.status(201).json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: false });
   } catch (err) {
     next(err);
   }
@@ -319,14 +425,21 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
     }
 
     // Motivo obrigatório ao marcar perdida — evita perder rasto sem explicação
-    const nextStatus = req.body.status ?? (existing as any).status;
+    const nextStatus = canonStatus(req.body.status ?? (existing as any).status);
     if (nextStatus === "perdido" && !req.body.motivoPerda && !(existing as any).motivoPerda) {
       throw new AppError(400, "Motivo da perda é obrigatório (selecione o motivo)");
+    }
+    // "Nova" é sentido único: registar que uma lead já contactada voltou a zero
+    // apagaria a etapa que ela percorreu. A regra é do servidor, não do ecrã.
+    if (req.body.status === "novo_lead" && canonStatus((existing as any).status) !== "novo_lead") {
+      throw new AppError(400, REGRA_SEM_RETORNO);
     }
     const patch: any = { updatedAt: new Date() };
     for (const [k, v] of Object.entries(req.body as any)) {
       if (v === undefined) continue;
       if (k === "ownerId") patch.owner_id = v;
+      else if (k === "ultimoContactoAt") patch.ultimoContatoAt = v;
+      else if (k === "status") patch.status = canonStatus(v);
       else patch[k] = v;
     }
 
@@ -387,6 +500,41 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
       throw new AppError(400, "Lead já foi convertido");
     }
 
+    // Cliente único (Módulo 3): se já existe um cliente com o mesmo email,
+    // whatsapp ou telefone, associa a lead a esse cliente — nunca cria um
+    // segundo cliente para a mesma pessoa, mesmo vinda de outra campanha.
+    const email = normEmail((lead as any).email);
+    const keys = contactKeys((lead as any).whatsapp, (lead as any).phone);
+    const conds: any[] = [];
+    if (email) conds.push(sql`lower(${customersTable.email}) = ${email}`);
+    for (const k of keys) {
+      conds.push(
+        sql`regexp_replace(coalesce(${customersTable.whatsappPhone}, ''), '\D', '', 'g') = ${k}`,
+        sql`regexp_replace(coalesce(${customersTable.phone}, ''), '\D', '', 'g') = ${k}`,
+      );
+    }
+    if (conds.length) {
+      const existingCustomer = await db.query.customersTable.findFirst({ where: or(...conds) });
+      if (existingCustomer) {
+        const upd: Record<string, unknown> = { updatedAt: new Date() };
+        if (!(existingCustomer as any).leadId) upd.leadId = lead.id;
+        const [customer] = await db
+          .update(customersTable)
+          .set(upd)
+          .where(eq(customersTable.id, existingCustomer.id))
+          .returning();
+        await db
+          .update(leadsTable)
+          .set({ status: "convertido", convertedAt: new Date(), updatedAt: new Date() })
+          .where(eq(leadsTable.id, lead.id));
+        res.json({
+          message: "Cliente já existente — lead associada ao cliente atual",
+          data: { lead: { ...lead, status: "convertido" }, customer, duplicado: true },
+        });
+        return;
+      }
+    }
+
     // Generate customer code
     const customerCount = await db.$count(customersTable);
     const customerCode = `CLI-${String(2000 + customerCount + 1).padStart(4, "0")}`;
@@ -420,7 +568,7 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
 
     res.json({
       message: "Lead convertido com sucesso",
-      data: { lead: { ...lead, status: "convertido" }, customer },
+      data: { lead: { ...lead, status: "convertido" }, customer, duplicado: false },
     });
   } catch (err) {
     next(err);
