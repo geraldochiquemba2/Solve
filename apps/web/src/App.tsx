@@ -45,10 +45,7 @@ import {
 } from '@workspace/api-client-react';
 import type { Lead as ApiLead, Plan as ApiPlan, Payment as ApiPayment, Integration as ApiIntegration, User as ApiUser } from '@workspace/api-client-react';
 
-// Modo Solve escondido: ativa uma única vez via ?marca=solve e dura até ao
-// refresh (o parâmetro é apagado do URL ao abrir). Vale para todas as páginas.
-let solveAtivo = false;
-try { if (new URLSearchParams(window.location.search).get('marca') === 'solve') solveAtivo = true; } catch {}
+import { solveAtivo } from '@/lib/marca';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -337,9 +334,13 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
     .filter((g) => !g.roles || (userRole ? g.roles.includes(userRole) : true))
     .map((g) => ({ ...g, items: userRole === 'comercial' ? g.items.filter((i) => COMERCIAL_HREFS.includes(i.href)) : g.items }))
     .filter((g) => g.items.length > 0);
+  // Modo Solve escondido: SamoraFit Workout e Integrações ficam ocultos.
+  const shownGroups = isSolve
+    ? visibleGroups.map((g) => ({ ...g, items: g.items.filter((i) => i.href !== '/admin/academia' && i.href !== '/admin/integracoes') })).filter((g) => g.items.length > 0)
+    : visibleGroups;
   return <><aside className={`sidebar ${open ? 'open' : ''}`} style={{ width: 238, minHeight: '100dvh', padding: '1.25rem .8rem', position: 'fixed', inset: '0 auto 0 0', zIndex: 40, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-    {isSolve ? <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><img src="/solve-access-logo.png" alt="Solve Access" style={{ height: 32, width: 'auto', maxWidth: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} /></div> : <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>}
-    <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{visibleGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
+    {isSolve ? <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><img src="/solve-corporate-logo.png" alt="Solve Corporate" style={{ height: 36, width: 'auto', maxWidth: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} /></div> : <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>}
+    <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{shownGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
     <button onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }} className="sidebar-link" style={{ marginTop: 'auto', padding: '.55rem .7rem', borderRadius: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.75rem', color: 'hsl(3 67% 55%)', cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left' }}><LogOut size={15} /><span>Sair da sessão</span></button>
   </aside>{open && <div className="mobile-overlay" onClick={onClose} />}</>;
 }

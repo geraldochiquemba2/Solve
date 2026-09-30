@@ -4,6 +4,7 @@ import { Eye, EyeOff, Mail, Lock, ArrowRight, X } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 import { useLocation } from 'wouter'
 import { useTheme } from './context/ThemeContext'
+import { solveAtivo } from '@/lib/marca'
 
 export default function Login() {
   const { login } = useAuth()
@@ -47,7 +48,11 @@ export default function Login() {
 
           {/* Header */}
           <div className="px-6 pt-6 pb-0 text-center">
-            <img src="/samorafit-logo.png" alt="SamoraFit" className="h-9 mx-auto mb-4 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
+            {solveAtivo ? (
+              <img src="/solve-corporate-logo.png" alt="Solve Corporate" className="h-9 mx-auto mb-4 object-contain" style={isDark ? { filter: 'brightness(0) invert(1)' } : undefined} />
+            ) : (
+              <img src="/samorafit-logo.png" alt="SamoraFit" className="h-9 mx-auto mb-4 object-contain" style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }} />
+            )}
             <h1 className="font-heading font-bold text-xl mb-0.5" style={{ color: textPrimary }}>
               Bem-vindo de volta
             </h1>
