@@ -222,11 +222,12 @@ function mapApiCustomer(c: any): Customer {
   };
 }
 
-const navGroups = [
+const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: string; label: string; icon: any }> }> = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
    { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
+  { label: 'Governação', roles: ['administrador', 'gestor'], items: [{ href: '/admin/equipa', label: 'Equipa', icon: Users }, { href: '/admin/utilizadores', label: 'Utilizadores', icon: ShieldCheck }] },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
@@ -280,12 +281,18 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: { lab
   return <label><span className="form-label">{label}</span><input className="input" type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} /></label>;
 }
 
-function Sidebar({ open, onClose, auditCount }: { open: boolean; onClose: () => void; auditCount?: number }) {
+function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClose: () => void; auditCount?: number; userRole?: string }) {
   const [location] = useLocation();
   const { logout } = useAuth();
+  // Comercial vê só Clientes + Leads; Governação só admin/gestor.
+  const COMERCIAL_HREFS = ['/admin/leads', '/admin/pipeline', '/admin/clientes'];
+  const visibleGroups = navGroups
+    .filter((g) => !g.roles || (userRole ? g.roles.includes(userRole) : true))
+    .map((g) => ({ ...g, items: userRole === 'comercial' ? g.items.filter((i) => COMERCIAL_HREFS.includes(i.href)) : g.items }))
+    .filter((g) => g.items.length > 0);
   return <><aside className={`sidebar ${open ? 'open' : ''}`} style={{ width: 238, minHeight: '100dvh', padding: '1.25rem .8rem', position: 'fixed', inset: '0 auto 0 0', zIndex: 40, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
     <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>
-    <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{navGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
+    <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{visibleGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
     <button onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }} className="sidebar-link" style={{ marginTop: 'auto', padding: '.55rem .7rem', borderRadius: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.75rem', color: 'hsl(3 67% 55%)', cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left' }}><LogOut size={15} /><span>Sair da sessão</span></button>
   </aside>{open && <div className="mobile-overlay" onClick={onClose} />}</>;
 }
@@ -1697,6 +1704,40 @@ function UsersPage() {
     </div>
   </div></div>}</>;
 }
+function EquipaPage({ leads }: { leads: Lead[] }) {
+  const usersQ = useListUsersAll();
+  const toggleMut = useToggleUser();
+  const all = ((usersQ.data as any)?.data ?? []) as any[];
+  const equipa = all.filter((u) => String(u.role || '').toLowerCase() === 'comercial');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [iName, setIName] = useState(''); const [iEmail, setIEmail] = useState('');
+  const [iMsg, setIMsg] = useState(''); const [inviting, setInviting] = useState(false);
+  const invite = async () => {
+    if (!iName.trim() || !iEmail.trim()) { setIMsg('Nome e email são obrigatórios'); return; }
+    setInviting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const base = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${base}/api/v1/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ name: iName.trim(), email: iEmail.trim(), role: 'comercial' }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      setIMsg(`Acesso criado! Password temporária: ${json.data?.tempPassword || '—'}`);
+      setIName(''); setIEmail('');
+      usersQ.refetch();
+    } catch (e: any) { setIMsg('Erro: ' + (e.message || 'falha a criar')); }
+    setInviting(false);
+  };
+  const stats = (id: string) => {
+    const mine = leads.filter((l) => l.owner === id);
+    return { total: mine.length, conv: mine.filter((l) => (l as any).statusApi === 'convertido').length };
+  };
+  return <><PageHeader eyebrow="Governação · Equipa" title="Equipa comercial" subtitle="Utilizadores com acesso apenas a Clientes e Leads." action={<button className="btn-primary" onClick={() => { setIMsg(''); setInviteOpen(true); }}><Plus size={14} /> Adicionar comercial</button>} /><Section title="Comerciais" note={`${equipa.length} utilizadores`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Nome</th><th>Email</th><th>Leads</th><th>Convertidas</th><th>Estado</th><th /></tr></thead><tbody>{equipa.map((u) => { const s = stats(u.id); return <tr key={u.id}><td style={{ fontWeight: 700 }}>{u.name}</td><td style={{ fontSize: '.72rem' }}>{u.email}</td><td className="mono">{s.total}</td><td className="mono">{s.conv}</td><td><Status tone={u.active ? 'good' : 'warn'}>{u.active ? 'Activo' : 'Inactivo'}</Status></td><td><button className="btn-quiet" onClick={() => toggleMut.mutate(u.id, { onSuccess: () => usersQ.refetch() })}>{u.active ? 'Desactivar' : 'Activar'}</button></td></tr>; })}{equipa.length === 0 ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'hsl(var(--muted-foreground))', padding: '1.5rem' }}>Sem comerciais. Adiciona o primeiro.</td></tr> : null}</tbody></table></div></Section>
+  {inviteOpen && <Modal title="Adicionar comercial" subtitle="Acesso só a Clientes e Leads · password temporária" onClose={() => setInviteOpen(false)}><div style={{ display: 'grid', gap: '.6rem' }}><FormField label="Nome completo *" value={iName} onChange={setIName} placeholder="Nome completo" /><FormField label="Email *" value={iEmail} onChange={setIEmail} placeholder="email@..." type="email" />{iMsg ? <div style={{ fontSize: '.75rem' }}>{iMsg}</div> : null}<div style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={() => setInviteOpen(false)} style={{ flex: 1 }}>Fechar</button><button className="btn-primary" onClick={invite} disabled={inviting} style={{ flex: 1 }}><Check size={14} /> {inviting ? 'A criar…' : 'Criar acesso'}</button></div></div></Modal>}</>;
+}
 function AuditPage() {
   const { data } = useListAuditLogs(undefined, { refetchInterval: 300000 });
   const logs = data?.data ?? [];
@@ -1759,8 +1800,8 @@ function SettingsPage() {
 }
 function Preference({ label, detail, on, setOn }: { label: string; detail: string; on: boolean; setOn: (v: boolean) => void }) { return <button className="btn-quiet" style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '.7rem .2rem' }} onClick={() => setOn(!on)}><div style={{ flex: 1 }}><div style={{ fontSize: '.76rem', fontWeight: 700, color: 'hsl(var(--foreground))' }}>{label}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.18rem' }}>{detail}</div></div>{on ? <ToggleRight size={22} color="hsl(155 41% 43%)" /> : <ToggleLeft size={22} color="hsl(var(--muted-foreground))" />}</button>; }
 
-function AppShell({ children, userName, auditCount }: { children: ReactNode; userName?: string; auditCount?: number }) {
-  const [menu, setMenu] = useState(false); return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} /><div className="main-area"><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
+function AppShell({ children, userName, auditCount, userRole }: { children: ReactNode; userName?: string; auditCount?: number; userRole?: string }) {
+  const [menu, setMenu] = useState(false); return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} userRole={userRole} /><div className="main-area"><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -1922,6 +1963,15 @@ function AccessPage() {
 function CRM() {
   const { user } = useAuth();
   const userName = user?.name || 'Utilizador';
+  const userRole = (user as any)?.role as string | undefined;
+  const [location, setLocation] = useLocation();
+  // Comercial só entra em Clientes + Leads (tabela, funil e ficha) — o resto redireciona.
+  useEffect(() => {
+    if (userRole === 'comercial') {
+      const ok = ['/admin/leads', '/admin/pipeline', '/admin/clientes'].some((p) => location === p || location.startsWith(p + '/'));
+      if (!ok) setLocation('/admin/leads');
+    }
+  }, [location, userRole]);
   const leadsQuery = useListLeads(undefined, { query: { refetchInterval: 300000 } });
   const customersQuery = useListCustomersManual();
   const auditQuery = useListAuditLogs(undefined, { refetchInterval: 300000 });
@@ -1937,7 +1987,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads" component={() => <LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (
