@@ -2872,8 +2872,8 @@ app.get("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
   }
 });
 
-const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail"];
-const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido"];
+const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail", "Sistema"];
+const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido", "Mudança de etapa"];
 const LEAD_PASSOS = ["Contactar amanhã", "Contactar em 3 dias", "Contactar em 7 dias", "Sem próximo contacto", "Agendar visita"];
 function passoParaData(passo) {
   const d = new Date();
@@ -2947,6 +2947,8 @@ app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
 
 app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
   try {
+    const cur = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     const fields = [];
     const params = [];
     for (const k of ["name", "email", "phone", "company", "source", "notes"]) {
@@ -2967,6 +2969,27 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     params.push(req.params.id);
     const r = await pool.query(`UPDATE leads SET ${fields.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    // Rasto de quem/quando: mudança de etapa entra no histórico (canal Sistema)
+    if (req.body.status !== undefined && req.body.status !== cur.rows[0].status) {
+      try {
+        let staffId = null, staffName = null;
+        const tryIds = [req.user?.userId].filter(Boolean);
+        for (const sid of tryIds) {
+          try {
+            const u = await pool.query("SELECT id, name FROM users WHERE id = $1", [sid]);
+            if (u.rows[0]) { staffId = u.rows[0].id; staffName = u.rows[0].name; break; }
+          } catch {}
+        }
+        const motivo = req.body.motivoPerda ?? r.rows[0].motivo_perda;
+        const obs = `Etapa: ${cur.rows[0].status} → ${req.body.status}` +
+          (req.body.status === "perdido" && motivo ? ` · Motivo: ${motivo}` : "");
+        await pool.query(
+          `INSERT INTO lead_contacts (id, lead_id, staff_id, staff_name, canal, resultado, proximo_passo, proximo_contato, observacao)
+           VALUES ($1,$2,$3,$4,'Sistema','Mudança de etapa',NULL,$5,$6)`,
+          [crypto.randomUUID(), req.params.id, staffId, staffName, r.rows[0].proximo_contato, obs]
+        );
+      } catch {}
+    }
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });

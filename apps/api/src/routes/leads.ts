@@ -11,8 +11,8 @@ const router = Router();
 
 const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"] as const;
 // Selects fixos — funcionário seleciona, não digita (paridade standalone-server + App.tsx)
-export const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail"] as const;
-export const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido"] as const;
+export const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail", "Sistema"] as const;
+export const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido", "Mudança de etapa"] as const;
 export const LEAD_PASSOS = ["Contactar amanhã", "Contactar em 3 dias", "Contactar em 7 dias", "Sem próximo contacto", "Agendar visita"] as const;
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve ser YYYY-MM-DD");
@@ -335,6 +335,28 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
       .set(patch)
       .where(eq(leadsTable.id, req.params.id as string))
       .returning();
+
+    // Rasto de quem/quando: mudança de etapa entra no histórico (canal Sistema)
+    if (req.body.status && req.body.status !== (existing as any).status) {
+      try {
+        let staffId: string | null = null;
+        let staffName: string | null = null;
+        const uid = (req.user as any)?.userId;
+        if (uid && uid !== "api-key") {
+          const u = await db.query.usersTable.findFirst({ where: eq(usersTable.id, uid) });
+          if (u) { staffId = u.id; staffName = u.name; }
+        }
+        const obs = `Etapa: ${(existing as any).status} → ${req.body.status}` +
+          (req.body.status === "perdido" && (req.body.motivoPerda ?? (lead as any).motivoPerda)
+            ? ` · Motivo: ${req.body.motivoPerda ?? (lead as any).motivoPerda}` : "");
+        await db.insert(leadContactsTable).values({
+          leadId: req.params.id as string, staffId, staffName,
+          canal: "Sistema", resultado: "Mudança de etapa",
+          proximoPasso: null, proximoContato: (lead as any).proximoContato ?? null,
+          observacao: obs,
+        } as any);
+      } catch { /* histórico nunca bloqueia o PATCH */ }
+    }
 
     res.json({ data: await withStats(lead) });
   } catch (err) {
