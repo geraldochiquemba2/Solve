@@ -243,7 +243,7 @@ function mapApiCustomer(c: any): Customer {
 
 const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: string; label: string; icon: any }> }> = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
-  { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
+  { label: 'Operação comercial', items: [{ href: '/admin/meu-progresso', label: 'Meu Progresso', icon: TrendingUp }, { href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
    { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
   { label: 'Governação', roles: ['administrador', 'gestor'], items: [{ href: '/admin/equipa', label: 'Equipa', icon: Users }, { href: '/admin/utilizadores', label: 'Utilizadores', icon: ShieldCheck }] },
@@ -317,8 +317,8 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: { lab
 function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClose: () => void; auditCount?: number; userRole?: string }) {
   const [location] = useLocation();
   const { logout } = useAuth();
-  // Comercial vê só Clientes + Leads; Governação só admin/gestor.
-  const COMERCIAL_HREFS = ['/admin/leads', '/admin/pipeline', '/admin/clientes'];
+  // Comercial vê só o seu painel + Clientes + Leads; Governação só admin/gestor.
+  const COMERCIAL_HREFS = ['/admin/meu-progresso', '/admin/leads', '/admin/pipeline', '/admin/clientes'];
   const visibleGroups = navGroups
     .filter((g) => !g.roles || (userRole ? g.roles.includes(userRole) : true))
     .map((g) => ({ ...g, items: userRole === 'comercial' ? g.items.filter((i) => COMERCIAL_HREFS.includes(i.href)) : g.items }))
@@ -410,13 +410,13 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
 </div></>;
 }
 
-function StaffSelect({ value, onChange, staff, onStaffCreated }: { value: string; onChange: (id: string) => void; staff: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void> }) {
+function StaffSelect({ value, onChange, staff, onStaffCreated, allowCreate = true, readOnly = false }: { value: string; onChange: (id: string) => void; staff: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void>; allowCreate?: boolean; readOnly?: boolean }) {
   const [adding, setAdding] = useState(false);
   const [nName, setNName] = useState(''); const [nEmail, setNEmail] = useState(''); const [nRole, setNRole] = useState('comercial');
   const [nMsg, setNMsg] = useState(''); const [nBusy, setNBusy] = useState(false);
   const known = (staff ?? []).some((s) => s.id === value);
   const pick = (v: string) => {
-    if (v === '__new__') { setNMsg(''); setAdding(true); return; }
+    if (v === '__new__') { if (!allowCreate) return; setNMsg(''); setAdding(true); return; }
     setAdding(false); onChange(v);
   };
   const create = async () => {
@@ -441,13 +441,13 @@ function StaffSelect({ value, onChange, staff, onStaffCreated }: { value: string
     setNBusy(false);
   };
   return <div style={{ display: 'grid', gap: '.4rem' }}>
-    <label><span className="form-label">Responsável</span><select className="select" style={{ width: '100%' }} value={known ? value : (value ? value : '')} onChange={(e) => pick(e.target.value)}><option value="">—</option>{(staff ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}{value && !known ? <option value={value}>{value}</option> : null}<option value="__new__">＋ Adicionar responsável…</option></select></label>
-    {adding ? <div className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .7)', padding: '.6rem', display: 'grid', gap: '.4rem' }}><input className="input" style={{ width: '100%' }} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="Nome completo *" /><input className="input" style={{ width: '100%' }} value={nEmail} onChange={(e) => setNEmail(e.target.value)} placeholder="Email *" type="email" /><select className="select" style={{ width: '100%' }} value={nRole} onChange={(e) => setNRole(e.target.value)}><option value="comercial">Comercial</option><option value="gestor">Gestor</option><option value="financeiro">Financeiro</option><option value="operacional">Operacional</option><option value="administrador">Administrador</option></select><div style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => { setAdding(false); setNMsg(''); }} style={{ flex: 1 }}>Cancelar</button><button className="btn-primary" onClick={create} disabled={nBusy} style={{ flex: 1 }}><Check size={14} /> {nBusy ? 'A criar…' : 'Criar'}</button></div></div> : null}
+    <label><span className="form-label">Responsável</span><select className="select" style={{ width: '100%' }} value={known ? value : (value ? value : '')} onChange={(e) => pick(e.target.value)} disabled={readOnly}>{readOnly ? null : <option value="">—</option>}{(staff ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}{value && !known ? <option value={value}>{value}</option> : null}{allowCreate && !readOnly ? <option value="__new__">＋ Adicionar responsável…</option> : null}</select></label>
+    {adding && allowCreate ? <div className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .7)', padding: '.6rem', display: 'grid', gap: '.4rem' }}><input className="input" style={{ width: '100%' }} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="Nome completo *" /><input className="input" style={{ width: '100%' }} value={nEmail} onChange={(e) => setNEmail(e.target.value)} placeholder="Email *" type="email" /><select className="select" style={{ width: '100%' }} value={nRole} onChange={(e) => setNRole(e.target.value)}><option value="comercial">Comercial</option><option value="gestor">Gestor</option><option value="financeiro">Financeiro</option><option value="operacional">Operacional</option><option value="administrador">Administrador</option></select><div style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => { setAdding(false); setNMsg(''); }} style={{ flex: 1 }}>Cancelar</button><button className="btn-primary" onClick={create} disabled={nBusy} style={{ flex: 1 }}><Check size={14} /> {nBusy ? 'A criar…' : 'Criar'}</button></div></div> : null}
     {nMsg ? <div style={{ fontSize: '.72rem' }}>{nMsg}</div> : null}
   </div>;
 }
 
-function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated }: { lead: Lead; staff: Array<{ id: string; name: string }>; onClose: () => void; onChanged?: () => void; onStaffCreated?: () => void | Promise<void> }) {
+function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated, allowCreate = true, readOnlyOwner = false }: { lead: Lead; staff: Array<{ id: string; name: string }>; onClose: () => void; onChanged?: () => void; onStaffCreated?: () => void | Promise<void>; allowCreate?: boolean; readOnlyOwner?: boolean }) {
   const apiEstado = (TRACK_LABEL_TO_API[lead.status] || LEAD_PT_TO_API[lead.status] || lead.statusApi || 'novo_lead');
   // "Nova" só existe para quem ainda não saiu dela (regra de sentido único, ver
   // também a guarda do servidor no PATCH).
@@ -520,7 +520,7 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated }: { lead: 
       <div>
         <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Ficha</div>
         <div className="form-grid">
-          <StaffSelect value={fResp} onChange={setFResp} staff={staff} onStaffCreated={onStaffCreated} />
+          <StaffSelect value={fResp} onChange={setFResp} staff={staff} onStaffCreated={onStaffCreated} allowCreate={allowCreate} readOnly={readOnlyOwner} />
           <label><span className="form-label">Estado</span><select className="select" data-testid="select-ficha-status" style={{ width: '100%' }} value={fEstado} onChange={(e) => setFEstado(e.target.value)} title={podeVoltar ? 'Muda a etapa da lead' : 'Uma lead que já saiu de «Nova» não volta atrás. Registe o contacto.'}>{TRACK_FICHA_OPTS.map((o) => <option key={o} disabled={o === 'Nova' && !podeVoltar}>{o}</option>)}</select></label>
           <FormField label="Produto / serviço de interesse" value={fProd} onChange={setFProd} placeholder="Ex.: Plano Mensal" />
           <label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={fProx} onChange={(e) => setFProx(e.target.value)} /></label>
@@ -724,6 +724,10 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
   const chegouAgora = (l: Lead) => aRecem.has(l.id);
   const createMut = useCreateLead(); const updateMut = useUpdateLead();
   const qc = useQueryClient();
+  const { user: me } = useAuth();
+  const meId = (me as any)?.id as string | undefined;
+  const meRole = String((me as any)?.role || '').toLowerCase();
+  const canAddStaff = meRole === 'administrador' || meRole === 'gestor';
   const usersQ = useListUsersAll();
   const staff: Array<{ id: string; name: string }> = ((usersQ.data as any)?.data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
   const staffName = (id: string) => staff.find((s) => s.id === id)?.name || id || '—';
@@ -992,7 +996,7 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
               </select>
             </td>
             <td data-label="Responsável">
-              <select className="select lead-owner-select" data-testid={`select-lead-owner-${l.id}`} value={l.owner || ''} onChange={e => mudarResponsavel(l, e.target.value)} aria-label={`Responsável por ${l.name}`}>
+              <select className="select lead-owner-select" data-testid={`select-lead-owner-${l.id}`} value={l.owner || ''} onChange={e => mudarResponsavel(l, e.target.value)} aria-label={`Responsável por ${l.name}`} disabled={!canAddStaff} title={canAddStaff ? undefined : 'Só administrador/gestor altera o responsável'}>
                 <option value="">Sem responsável</option>
                 {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -1011,8 +1015,8 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
         </table>
       </div>}
     </Section>
-    {ficha && <LeadFicha lead={ficha} staff={staff} onClose={() => setFicha(null)} onChanged={reloadAll} onStaffCreated={() => { usersQ.refetch(); }} />}
-    {open && <LeadModal initial={editing} onClose={() => setOpen(false)} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} />}
+    {ficha && <LeadFicha lead={ficha} staff={staff} onClose={() => setFicha(null)} onChanged={reloadAll} onStaffCreated={() => { usersQ.refetch(); }} allowCreate={canAddStaff} readOnlyOwner={!canAddStaff} />}
+    {open && <LeadModal initial={editing} onClose={() => setOpen(false)} onSave={handleSave} userName={userName} staff={staff} onStaffCreated={() => { usersQ.refetch(); }} currentUserId={meId} allowCreate={canAddStaff} readOnlyOwner={!canAddStaff} />}
   </>;
 }
 
@@ -1052,14 +1056,14 @@ function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () =>
   <Section title="No CRM (Fit90)" note={`${filtered.length} registos`}>{filtered.length === 0 ? <EmptyState title={q ? 'Sem resultados' : 'Nenhum cadastro Fit90'} text={q ? 'Tenta outra pesquisa.' : 'Os leads submetidos na landing Fit90 aparecerão aqui automaticamente.'} /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Nome</th><th>WhatsApp</th><th>Email</th><th>Valor estimado</th><th>Etapa</th><th /></tr></thead><tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-fit90-${l.id}`}><td className="mono" style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{l.code || '—'}</td><td style={{ fontWeight: 600 }}>{l.name || '—'}</td><td>{l.phone ? <a href={wa(l.phone)} target="_blank" rel="noreferrer" className="btn-quiet" data-testid={`link-whatsapp-${l.id}`}><MessageCircle size={13} style={{ verticalAlign: 'middle' }} /> {l.phone}</a> : '—'}</td><td style={{ fontSize: '.75rem' }}>{l.email || '—'}</td><td className="mono" style={{ fontSize: '.75rem' }}>{l.value ? money(l.value) : '—'}</td><td><Status tone={fitTrack(l) === 'Convertida' ? 'good' : fitTrack(l) === 'Perdida' ? 'danger' : 'neutral'}>{fitTrack(l)}</Status></td><td>{fitTrack(l) === 'Nova' ? <button className="btn-quiet" data-testid={`button-contactar-${l.id}`} onClick={() => move(l)}><PhoneCall size={13} style={{ verticalAlign: 'middle' }} /> Marcar contacto</button> : <span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>Em acompanhamento</span>}</td></tr>)}</tbody></table></div>}</Section></>;
 }
 
-function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void> }) {
+function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated, currentUserId, allowCreate = true, readOnlyOwner = false }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void>; currentUserId?: string; allowCreate?: boolean; readOnlyOwner?: boolean }) {
   const [name, setName] = useState(initial?.name ?? ''); const [company, setCompany] = useState(initial?.company ?? ''); const [email, setEmail] = useState(initial?.email ?? ''); const [source, setSource] = useState(initial?.source ?? 'Website');
   const [phone, setPhone] = useState(initial?.phone ?? ''); const [zap, setZap] = useState(initial?.whatsapp ?? ''); const [produto, setProduto] = useState(initial?.produtoInteresse ?? '');
   const [estado, setEstado] = useState(TRACK_PT[(initial as any)?.statusApi ?? ''] || initial?.status || TRACK_FICHA_OPTS[0]);
-  const [resp, setResp] = useState(initial?.owner ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
+  const [resp, setResp] = useState(initial?.owner ?? currentUserId ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
   // "Nova" s\u00f3 fica dispon\u00edvel se a lead ainda l\u00e1 estiver (sentido \u00fanico).
   const estadoIsNova = !initial || (TRACK_LABEL_TO_API[estado] || LEAD_PT_TO_API[estado]) === 'novo_lead';
-  return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x} disabled={x === 'Nova' && !estadoIsNova}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={!name || !company} onClick={() => onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name, company, email, source, status: estado, owner: resp || initial?.owner || '', value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, proximoContato: prox || null, motivoPerda: motivo || null, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' })}><Check size={14} /> Guardar lead</button></div></div></Modal>;
+  return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x} disabled={x === 'Nova' && !estadoIsNova}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} allowCreate={allowCreate} readOnly={readOnlyOwner} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={!name || !company} onClick={() => onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name, company, email, source, status: estado, owner: resp || initial?.owner || '', value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, proximoContato: prox || null, motivoPerda: motivo || null, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' })}><Check size={14} /> Guardar lead</button></div></div></Modal>;
 }
 
 function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?: string; onChanged?: () => void }) {
@@ -1070,6 +1074,10 @@ function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?
   const [sort, setSort] = useState('Recentes');
   const updateMut = useUpdateLead(); const createMut = useCreateLead();
   const qc = useQueryClient();
+  const { user: mePipe } = useAuth();
+  const meIdPipe = (mePipe as any)?.id as string | undefined;
+  const meRolePipe = String((mePipe as any)?.role || '').toLowerCase();
+  const canAddStaffPipe = meRolePipe === 'administrador' || meRolePipe === 'gestor';
   const usersQ = useListUsersAll();
   const staff: Array<{ id: string; name: string }> = ((usersQ.data as any)?.data ?? []).map((u: any) => ({ id: u.id, name: u.name }));
   const { toast } = useToast();
@@ -1111,7 +1119,7 @@ function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?
     else createMut.mutate({ data }, { onSuccess: () => { setIsNew(false); onChanged?.(); } });
   };
   const cycleSort = () => setSort(sort === 'Recentes' ? 'Maior valor' : sort === 'Maior valor' ? 'Nome A-Z' : 'Recentes');
-  return <><PageHeader eyebrow="Comercial · Conversão" title="Pipeline" subtitle="Acompanhe cada oportunidade até  à decisão." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={cycleSort}><ListFilter size={14} /> Vista: {sort}</button><button className="btn-primary" onClick={() => { setSelected(null); setIsNew(true); }}><Plus size={14} /> Oportunidade</button></div>} /><div className="card" style={{ padding: '.8rem', marginBottom: '.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.8rem', flexWrap: 'wrap' }}><div><span className="eyebrow">Valor total em aberto</span><div className="mono" style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: '.25rem' }}>{money(leads.reduce((s, l) => s + l.value, 0))}</div></div><div style={{ display: 'flex', gap: '1.2rem', color: 'hsl(var(--muted-foreground))', fontSize: '.7rem' }}><span><strong style={{ color: 'hsl(var(--foreground))' }}>{leads.length}</strong> oportunidades</span><span><strong style={{ color: 'hsl(var(--foreground))' }}>{Math.round((leads.filter(l => etapaDe(l) === 'convertido').length / Math.max(leads.length, 1)) * 100)}%</strong> conversão</span></div></div><div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(180px, 1fr))`, gap: '.65rem', overflowX: 'auto', paddingBottom: '.45rem' }}>{stages.map((stage) => { const cards = sorted(leads.filter(l => l.status === stage)); return <div key={stage} style={{ minHeight: 410, background: 'hsl(var(--secondary) / .55)', border: '1px solid hsl(var(--border))', borderRadius: '.65rem', padding: '.65rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.7rem' }}><div style={{ fontSize: '.7rem', fontWeight: 700 }}>{stage}</div><span style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', borderRadius: 6, background: 'hsl(var(--card))', color: 'hsl(var(--muted-foreground))', fontSize: '.62rem' }}>{cards.length}</span></div><div style={{ display: 'grid', gap: '.5rem' }}>{cards.map(l => <div key={l.id} onClick={() => { setSelected(l); setIsNew(false); }} data-testid={`pipeline-card-${l.id}`} className={chegouAgora(l) ? 'lead-recem lead-recem-card' : undefined} style={{ textAlign: 'left', padding: '.65rem', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.5rem', cursor: 'pointer', boxShadow: 'none' }}><div style={{ fontWeight: 700, fontSize: '.74rem' }}>{l.name}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.15rem' }}>{l.company}</div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.5rem', fontSize: '.64rem' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{srcLabel(l.source)}</span><span className="mono">{money(l.value)}</span></div><select className="select" data-testid={`select-pipeline-stage-${l.id}`} style={{ marginTop: '.5rem', width: '100%', fontSize: '.66rem', padding: '.2rem .45rem' }} value={stage} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); move(l, e.target.value); }}>{stages.map(sOpt => <option key={sOpt} value={sOpt} disabled={sOpt === 'Nova' && !novaDisponivel(l)}>{sOpt}</option>)}</select></div>)}</div></div>; })}</div>{(isNew || selected) && <LeadModal initial={isNew ? null : selected} onClose={() => { setSelected(null); setIsNew(false); }} onSave={handleSave} userName={userName} />}</>;
+  return <><PageHeader eyebrow="Comercial · Conversão" title="Pipeline" subtitle="Acompanhe cada oportunidade até  à decisão." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={cycleSort}><ListFilter size={14} /> Vista: {sort}</button><button className="btn-primary" onClick={() => { setSelected(null); setIsNew(true); }}><Plus size={14} /> Oportunidade</button></div>} /><div className="card" style={{ padding: '.8rem', marginBottom: '.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.8rem', flexWrap: 'wrap' }}><div><span className="eyebrow">Valor total em aberto</span><div className="mono" style={{ fontWeight: 600, fontSize: '1.1rem', marginTop: '.25rem' }}>{money(leads.reduce((s, l) => s + l.value, 0))}</div></div><div style={{ display: 'flex', gap: '1.2rem', color: 'hsl(var(--muted-foreground))', fontSize: '.7rem' }}><span><strong style={{ color: 'hsl(var(--foreground))' }}>{leads.length}</strong> oportunidades</span><span><strong style={{ color: 'hsl(var(--foreground))' }}>{Math.round((leads.filter(l => etapaDe(l) === 'convertido').length / Math.max(leads.length, 1)) * 100)}%</strong> conversão</span></div></div><div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(180px, 1fr))`, gap: '.65rem', overflowX: 'auto', paddingBottom: '.45rem' }}>{stages.map((stage) => { const cards = sorted(leads.filter(l => l.status === stage)); return <div key={stage} style={{ minHeight: 410, background: 'hsl(var(--secondary) / .55)', border: '1px solid hsl(var(--border))', borderRadius: '.65rem', padding: '.65rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.7rem' }}><div style={{ fontSize: '.7rem', fontWeight: 700 }}>{stage}</div><span style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', borderRadius: 6, background: 'hsl(var(--card))', color: 'hsl(var(--muted-foreground))', fontSize: '.62rem' }}>{cards.length}</span></div><div style={{ display: 'grid', gap: '.5rem' }}>{cards.map(l => <div key={l.id} onClick={() => { setSelected(l); setIsNew(false); }} data-testid={`pipeline-card-${l.id}`} className={chegouAgora(l) ? 'lead-recem lead-recem-card' : undefined} style={{ textAlign: 'left', padding: '.65rem', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.5rem', cursor: 'pointer', boxShadow: 'none' }}><div style={{ fontWeight: 700, fontSize: '.74rem' }}>{l.name}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.15rem' }}>{l.company}</div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.5rem', fontSize: '.64rem' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{srcLabel(l.source)}</span><span className="mono">{money(l.value)}</span></div><select className="select" data-testid={`select-pipeline-stage-${l.id}`} style={{ marginTop: '.5rem', width: '100%', fontSize: '.66rem', padding: '.2rem .45rem' }} value={stage} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); move(l, e.target.value); }}>{stages.map(sOpt => <option key={sOpt} value={sOpt} disabled={sOpt === 'Nova' && !novaDisponivel(l)}>{sOpt}</option>)}</select></div>)}</div></div>; })}</div>{(isNew || selected) && <LeadModal initial={isNew ? null : selected} onClose={() => { setSelected(null); setIsNew(false); }} onSave={handleSave} userName={userName} currentUserId={meIdPipe} allowCreate={canAddStaffPipe} readOnlyOwner={!canAddStaffPipe} />}</>;
 }
 
 
@@ -1456,19 +1464,19 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const meta = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
   const fields = [
     ['Código da Transação', payment.code || payment.id || '—'],
-    ['Número da Referência', payment.referenceCode || raw.referenceCode || '—'],
+    ['Número da Referência', payment.referenceCode || raw.referenceCode || raw.reference_code || '—'],
     ['Entidade', payment.entity || raw.entity || meta.entity || '—'],
-    ['Código É-kwanza', payment.ekwanzaCode || raw.ekwanzaCode || '—'],
-    ['Código Operação É-kwanza', payment.ekwanzaOperationCode || raw.ekwanzaOperationCode || '—'],
-    ['Cliente', payment.customerName || '—'],
-    ['Telefone', payment.customerPhone || '—'],
-    ['Email', payment.customerEmail || '—'],
+    ['Código É-kwanza', payment.ekwanzaCode || raw.ekwanzaCode || raw.ekwanza_code || '—'],
+    ['Código Operação É-kwanza', payment.ekwanzaOperationCode || raw.ekwanzaOperationCode || raw.ekwanza_operation_code || '—'],
+    ['Cliente', payment.customerName || raw.customerName || raw.customer_name || '—'],
+    ['Telefone', payment.customerPhone || raw.customerPhone || raw.customer_phone || '—'],
+    ['Email', payment.customerEmail || raw.customerEmail || raw.customer_email || '—'],
     ['Montante', payment.amount ? money(payment.amount) : '—'],
-    ['Método', payment.method || '—'],
-    ['Estado', payment.state || '—'],
-    ['Data de Criação', fmtDate(payment.createdAt)],
-    ['Data de Pagamento', fmtDate(payment.paidAt)],
-    ['Expira em', fmtDate(payment.expiresAt)],
+    ['Método', payment.method || payment.methodLabel || '—'],
+    ['Estado', payment.state || raw.status || '—'],
+    ['Data de Criação', fmtDate(payment.createdAt || raw.createdAt || raw.created_at)],
+    ['Data de Pagamento', fmtDate(payment.paidAt || raw.paidAt || raw.paid_at)],
+    ['Expira em', fmtDate(payment.expiresAt || raw.expiresAt || raw.expires_at)],
   ];
   return <Modal title="Detalhes do Pagamento" subtitle={`Transação ${payment.code || payment.id}`} onClose={onClose}>
     <div style={{ display: 'grid', gap: '.55rem' }}>
@@ -1701,9 +1709,14 @@ function PaymentsPage() {
   const payments = useMemo(() =>
     paymentsData.map((p: any) => {
       const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
-      const phone = p.customer_phone || meta.phone || '';
-      const name = p.customer_name || '';
-      const shortRef = p.customer_id ? `#${String(p.customer_id).slice(0, 8)}` : '';
+      const phone = p.customer_phone ?? p.customerPhone ?? meta.phone ?? meta.customer_phone ?? '';
+      const name = p.customer_name ?? p.customerName ?? meta.customer_name ?? '';
+      const email = p.customer_email ?? p.customerEmail ?? meta.email ?? '';
+      const customerId = p.customer_id ?? p.customerId ?? '';
+      const shortRef = customerId ? `#${String(customerId).slice(0, 8)}` : '';
+      const paidAt = p.paid_at ?? p.paidAt ?? null;
+      const createdAt = p.created_at ?? p.createdAt ?? null;
+      const expiresAt = p.expires_at ?? p.expiresAt ?? null;
       return {
       id: p.code ?? p.id ?? '',
       customer: name || phone || shortRef || '—',
@@ -1712,16 +1725,17 @@ function PaymentsPage() {
       method: p.method ?? '',
       methodLabel: PAYMENT_METHOD_LABELS[p.method] || p.method || '—',
       state: p.status === 'confirmado' ? 'Confirmado' : p.status === 'pendente' ? 'Pendente' : p.status === 'em_atraso' ? 'Em atraso' : p.status === 'rejeitado' ? 'Cancelado' : p.status === 'reembolsado' ? 'Reembolsado' : p.status === 'expirado' ? 'Expirado' : p.status ?? '',
-      date: p.paid_at ?? p.created_at ?? '',
-      dateFmt: fmtPaymentDate(p.paid_at ?? p.created_at),
-      referenceCode: p.reference_code ?? '',
+      date: paidAt ?? createdAt ?? '',
+      dateFmt: fmtPaymentDate(paidAt ?? createdAt),
+      referenceCode: p.reference_code ?? p.referenceCode ?? '',
       entity: p.entity ?? '',
-      ekwanzaCode: p.ekwanza_code ?? '',
-      ekwanzaOperationCode: p.ekwanza_operation_code ?? '',
-      customerName: p.customer_name ?? '',
-      createdAt: p.created_at ?? '',
-      paidAt: p.paid_at ?? '',
-      expiresAt: p.expires_at ?? '',
+      ekwanzaCode: p.ekwanza_code ?? p.ekwanzaCode ?? '',
+      ekwanzaOperationCode: p.ekwanza_operation_code ?? p.ekwanzaOperationCode ?? '',
+      customerName: name ?? '',
+      customerEmail: email ?? '',
+      createdAt: createdAt ?? '',
+      paidAt: paidAt ?? '',
+      expiresAt: expiresAt ?? '',
       raw: p,
       };
     })
@@ -2200,6 +2214,39 @@ function UsersPage() {
     </div>
   </div></div>}</>;
 }
+function MeuProgressoPage({ leads, userName }: { leads: Lead[]; userName?: string }) {
+  const [, setLocation] = useLocation();
+  const { user: me } = useAuth();
+  const meId = (me as any)?.id as string | undefined;
+  const mine = useMemo(() => (meId ? leads.filter((l) => l.owner === meId) : []), [leads, meId]);
+  const trackOf = (l: Lead) => TRACK_PT[(l as any).statusApi || LEAD_PT_TO_API[l.status] || ''] || l.status;
+  const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const hoje = hojeISO();
+  const byStage = (s: string) => mine.filter((l) => trackOf(l) === s);
+  const conv = byStage('Convertida').length;
+  const taxa = mine.length > 0 ? Math.round((conv / mine.length) * 100) : 0;
+  const novos7 = mine.filter((l) => { try { return Date.now() - new Date(l.createdAt).getTime() < 7 * 86400000; } catch { return false; } }).length;
+  const semAcomp = mine.filter((l) => (l.contactosTotal ?? 0) === 0 || (!!l.proximoContato && l.proximoContato < hoje)).length;
+  const paraHoje = mine.filter((l) => l.proximoContato === hoje).length;
+  const emDia = mine.filter((l) => !!l.proximoContato && l.proximoContato >= hoje).length;
+  const proximos = [...mine].filter((l) => !!l.proximoContato).sort((a, b) => String(a.proximoContato).localeCompare(String(b.proximoContato))).slice(0, 8);
+  const recentes = [...mine].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
+  const firstName = (userName || 'Utilizador').split(' ')[0];
+  const funnel = TRACK_FICHA_OPTS.map((label) => ({ label, count: byStage(label).length }));
+  const maxFunnel = Math.max(...funnel.map((f) => f.count), 1);
+  return <><PageHeader eyebrow="Equipa · O meu trabalho" title={`O meu progresso, ${firstName}`} subtitle={`${mine.length} leads atribuídos a mim · ${taxa}% conversão`} action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => setLocation('/admin/pipeline')}><Filter size={14} /> Ver funil</button><button className="btn-primary" onClick={() => setLocation('/admin/leads')}><Plus size={14} /> Novo lead</button></div>} />
+  <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}>
+    <Metric label="Meus leads" value={String(mine.length)} note={`${novos7} novos nos últimos 7 dias`} onClick={() => setLocation('/admin/leads')} />
+    <Metric label="Convertidos" value={String(conv)} note={`${taxa}% taxa de conversão`} onClick={() => setLocation('/admin/pipeline')} />
+    <Metric label="Para hoje" value={String(paraHoje)} note="acompanhamentos com data de hoje" onClick={() => setLocation('/admin/leads')} />
+    <Metric label="Sem acompanhamento" value={String(semAcomp)} note="precisam de contacto" negative={semAcomp > 0} onClick={() => setLocation('/admin/leads')} />
+  </div>
+  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: '.8rem', marginBottom: '.8rem' }}>
+    <Section title="O meu funil" note="Por etapa, só os meus leads"><div style={{ display: 'grid', gap: '.5rem' }}>{funnel.map((f) => <div key={f.label} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600 }}>{f.label}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${f.count > 0 ? Math.max((f.count / maxFunnel) * 100, 5) : 0}%`, background: f.label === 'Convertida' ? 'hsl(155 41% 43%)' : f.label === 'Perdida' ? 'hsl(0 84% 60%)' : 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{f.count}</span></div>)}</div></Section>
+    <Section title="Próximos acompanhamentos" note={emDia > 0 ? `${emDia} agendados` : 'Nada agendado'}>{proximos.length === 0 ? <EmptyState title="Sem próximos passos" text="Abre a ficha do lead e regista o próximo contacto." action={<Link href="/admin/leads" className="btn-primary">Ver leads</Link>} /> : <div style={{ display: 'grid', gap: '.45rem' }}>{proximos.map((l) => <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.5rem .6rem', background: 'hsl(var(--secondary) / .5)', borderRadius: '.45rem' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: '.74rem' }}>{l.name}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{l.company} · {trackOf(l)}</div></div><span className="mono" style={{ fontSize: '.68rem', whiteSpace: 'nowrap' }}>{fmtDateShort(l.proximoContato)}</span></div>)}</div>}</Section>
+  </div>
+  <Section title="Leads recentes" note="Os últimos atribuídos a mim" action={<Link href="/admin/leads" className="btn-quiet">Ver todos</Link>}>{recentes.length === 0 ? <EmptyState title="Ainda sem leads" text="Quando um lead for atribuído a ti, aparece aqui." action={<Link href="/admin/leads" className="btn-primary">Criar lead</Link>} /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Nome</th><th>Etapa</th><th>Próx. contacto</th><th>Último contacto</th></tr></thead><tbody>{recentes.map((l) => <tr key={l.id}><td><div style={{ fontWeight: 700 }}>{l.name}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></td><td>{trackOf(l)}</td><td style={{ whiteSpace: 'nowrap' }}>{fmtDateShort(l.proximoContato)}</td><td style={{ whiteSpace: 'nowrap' }}>{l.ultimoContactoAt ? fmtDateShort(l.ultimoContactoAt) : '-'}</td></tr>)}</tbody></table></div>}</Section></>;
+}
 function EquipaPage({ leads }: { leads: Lead[] }) {
   const usersQ = useListUsersAll();
   const toggleMut = useToggleUser();
@@ -2467,11 +2514,11 @@ function CRM() {
   const userName = user?.name || 'Utilizador';
   const userRole = (user as any)?.role as string | undefined;
   const [location, setLocation] = useLocation();
-  // Comercial só entra em Clientes + Leads (tabela, funil e ficha) — o resto redireciona.
+  // Comercial só entra no seu painel + Clientes + Leads (tabela, funil e ficha) — o resto redireciona.
   useEffect(() => {
     if (userRole === 'comercial') {
-      const ok = ['/admin/leads', '/admin/pipeline', '/admin/clientes'].some((p) => location === p || location.startsWith(p + '/'));
-      if (!ok) setLocation('/admin/leads');
+      const ok = ['/admin/meu-progresso', '/admin/leads', '/admin/pipeline', '/admin/clientes'].some((p) => location === p || location.startsWith(p + '/'));
+      if (!ok) setLocation('/admin/meu-progresso');
     }
   }, [location, userRole]);
   const leadsQuery = useListLeads(undefined, { query: { refetchInterval: 300000 } });
@@ -2489,7 +2536,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso" component={() => <MeuProgressoPage leads={leads} userName={userName} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (
