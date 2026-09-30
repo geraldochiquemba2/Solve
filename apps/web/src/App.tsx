@@ -221,7 +221,7 @@ function mapApiCustomer(c: any): Customer {
 
 const navGroups = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
-  { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }, { href: '/admin/fit90-leads', label: 'Leads Fit90', icon: Smartphone }] },
+  { label: 'Operação comercial', items: [{ href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
    { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
 ];
