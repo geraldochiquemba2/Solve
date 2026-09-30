@@ -1710,10 +1710,11 @@ function EquipaPage({ leads }: { leads: Lead[] }) {
   const all = ((usersQ.data as any)?.data ?? []) as any[];
   const equipa = all.filter((u) => String(u.role || '').toLowerCase() === 'comercial');
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [iName, setIName] = useState(''); const [iEmail, setIEmail] = useState('');
+  const [iName, setIName] = useState(''); const [iPhone, setIPhone] = useState('');
   const [iMsg, setIMsg] = useState(''); const [inviting, setInviting] = useState(false);
+  const PASSE_PADRAO = '0987654321';
   const invite = async () => {
-    if (!iName.trim() || !iEmail.trim()) { setIMsg('Nome e email são obrigatórios'); return; }
+    if (!iName.trim() || !iPhone.trim()) { setIMsg('Nome e número são obrigatórios'); return; }
     setInviting(true);
     try {
       const token = localStorage.getItem('token');
@@ -1721,12 +1722,12 @@ function EquipaPage({ leads }: { leads: Lead[] }) {
       const res = await fetch(`${base}/api/v1/users/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ name: iName.trim(), email: iEmail.trim(), role: 'comercial' }),
+        body: JSON.stringify({ name: iName.trim(), phone: iPhone.trim(), role: 'comercial', password: PASSE_PADRAO }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.statusText);
-      setIMsg(`Acesso criado! Password temporária: ${json.data?.tempPassword || '—'}`);
-      setIName(''); setIEmail('');
+      setIMsg(`Acesso criado! Número: ${iPhone.trim()} · Passe padrão: ${PASSE_PADRAO}`);
+      setIName(''); setIPhone('');
       usersQ.refetch();
     } catch (e: any) { setIMsg('Erro: ' + (e.message || 'falha a criar')); }
     setInviting(false);
@@ -1735,8 +1736,8 @@ function EquipaPage({ leads }: { leads: Lead[] }) {
     const mine = leads.filter((l) => l.owner === id);
     return { total: mine.length, conv: mine.filter((l) => (l as any).statusApi === 'convertido').length };
   };
-  return <><PageHeader eyebrow="Governação · Equipa" title="Equipa comercial" subtitle="Utilizadores com acesso apenas a Clientes e Leads." action={<button className="btn-primary" onClick={() => { setIMsg(''); setInviteOpen(true); }}><Plus size={14} /> Adicionar comercial</button>} /><Section title="Comerciais" note={`${equipa.length} utilizadores`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Nome</th><th>Email</th><th>Leads</th><th>Convertidas</th><th>Estado</th><th /></tr></thead><tbody>{equipa.map((u) => { const s = stats(u.id); return <tr key={u.id}><td style={{ fontWeight: 700 }}>{u.name}</td><td style={{ fontSize: '.72rem' }}>{u.email}</td><td className="mono">{s.total}</td><td className="mono">{s.conv}</td><td><Status tone={u.active ? 'good' : 'warn'}>{u.active ? 'Activo' : 'Inactivo'}</Status></td><td><button className="btn-quiet" onClick={() => toggleMut.mutate(u.id, { onSuccess: () => usersQ.refetch() })}>{u.active ? 'Desactivar' : 'Activar'}</button></td></tr>; })}{equipa.length === 0 ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'hsl(var(--muted-foreground))', padding: '1.5rem' }}>Sem comerciais. Adiciona o primeiro.</td></tr> : null}</tbody></table></div></Section>
-  {inviteOpen && <Modal title="Adicionar comercial" subtitle="Acesso só a Clientes e Leads · password temporária" onClose={() => setInviteOpen(false)}><div style={{ display: 'grid', gap: '.6rem' }}><FormField label="Nome completo *" value={iName} onChange={setIName} placeholder="Nome completo" /><FormField label="Email *" value={iEmail} onChange={setIEmail} placeholder="email@..." type="email" />{iMsg ? <div style={{ fontSize: '.75rem' }}>{iMsg}</div> : null}<div style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={() => setInviteOpen(false)} style={{ flex: 1 }}>Fechar</button><button className="btn-primary" onClick={invite} disabled={inviting} style={{ flex: 1 }}><Check size={14} /> {inviting ? 'A criar…' : 'Criar acesso'}</button></div></div></Modal>}</>;
+  return <><PageHeader eyebrow="Governação · Equipa" title="Equipa comercial" subtitle="Utilizadores com acesso apenas a Clientes e Leads." action={<button className="btn-primary" onClick={() => { setIMsg(''); setInviteOpen(true); }}><Plus size={14} /> Adicionar comercial</button>} /><Section title="Comerciais" note={`${equipa.length} utilizadores`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Nome</th><th>Número</th><th>Leads</th><th>Convertidas</th><th>Estado</th><th /></tr></thead><tbody>{equipa.map((u) => { const s = stats(u.id); return <tr key={u.id}><td style={{ fontWeight: 700 }}>{u.name}</td><td style={{ fontSize: '.72rem' }} className="mono">{u.phone || '—'}</td><td className="mono">{s.total}</td><td className="mono">{s.conv}</td><td><Status tone={u.active ? 'good' : 'warn'}>{u.active ? 'Activo' : 'Inactivo'}</Status></td><td><button className="btn-quiet" onClick={() => toggleMut.mutate(u.id, { onSuccess: () => usersQ.refetch() })}>{u.active ? 'Desactivar' : 'Activar'}</button></td></tr>; })}{equipa.length === 0 ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'hsl(var(--muted-foreground))', padding: '1.5rem' }}>Sem comerciais. Adiciona o primeiro.</td></tr> : null}</tbody></table></div></Section>
+  {inviteOpen && <Modal title="Adicionar comercial" subtitle="Acesso só a Clientes e Leads · passe padrão 0987654321" onClose={() => setInviteOpen(false)}><div style={{ display: 'grid', gap: '.6rem' }}><FormField label="Nome completo *" value={iName} onChange={setIName} placeholder="Nome completo" /><FormField label="Número (login) *" value={iPhone} onChange={setIPhone} placeholder="Ex.: 943412688" type="tel" />{iMsg ? <div style={{ fontSize: '.75rem' }}>{iMsg}</div> : null}<div style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={() => setInviteOpen(false)} style={{ flex: 1 }}>Fechar</button><button className="btn-primary" onClick={invite} disabled={inviting} style={{ flex: 1 }}><Check size={14} /> {inviting ? 'A criar…' : 'Criar acesso'}</button></div></div></Modal>}</>;
 }
 function AuditPage() {
   const { data } = useListAuditLogs(undefined, { refetchInterval: 300000 });

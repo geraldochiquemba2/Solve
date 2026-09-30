@@ -2604,34 +2604,44 @@ app.get("/api/v1/users", requireAuth, async (req, res) => {
 
 app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { name, email, role } = req.body;
-    if (!name || !email) return res.status(400).json({ error: "Nome e email são obrigatórios" });
+    const { name, email, role, phone, password } = req.body;
+    if (!name || (!email && !phone)) return res.status(400).json({ error: "Nome e email ou número são obrigatórios" });
     // VULN-05/06: papel válido obrigatório (só admin chega aqui). Aceita qualquer capitalização.
     const INVITE_ROLES = ["administrador", "gestor", "comercial", "financeiro", "operacional"];
     const roleNorm = String(role || "comercial").toLowerCase();
     if (!INVITE_ROLES.includes(roleNorm)) {
       return res.status(400).json({ error: "Papel inválido" });
     }
+    const phoneNorm = phone ? String(phone).trim() : null;
+    // Sem email gera-se um interno único a partir do número (login faz-se pelo número).
+    const emailNorm = email ? String(email).trim() : `${String(phoneNorm).replace(/\D/g, "")}@equipa.crm`;
+    const dupE = await pool.query("SELECT id FROM users WHERE email = $1", [emailNorm]);
+    if (dupE.rows[0]) return res.status(409).json({ error: "Email já registado" });
+    if (phoneNorm) {
+      const dupP = await pool.query("SELECT id FROM users WHERE phone = $1", [phoneNorm]);
+      if (dupP.rows[0]) return res.status(409).json({ error: "Número já registado" });
+    }
     const cols = await usersColumns();
-    const tempPass = crypto.randomBytes(6).toString('hex');
+    const tempPass = password && String(password).length >= 8 ? String(password) : crypto.randomBytes(6).toString('hex');
     const hash = await bcrypt.hash(tempPass, SALT_ROUNDS);
-    const hasRole = cols.has("role"), hasPass = cols.has("password") || cols.has("password_hash");
+    const hasRole = cols.has("role"), hasPass = cols.has("password") || cols.has("password_hash"), hasPhone = cols.has("phone");
     const passCol = cols.has("password") ? "password" : "password_hash";
-    const extra = hasRole ? ", role" : "";
-    const extraVal = hasRole ? ", $4" : "";
-    const params = [name, email, hash];
+    const extra = (hasRole ? ", role" : "") + (hasPhone ? ", phone" : "");
+    const extraVal = (hasRole ? ", $4" : "") + (hasPhone ? `, $${4 + (hasRole ? 1 : 0)}` : "");
+    const params = [name, emailNorm, hash];
     if (hasRole) params.push(roleNorm);
+    if (hasPhone) params.push(phoneNorm);
     let row;
     if (hasPass) {
       const r = await pool.query(
-        `INSERT INTO users (name, email, ${passCol}${extra}) VALUES ($1, $2, $3${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}`,
+        `INSERT INTO users (name, email, ${passCol}${extra}) VALUES ($1, $2, $3${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}${hasPhone ? ", phone" : ""}`,
         params
       );
       row = r.rows[0];
     } else {
       const r = await pool.query(
-        `INSERT INTO users (name, email${extra}) VALUES ($1, $2${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}`,
-        hasRole ? [name, email, roleNorm] : [name, email]
+        `INSERT INTO users (name, email${extra}) VALUES ($1, $2${extraVal}) RETURNING id, name, email${hasRole ? ", role" : ""}${hasPhone ? ", phone" : ""}`,
+        hasRole || hasPhone ? [name, emailNorm, ...(hasRole ? [roleNorm] : []), ...(hasPhone ? [phoneNorm] : [])] : [name, emailNorm]
       );
       row = r.rows[0];
     }
