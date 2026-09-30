@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
@@ -43,6 +43,10 @@ export const leadsTable = pgTable("leads", {
   whatsapp: varchar("whatsapp", { length: 50 }),
   produtoInteresse: varchar("produto_interesse", { length: 255 }),
   proximoContato: date("proximo_contato"),
+  // Data do último contacto. É a fonte única do que o gestor lê em "Último
+  // contacto": nasce do histórico (registo de contactos) mas passa a ser
+  // editável no calendário, sem inventar um contacto que não aconteceu.
+  ultimoContatoAt: date("ultimo_contato_at"),
   motivoPerda: varchar("motivo_perda", { length: 255 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -60,6 +64,24 @@ export const leadContactsTable = pgTable("lead_contacts", {
   observacao: text("observacao"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Uma pessoa pode demonstrar interesse em várias campanhas sem ser outros clientes:
+// a lead é única (identificada por email/whatsapp/telefone) e cada campanha/interesse
+// novo que volta da mesma pessoa é registado aqui, preservando o histórico.
+// `leads.source` continua a ser a campanha principal (a primeira). Não apagar leads:
+// mover entre campanhas/estados nunca remove o rasto.
+export const leadCampaignsTable = pgTable(
+  "lead_campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id").notNull().references(() => leadsTable.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 100 }).notNull(),
+    produtoInteresse: varchar("produto_interesse", { length: 255 }),
+    externalId: varchar("external_id", { length: 100 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.leadId, t.source)],
+);
 
 export const customersTable = pgTable("customers", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -274,4 +296,16 @@ export const paymentsRelations = relations(paymentsTable, ({ one }) => ({
 
 export const customersRelations = relations(customersTable, ({ many }) => ({
   payments: many(paymentsTable),
+}));
+
+export const leadsRelations = relations(leadsTable, ({ many }) => ({
+  contacts: many(leadContactsTable),
+  campaigns: many(leadCampaignsTable),
+}));
+
+export const leadCampaignsRelations = relations(leadCampaignsTable, ({ one }) => ({
+  lead: one(leadsTable, {
+    fields: [leadCampaignsTable.leadId],
+    references: [leadsTable.id],
+  }),
 }));

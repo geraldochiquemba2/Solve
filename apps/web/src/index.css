@@ -550,6 +550,9 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .table-wrap { overflow:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
 /* Tabelas com 1ª coluna fixa (nome) + resto com scroll horizontal */
 .table-wrap.sticky-first th:first-child, .table-wrap.sticky-first td:first-child { position:sticky; left:0; background:hsl(var(--card)); z-index:1; box-shadow:1px 0 0 hsl(var(--border)); }
+/* A primeira coluna fica opaca, por isso precisa de acompanhar o hover da linha
+   senão o nome fica branco enquanto o resto da linha acende. */
+.table-wrap.sticky-first tbody tr:hover td:first-child { background:hsl(var(--secondary) / .55); }
 /* Grelha auto (cartões de cursos): 240px desktop, compacta em telemóvel */
 .auto-grid { display:grid; gap:.8rem; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); }
 .data-table { width:100%; border-collapse:collapse; font-size:.79rem; }
@@ -587,6 +590,105 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .metric-compact .metric { padding:.55rem .7rem; min-height:0; }
 .metric-compact .metric-value { font-size:1.15rem; margin-top:.15rem; }
 .metric-compact .metric-note { margin-top:.15rem; }
+/* Seta do select: `appearance:none` impedia o UA de a desenhar, mas o padding
+   direito de .select (1.8rem) continuava reservado — 29px mortos em todos os
+   selects. Um traço SVG em background-image preenche esse espaço. */
+.select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' viewBox='0 0 9 5'%3E%3Cpath d='M1 1l3.5 3L8 1' fill='none' stroke='%2363636e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .6rem center; background-size:9px 5px; }
+.dark .select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' viewBox='0 0 9 5'%3E%3Cpath d='M1 1l3.5 3L8 1' fill='none' stroke='%23999999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Caixa da Etapa na tabela de leads. Controlo dentro de uma linha densa: material
+   plano, alinhado com .input/.select (mesma borda e raio) para a linha ler como um
+   só plano — a elevação pertence ao cartão da ficha, não a cada select. Sem
+   box-shadow e com `background-color` (e não o atalho `background`) para não
+   apagar a seta herdada de .select. */
+.stage-select { background-color:hsl(var(--card)); border:1px solid hsl(var(--input)); border-radius:.5rem; padding:.3rem 1.5rem .3rem .55rem; font-size:.7rem; font-weight:600; }
+.stage-select:hover { border-color:hsl(var(--muted-foreground) / .45); }
+.stage-select:focus { border-color:hsl(var(--ring)); box-shadow:0 0 0 3px hsl(var(--ring) / .18); }
+/* Select do responsável: mesmas metricas do select da etapa (28px vs 39px de
+   altura quando faltava a regra, ou seja, tres controlados diferentes na mesma
+   linha). max-width para um nome de funcionário não segurar a coluna. */
+.lead-owner-select { background-color:hsl(var(--card)); border:1px solid hsl(var(--input)); border-radius:.5rem; padding:.3rem 1.5rem .3rem .55rem; font-size:.7rem; font-weight:500; max-width:9.5rem; text-overflow:ellipsis; }
+.lead-owner-select:hover { border-color:hsl(var(--muted-foreground) / .45); }
+.lead-owner-select:focus { border-color:hsl(var(--ring)); box-shadow:0 0 0 3px hsl(var(--ring) / .18); }
+
+/* ── Módulo de Leads: base (sem pastas por etapa) ─────────────────────────────
+   A navegação por etapa saiu: o cabeçalho, os KPIs e a tabela mostram a base
+   inteira, e a etapa filtra-se nos KPIs ou no select acima da tabela. O card da
+   base mantém o contador (sai sempre do mesmo array que alimenta a tabela). */
+.lead-pastas { display:flex; gap:.4rem; overflow-x:auto; padding-bottom:.2rem; margin-bottom:.6rem; scrollbar-width:thin; }
+.lead-pasta { display:inline-flex; align-items:center; gap:.4rem; flex:0 0 auto; padding:.32rem .62rem; border:1px solid hsl(var(--input)); border-radius:2rem; background:hsl(var(--card)); color:hsl(var(--muted-foreground)); font-size:.72rem; font-weight:600; white-space:nowrap; }
+.lead-pasta:hover { border-color:hsl(var(--muted-foreground) / .45); color:hsl(var(--foreground)); }
+.lead-pasta:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:2px; }
+.lead-pasta.is-active { border-color:hsl(var(--accent)); background:hsl(var(--accent) / .09); color:hsl(var(--accent)); }
+.lead-pasta-n { display:inline-grid; place-items:center; min-width:1.3rem; height:1.15rem; padding:0 .3rem; border-radius:2rem; background:hsl(var(--secondary)); color:hsl(var(--foreground)); font-size:.66rem; font-variant-numeric:tabular-nums; }
+.lead-pasta.is-active .lead-pasta-n { background:hsl(var(--accent)); color:hsl(var(--accent-foreground)); }
+/* Etapa fixa quando estamos dentro de uma pasta: substitui o select de etapa,
+   que ficaria redundante (a URL já é a etapa) e poderia contradizê-la. */
+.lead-etapa-fixa { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem .6rem; border:1px solid hsl(var(--accent) / .4); border-radius:.5rem; background:hsl(var(--accent) / .08); color:hsl(var(--accent)); font-size:.7rem; font-weight:600; }
+/* Filtros activos: o que está a reduzir a lista, removível em um clique. Sem isto
+   a vista "Nenhum lead corresponde aos filtros" não diz o que filtrou. */
+.lead-filtros-activos { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; margin:-.2rem 0 .6rem; font-size:.7rem; }
+.lead-filtros-activos > span { color:hsl(var(--muted-foreground)); font-weight:600; }
+.lead-filtros-activos button { padding:.18rem .45rem; border:1px solid hsl(var(--input)); border-radius:2rem; background:hsl(var(--secondary) / .5); color:hsl(var(--foreground)); font-size:.68rem; }
+.lead-filtros-activos button:hover { border-color:hsl(var(--muted-foreground) / .5); }
+.lead-filtros-activos button.is-limpar { border-color:hsl(var(--accent) / .5); color:hsl(var(--accent)); font-weight:600; }
+/* Aviso de base truncada pelo limite do servidor: diz o que falta em vez de
+   deixar as contagens das pastas a fingirem que são o total. */
+.lead-aviso { display:flex; gap:.45rem; align-items:flex-start; margin-bottom:.6rem; padding:.5rem .62rem; border:1px solid hsl(var(--destructive) / .35); border-radius:.5rem; background:hsl(var(--destructive) / .07); color:hsl(var(--foreground)); font-size:.72rem; line-height:1.45; }
+/* Datas de contacto editáveis na própria tabela: o calendário nativo do browser
+   (sem dependências novas) numa caixa compacta, com o mesmo peso visual da etapa. */
+.lead-datas { white-space:nowrap; }
+/* Contacto: o número é o alvo principal (liga-se com um clique). O WhatsApp fica
+   ao lado como segundavia, porque nem sempre o número de telemóvel é o de WhatsApp. */
+.lead-contacto { display:flex; align-items:center; gap:.4rem; justify-content:flex-end; }
+.lead-contacto-num { font-size:.72rem; font-variant-numeric:tabular-nums; color:hsl(var(--foreground)); text-decoration:none; border-bottom:1px solid hsl(var(--accent) / .35); }
+a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(var(--accent)); }
+.lead-contacto-alt { font-size:.63rem; font-variant-numeric:tabular-nums; color:hsl(var(--muted-foreground)); text-decoration:none; }
+.lead-contacto-alt:hover { color:hsl(var(--foreground)); text-decoration:underline; }
+.input-data { padding:.28rem .4rem; font-size:.7rem; font-variant-numeric:tabular-nums; color:hsl(var(--foreground)); }
+.input-data:hover { border-color:hsl(var(--muted-foreground) / .45); }
+.input-data::-webkit-datetime-edit { color:hsl(var(--muted-foreground)); }
+.input-data::-webkit-calendar-picker-indicator { cursor:pointer; opacity:.55; }
+.input-data:hover::-webkit-calendar-picker-indicator { opacity:1; }
+/* ── Módulo 6: a lead que chega é o seu próprio card que se destaca ────────────
+   Não há pop-up nem notificação: a lead entra na lista e é a própria linha (na
+   tabela) ou o próprio card (no funil) que acende, uma vez, e sossega. O destaque
+   acaba sozinho para a linha voltar ao normal — fica legível, não grita. */
+.lead-recem { animation:leadChegada 1.5s cubic-bezier(.2,.9,.3,1) both; }
+.lead-recem td:first-child { box-shadow:inset 3px 0 0 hsl(var(--accent)); }
+.lead-recem-card { border-color:hsl(var(--accent) / .5) !important; box-shadow:0 0 0 3px hsl(var(--accent) / .12) !important; }
+.lead-recem-selo { display:inline-block; margin-left:.35rem; padding:.02rem .3rem; border-radius:2rem; background:hsl(var(--accent) / .14); color:hsl(var(--accent)); font-size:.58rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; vertical-align:middle; }
+@keyframes leadChegada {
+  0% { background:hsl(var(--accent) / .18); }
+  60% { background:hsl(var(--accent) / .12); }
+  100% { background:transparent; }
+}
+@keyframes leadChegadaCartao {
+  0% { transform:translate3d(0,-.35rem,0) scale(.985); }
+  100% { transform:none; }
+}
+.lead-recem-card { animation:leadChegadaCartao .45s cubic-bezier(.2,.9,.3,1.15) both, leadChegada 1.5s ease-out both; }
+/* Alvos de toque. A linha é densa de propósito no rato (10 colunas não cabem),
+   mas em ecrã táctil os mesmos controlos mediam 28px de altura e 17x27 nos botões
+   de acao — abaixo do mínimo confortável. Só com ponteiro grosseiro. */
+@media (pointer:coarse) {
+  .stage-select, .lead-owner-select, .input-data, .cell-notes { min-height:2.4rem; font-size:.78rem; }
+  .data-table .btn-quiet { min-width:2.5rem; min-height:2.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { .lead-recem, .lead-recem-card { animation:none; } }
+/* Campo Observações na mesma tabela. A tabela de leads tem 10 colunas e não cabe
+   em 1440px — o scroll horizontal do .table-wrap trata disso, e sticky-first
+   mantém o nome visível enquanto se percorre. O campo fica no mínimo legível e o
+   texto completo lê-se no title (tooltip) enquanto a nota for curta. */
+.cell-notes-wrap { position:relative; display:block; }
+.cell-notes { padding:.32rem .5rem; font-size:.7rem; min-width:8.5rem; }
+.cell-notes.is-error { border-color:hsl(var(--destructive)); box-shadow:0 0 0 3px hsl(var(--destructive) / .15); }
+/* Estado da gravação, sem reservar espaço: o selo aparece sobre a margem
+   direita do campo e desaparece sozinho, para não oscilar a altura da linha. */
+.cell-notes-flag { position:absolute; right:3px; top:50%; transform:translateY(-50%); width:14px; height:14px; display:grid; place-items:center; border-radius:4px; font-size:.6rem; font-weight:700; line-height:1; background:hsl(var(--card)); pointer-events:none; }
+.cell-notes-flag.a-guardar { color:hsl(var(--muted-foreground)); }
+.cell-notes-flag.guardado { color:hsl(152 62% 30%); }
+.cell-notes-flag.erro { color:hsl(var(--destructive)); background:hsl(var(--destructive) / .12); }
+.dark .cell-notes-flag.guardado { color:hsl(152 60% 60%); }
 .section-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
 .section-title { font-family:'Space Grotesk', sans-serif; font-size:.92rem; font-weight:700; letter-spacing:-.01em; }
 .section-note { color:hsl(var(--muted-foreground)); font-size:.72rem; margin-top:.2rem; }
@@ -653,6 +755,23 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
   .page-actions > * { flex:1 1 auto; }
   .data-table { font-size:.72rem; }
   .data-table th, .data-table td { padding:.55rem .6rem; }
+  /* Base de leads no telemóvel: cada linha vira um cartão e o scroll lateral
+     deixa de ser preciso. Os rótulos saem de data-label. */
+  .lead-cartoes { overflow-x:visible; }
+  .lead-cartoes thead { display:none; }
+  .lead-cartoes .data-table, .lead-cartoes .data-table tbody, .lead-cartoes .data-table tr, .lead-cartoes .data-table td { display:block; width:100%; }
+  .lead-cartoes .data-table tr { border:1px solid hsl(var(--border)); border-radius:.7rem; background:hsl(var(--card)); padding:.55rem .7rem; margin-bottom:.55rem; }
+  .lead-cartoes .data-table tr:hover { background:hsl(var(--card)); }
+  .lead-cartoes .data-table td { border-bottom:1px solid hsl(var(--border) / .55); padding:.45rem 0; display:flex; align-items:center; gap:.7rem; justify-content:space-between; text-align:right; }
+  .lead-cartoes .data-table tr td:last-child { border-bottom:0; }
+  .lead-cartoes .data-table td::before { content:attr(data-label); flex:0 0 42%; text-align:left; font-size:.6rem; letter-spacing:.07em; text-transform:uppercase; font-weight:700; color:hsl(var(--muted-foreground)); }
+  .lead-cartoes .data-table td.sem-rotulo::before { content:none; }
+  .lead-cartoes .data-table td > * { min-width:0; }
+  .lead-cartoes .data-table td:first-child { position:static; box-shadow:none; text-align:left; border-bottom:1px solid hsl(var(--border)); padding-bottom:.5rem; margin-bottom:.1rem; }
+  .lead-cartoes .data-table td:first-child::before { content:none; }
+  .lead-cartoes .data-table .stage-select, .lead-cartoes .data-table .lead-owner-select, .lead-cartoes .data-table .input-data { width:auto; min-width:9.5rem; }
+  .lead-cartoes .lead-contacto { justify-content:flex-end; width:100%; }
+  .lead-cartoes .data-table .cell-notes { width:100%; }
   /* Cademi em telemóvel: cartões de curso em 1 coluna, filtro ocupa a linha toda */
   .auto-grid { grid-template-columns:1fr !important; gap:.6rem; }
   .section-header .select { flex:1 1 100%; }

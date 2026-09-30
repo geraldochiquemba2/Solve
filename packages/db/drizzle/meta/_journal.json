@@ -29,6 +29,20 @@
       "when": 1791148800000,
       "tag": "0003_user_login_count",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790419200000,
+      "tag": "0004_lead_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790419200000,
+      "tag": "0005_leads_etapas_ultimo_contato",
+      "breakpoints": true
     }
   ]
 }

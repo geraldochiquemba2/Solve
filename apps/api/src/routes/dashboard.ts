@@ -51,11 +51,13 @@ router.get("/dashboard/stats", authenticate, async (req, res, next) => {
     const inactiveCustomers = totalCustomers - activeCustomers;
     const totalLeads = leadsByStatus.reduce((sum, r) => sum + r.count, 0);
     const leadsByStatusMap: Record<string, number> = {
-      novo_lead: 0, contacto: 0, qualificado: 0, proposta: 0,
-      negociacao: 0, convertido: 0, perdido: 0,
+      novo_lead: 0, qualificado: 0, convertido: 0, perdido: 0,
     };
+    // Só existem 4 etapas. "Proposta", "Negociação" e "Contactada" contam em
+    // "Em acompanhamento" (já foram contactadas, estão a ser trabalhadas).
     for (const row of leadsByStatus) {
-      leadsByStatusMap[row.status] = row.count;
+      const key = row.status === "proposta" || row.status === "negociacao" || row.status === "contacto" ? "qualificado" : row.status;
+      leadsByStatusMap[key] = (leadsByStatusMap[key] ?? 0) + row.count;
     }
 
     res.json({
