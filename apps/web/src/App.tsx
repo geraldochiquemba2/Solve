@@ -618,7 +618,7 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated, allowCreat
       <div>
         <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Histórico de contactos</div>
         {loadingH ? <div className="section-note">A carregar…</div> : hist.length === 0 ? <div className="section-note">Sem contactos registados.</div> :
-        <div className="table-wrap"><table className="data-table"><thead><tr><th>Data</th><th>Funcionário</th><th>Canal</th><th>Resultado</th><th>Próx.</th><th>Obs.</th></tr></thead><tbody>{hist.map((h: any) => <tr key={h.id}><td style={{ whiteSpace: 'nowrap' }}>{fmtH(h.created_at)}</td><td>{h.staff_nome || '—'}</td><td>{h.canal}</td><td>{h.resultado}</td><td style={{ whiteSpace: 'nowrap' }}>{h.proximo_contato ? fmtDateShort(h.proximo_contato) : '—'}</td><td style={{ fontSize: '.7rem' }}>{h.observacao || '—'}</td></tr>)}</tbody></table></div>}
+        <div className="table-wrap historico-tabela"><table className="data-table"><thead><tr><th>Data</th><th>Funcionário</th><th>Canal</th><th>Resultado</th><th>Próx.</th><th>Obs.</th></tr></thead><tbody>{hist.map((h: any) => <tr key={h.id}><td data-label="Data" style={{ whiteSpace: 'nowrap' }}>{fmtH(h.created_at)}</td><td data-label="Funcionário">{h.staff_nome || '—'}</td><td data-label="Canal">{h.canal}</td><td data-label="Resultado">{h.resultado}</td><td data-label="Próx. contacto" style={{ whiteSpace: 'nowrap' }}>{h.proximo_contato ? fmtDateShort(h.proximo_contato) : '—'}</td><td data-label="Obs." style={{ fontSize: '.7rem' }}>{h.observacao || '—'}</td></tr>)}</tbody></table></div>}
       </div>
       <div>
         <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Registar contacto</div>
@@ -1278,7 +1278,7 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista como lead de Balcão para acompanhamento comercial.</div>
     <label className="label">Nome *</label>
     <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nome completo" style={{ width: '100%' }} />
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Telefone</label>
       <input className="input" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="9XXXXXXXX" /></div>
       <div style={{ flex: 1 }}><label className="label">Email</label>
@@ -1377,7 +1377,7 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
     <div className="section-note" style={{ marginBottom: '1rem' }}>Só nome, telefone, email e género (a catraca gere o resto).</div>
     <label className="label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} style={{ width: '100%' }} />
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Telefone</label>
       <input className="input" value={fPhone} onChange={e => setFPhone(e.target.value)} /></div>
       <div style={{ flex: 1 }}><label className="label">Email</label>
@@ -1488,7 +1488,7 @@ function PlansPage() {
     <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: SamoraFit Mensal" />
     <label className="label" style={{ marginTop: '.6rem' }}>Descrição</label>
     <textarea className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição do plano" rows={2} />
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Preço (Kz)</label>
       <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
       <div style={{ flex: 1 }}><label className="label">Periodicidade</label>
@@ -1581,7 +1581,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
         </div>
       ))}
       {Object.keys(meta).length > 0 && <div style={{ marginTop: '.3rem' }}><div className="eyebrow" style={{ marginBottom: '.35rem' }}>Metadados</div>{Object.entries(meta).map(([k, v]) => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '.4rem .65rem', background: 'hsl(var(--secondary) / .3)', borderRadius: '.3rem', marginBottom: '.2rem' }}><span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{k}</span><span className="mono" style={{ fontSize: '.67rem' }}>{String(v)}</span></div>)}</div>}
-      <div style={{ marginTop: '.5rem', display: 'flex', gap: '.5rem' }}>
+      <div className="fila-dupla" style={{ marginTop: '.5rem' }}>
         <button className="btn-secondary" onClick={checkStatus} disabled={checking} style={{ flex: 1 }}>
           {checking ? 'Verificando…' : 'Verificar Estado no É-kwanza'}
         </button>
@@ -1867,7 +1867,7 @@ function PaymentsPage() {
   {chargeOpen && <div className="modal-backdrop" onClick={() => setChargeOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Nova cobrança</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente e gera o link de pagamento (o método escolhe-se na página).</div>
-    <div style={{ display: 'flex', gap: '.5rem' }}>
+    <div className="fila-dupla">
       <div style={{ flex: 1 }}><label className="label">Montante (Kz) *</label>
       <input className="input" type="number" min="1" value={cAmount} onChange={e => setCAmount(e.target.value)} placeholder="100" /></div>
       <div style={{ flex: 1 }}><label className="label">Pagamento</label>
@@ -1881,7 +1881,7 @@ function PaymentsPage() {
       <option value="">Selecionar aluno… ({cAlunos.length})</option>
       {cAlunos.filter(a => { const q = cAlunoBusca.trim().toLowerCase(); if (!q) return true; return (a.name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q); }).slice(0, 150).map(a => <option key={a.id} value={a.id}>{a.name}{a.phone ? ` · ${a.phone}` : ''}</option>)}
     </select></div>
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Nome (p/ SamoraFit Workout)</label>
       <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="Nome do aluno" style={{ width: '100%' }} /></div>
       <div style={{ flex: 1 }}><label className="label">Email (p/ SamoraFit Workout)</label>
@@ -2130,7 +2130,7 @@ function AcademiaPage() {
     (detail?.acesso?.length > 0 ? detail.acesso.map((ac: any, i: number) => {
       const pct = parseFloat(String(ac.progresso?.total || '0').replace('%', '')) || 0;
       return <div key={i} className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .6)', padding: '.8rem', marginBottom: '.6rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong style={{ fontSize: '.82rem' }}>{ac.produto?.nome}</strong><Status tone={ac.encerrado ? 'warn' : 'good'}>{ac.encerrado ? 'Encerrado' : (ac.duracao_tipo === 'vitalicio' ? 'Vitalício' : 'Ativo')}</Status></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}><strong style={{ fontSize: '.82rem', minWidth: 0 }}>{ac.produto?.nome}</strong><Status tone={ac.encerrado ? 'warn' : 'good'}>{ac.encerrado ? 'Encerrado' : (ac.duracao_tipo === 'vitalicio' ? 'Vitalício' : 'Ativo')}</Status></div>
         <div style={{ fontSize: '.7rem', color: 'hsl(var(--muted-foreground))', marginTop: '.3rem' }}>Início: {fmtD(ac.comecou_em)}{ac.encerra_em ? ` · Fim: ${fmtD(ac.encerra_em)}` : ''}</div>
         {ac.progresso && <div style={{ marginTop: '.5rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.7rem' }}><span>Progresso</span><strong>{ac.progresso.total}</strong></div><div style={{ height: 6, borderRadius: 3, background: 'hsl(var(--muted))', marginTop: '.25rem' }}><div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: 3, background: 'hsl(var(--accent))' }} /></div><div style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))', marginTop: '.25rem' }}>{ac.progresso.completas ?? 0} de {ac.totalAulas ?? '?'} aulas completas · {ac.progresso.assistidas ?? 0} assistidas</div></div>}
       </div>;
@@ -2217,7 +2217,7 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
       <input className="input" type={f.type || 'text'} placeholder={f.type === 'password' ? '•••••• (guardada — vazio mantém)' : (f.placeholder || '')} value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ width: '100%' }} /></div>)}
     {testMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem', color: testMsg.startsWith('OK') ? 'hsl(155 41% 35%)' : 'hsl(0 70% 50%)' }}>{testMsg}</div>}
     {saveMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem' }}>{saveMsg}</div>}
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.4rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.4rem' }}>
       <button className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>Fechar</button>
       {INTEGRATION_HEALTH_URL[name] && <button className="btn-secondary" onClick={test} disabled={testing} style={{ flex: 1 }}>{testing ? 'A testar…' : 'Testar ligação'}</button>}
       {fields.length > 0 && <button className="btn-primary" onClick={save} disabled={saveMut.isPending} style={{ flex: 1 }}><Check size={14} /> Guardar</button>}
@@ -2249,7 +2249,7 @@ function AutomationsPage() {
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regra guardada como ativa. A execução agenda-se no motor.</div>
     <label className="label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} placeholder="Ex: Alertar aulas esgotadas" style={{ width: '100%' }} />
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Quando</label>
       <select className="select" value={fTrigger} onChange={e => setFTrigger(e.target.value)}>{['pagamento.confirmado', 'pagamento.pendente', 'acesso.negado', 'aulas.esgotadas', 'cliente.bloqueado'].map(v => <option key={v}>{v}</option>)}</select></div>
       <div style={{ flex: 1 }}><label className="label">Executar</label>
@@ -2302,7 +2302,7 @@ function UsersPage() {
     <div className="section-note" style={{ marginBottom: '1rem' }}>Cria o acesso com password temporária.</div>
     <label className="label">Nome *</label>
     <input className="input" value={iName} onChange={e => setIName(e.target.value)} placeholder="Nome completo" style={{ width: '100%' }} />
-    <div style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem' }}>
+    <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="label">Email *</label>
       <input className="input" value={iEmail} onChange={e => setIEmail(e.target.value)} placeholder="email@..." /></div>
       <div style={{ flex: 1 }}><label className="label">Papel</label>

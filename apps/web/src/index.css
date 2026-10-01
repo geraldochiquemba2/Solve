@@ -696,6 +696,25 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 .modal { width:min(100%, 480px); max-height:calc(100dvh - 2rem); overflow:auto; background:hsl(var(--card)); border:1px solid hsl(var(--border)); border-radius:.8rem; box-shadow:var(--shadow-lg); }
 .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid hsl(var(--border)); }
 .modal-body { padding:1.2rem; }
+/* Filas de 2 colunas dentro de modais (campos lado a lado, botões de acção).
+   No desktop ficam ao lado; em telemóvel empilham para não espremer. */
+.fila-dupla { display:flex; gap:.5rem; }
+.fila-dupla > * { flex:1; min-width:0; }
+@media (max-width:700px) {
+  .modal-backdrop { padding:.6rem; }
+  .modal { padding:1rem !important; }
+  .modal-head { padding:.9rem 1rem !important; }
+  .modal-body { padding:1rem !important; }
+  .fila-dupla { flex-direction:column; }
+  /* Histórico da ficha: 6 colunas não cabem no modal em telemóvel — vira
+     cartões com rótulo em vez de scroll lateral. */
+  .historico-tabela { overflow:visible; }
+  .historico-tabela thead { display:none; }
+  .historico-tabela table, .historico-tabela tbody, .historico-tabela tr, .historico-tabela td { display:block; width:100%; }
+  .historico-tabela tr { border:1px solid hsl(var(--border)); border-radius:.6rem; padding:.5rem .65rem; margin-bottom:.5rem; background:hsl(var(--card)); }
+  .historico-tabela td { border:0; padding:.28rem 0; display:flex; justify-content:space-between; align-items:baseline; gap:.7rem; text-align:right; }
+  .historico-tabela td::before { content:attr(data-label); font-size:.6rem; letter-spacing:.07em; text-transform:uppercase; font-weight:700; color:hsl(var(--muted-foreground)); text-align:left; flex-shrink:0; }
+}
 .form-label { display:block; font-size:.72rem; font-weight:700; color:hsl(var(--foreground)); margin-bottom:.35rem; }
 /* ── Sistema tipográfico Inter — CRM admin (.shell) e portal (/conta) ──
    Títulos 700 · Botões/menus importantes 600 · Labels/informações 500 · Texto normal 400.
