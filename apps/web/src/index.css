@@ -695,6 +695,8 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 .modal-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; background:hsl(0 0% 2% / .65); backdrop-filter:blur(4px); }
 .modal { width:min(100%, 480px); max-height:calc(100dvh - 2rem); overflow:auto; background:hsl(var(--card)); border:1px solid hsl(var(--border)); border-radius:.8rem; box-shadow:var(--shadow-lg); }
 .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid hsl(var(--border)); }
+.modal-head > div:first-child { min-width:0; }
+.modal-head .section-title, .modal-head .section-note { overflow-wrap:anywhere; }
 .modal-body { padding:1.2rem; }
 /* Filas de 2 colunas dentro de modais (campos lado a lado, botões de acção).
    No desktop ficam ao lado; em telemóvel empilham para não espremer. */

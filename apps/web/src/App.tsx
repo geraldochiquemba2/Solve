@@ -1580,7 +1580,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
           <span className="mono" style={{ fontSize: '.72rem', fontWeight: 600, textAlign: 'right', maxWidth: '60%', wordBreak: 'break-all' }}>{value}</span>
         </div>
       ))}
-      {Object.keys(meta).length > 0 && <div style={{ marginTop: '.3rem' }}><div className="eyebrow" style={{ marginBottom: '.35rem' }}>Metadados</div>{Object.entries(meta).map(([k, v]) => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '.4rem .65rem', background: 'hsl(var(--secondary) / .3)', borderRadius: '.3rem', marginBottom: '.2rem' }}><span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{k}</span><span className="mono" style={{ fontSize: '.67rem' }}>{String(v)}</span></div>)}</div>}
+      {Object.keys(meta).length > 0 && <div style={{ marginTop: '.3rem' }}><div className="eyebrow" style={{ marginBottom: '.35rem' }}>Metadados</div>{Object.entries(meta).map(([k, v]) => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '.4rem .65rem', background: 'hsl(var(--secondary) / .3)', borderRadius: '.3rem', marginBottom: '.2rem' }}><span style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>{k}</span><span className="mono" style={{ fontSize: '.67rem', minWidth: 0, overflowWrap: 'anywhere', textAlign: 'right' }}>{String(v)}</span></div>)}</div>}
       <div className="fila-dupla" style={{ marginTop: '.5rem' }}>
         <button className="btn-secondary" onClick={checkStatus} disabled={checking} style={{ flex: 1 }}>
           {checking ? 'Verificando…' : 'Verificar Estado no É-kwanza'}
