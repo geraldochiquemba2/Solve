@@ -2038,8 +2038,11 @@ function AcademiaPage() {
   const [cobr, setCobr] = useState<any[]>([]);
   const [cobFilter, setCobFilter] = useState('Todos');
   const [cademiView, setCademiView] = useState<'pagamentos' | 'alunos'>('pagamentos');
-  // Entrega Cademi fixa (não editável): produto sempre 'samorafit-workout', envio sempre ligado.
-  const FIXO_PRODUTO_ID = 'samorafit-workout';
+// Produto de entrega na Cademi: um dos planos de duração, nunca o produto genérico
+// de 100 Kz (que saiu do catálogo). A entrega segue o plano que o cliente comprou
+// (`cademi_produto` no metadata do pagamento); este valor é a reserva para os
+// pagamentos que não trazem produto.
+const [produtoEntrega, setProdutoEntrega] = useState('');
   const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
   const [entregasCarregadas, setEntregasCarregadas] = useState(false);
   const [cfgMsg, setCfgMsg] = useState('');
@@ -2048,12 +2051,20 @@ function AcademiaPage() {
   const fetchCfg = async () => {
     try {
       // Entregas reais (do endpoint): cada uma com o seu campo de preço.
-      // (produto de entrega e envio automático são fixos — ver FIXO_PRODUTO_ID.)
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() }).then(r => r.json());
-        // Só os quatro planos de duração, pela ordem de venda (ver catalogoWorkout).
+        // Só os quatro planos de duração, por ordem crescente de meses (catalogoWorkout).
         const list = catalogoWorkout(Array.isArray(e.data) ? e.data : []);
         setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
+        // Entrega guardada: se já for um plano da lista mantém-se; se for o produto
+        // genérico (ou qualquer coisa fora do catálogo) passa ao primeiro plano, para
+        // a entrega deixar de recair no "SamoraFit Workout" de 100 Kz.
+        try {
+          const s: any = await fetch(`${apiBase}/api/v1/settings`, { headers: authHeaders() }).then(r => r.json());
+          const guardado = String(s?.data?.cademi_produto_id || '').trim();
+          const ePlanos = list.map((o: any) => String(o.id));
+          setProdutoEntrega(ePlanos.includes(guardado) ? guardado : (ePlanos[0] || ''));
+        } catch {}
       } catch {}
       setEntregasCarregadas(true);
     } catch {}
@@ -2066,11 +2077,16 @@ function AcademiaPage() {
       setCfgMsg('Nada para guardar: nenhum conteúdo de SamoraFit Workout foi lido.');
       setSavingCfg(false); return;
     }
+    // Sem entrega definida não se guarda: a entrega em Cademi tem de ser um plano.
+    if (!produtoEntrega || !entregasArr.some(o => o.id === produtoEntrega)) {
+      setCfgMsg('Escolhe o plano que a Cademi entrega por omissão.');
+      setSavingCfg(false); return;
+    }
     try {
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ settings: { cademi_produto_id: FIXO_PRODUTO_ID, cademi_auto_delivery: '1', cademi_entregas: JSON.stringify(entregasArr) } }),
+        body: JSON.stringify({ settings: { cademi_produto_id: produtoEntrega, cademi_auto_delivery: '1', cademi_entregas: JSON.stringify(entregasArr) } }),
       });
       if (!res.ok) throw new Error('Falha a guardar');
       setCfgMsg('Configuração guardada. Pagamentos confirmados passam a libertar acesso.');
@@ -2136,8 +2152,12 @@ function AcademiaPage() {
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso no SamoraFit Workout">
     <div className="grid-2">
-      <div><label className="label">Entrega padrão *</label>
-      <div className="mono" style={{ fontSize: '.8rem', fontWeight: 700, padding: '.55rem .7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.45rem' }}>{FIXO_PRODUTO_ID}</div></div>
+      <div><label className="label">Entrega por omissão *</label>
+      <select className="select" data-testid="select-cademi-entrega" aria-label="Plano entregue por omissão na Cademi" value={produtoEntrega} onChange={e => setProdutoEntrega(e.target.value)} disabled={entregasArr.length === 0}>
+        {entregasArr.length === 0 && <option value="">A carregar planos…</option>}
+        {entregasArr.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+      </select>
+      <div className="section-note">A Cademi entrega o plano que o cliente comprou; este é o usado quando o pagamento não traz produto.</div></div>
       <div><label className="label">Envio automático</label>
       <div style={{ padding: '.55rem .7rem' }}><Status tone="good">Ligado</Status></div></div>
     </div>
