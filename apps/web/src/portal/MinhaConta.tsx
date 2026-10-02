@@ -5,7 +5,6 @@ import {
   getMinhaConta,
   listPagamentos,
   pagar,
-  isValidAONumber,
   type MinhaContaResponse,
   type PortalPayment,
 } from './api';
@@ -62,8 +61,7 @@ export default function MinhaConta() {
   const [paying, setPaying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [lastRef, setLastRef] = useState<{ entity: string | null; reference: string } | null>(null);
-  // Qualquer número pode pagar o Express (ex: familiar). Pré-preenche com o da conta.
-  const [expressPhone, setExpressPhone] = useState('');
+
 
   const load = async () => {
     setLoading(true);
@@ -72,8 +70,6 @@ export default function MinhaConta() {
       const [c, pays] = await Promise.all([getMinhaConta(), listPagamentos(5).catch(() => [])]);
       setConta(c);
       setRecent(pays || []);
-      // Pré-preenche o número Express com o da conta (editável para qualquer número).
-      if (c?.customer?.phone) setExpressPhone((prev) => prev || c.customer.phone || '');
     } catch (e: any) {
       setErr(e.message || 'Não foi possível carregar a conta.');
     }
@@ -100,19 +96,13 @@ export default function MinhaConta() {
     setPaying(true);
     setPayMsg('');
     try {
-      // Express aceita qualquer número AO — valida antes de chamar a API.
-      const phoneToUse = method === 'express' ? expressPhone.trim() : undefined;
-      if (method === 'express' && phoneToUse && !isValidAONumber(phoneToUse)) {
-        setPayMsg('Erro: número Express inválido (usa 9XXXXXXXX).');
-        setPaying(false);
-        return;
-      }
-      const r = await pagar(method, undefined, phoneToUse);
+      // O número usa-se o da conta (servidor); o método escolhe-se a seguir.
+      const r = await pagar(method, undefined, undefined);
       if (method === 'express') {
         setPayMsg(
           r.payment.status === 'confirmado'
             ? `Pagamento confirmado (${r.payment.code}).`
-            : `Pedido Express enviado para ${phoneToUse || 'o teu número'} (${r.payment.code}). Confirma no telemóvel — o estado actualiza ao recarregar.`,
+            : `Pedido Express enviado para o teu número (${r.payment.code}). Confirma no telemóvel — o estado actualiza ao recarregar.`,
         );
       } else {
         setLastRef(r.referencia ? { entity: r.referencia.entity, reference: r.referencia.reference } : null);
@@ -201,22 +191,6 @@ export default function MinhaConta() {
               </button>
             </div>
           )}
-        </div>
-        <div>
-          <label className="form-label" htmlFor="express-phone">Número Multicaixa Express</label>
-          <input
-            id="express-phone"
-            className="input"
-            type="tel"
-            inputMode="numeric"
-            placeholder="9XXXXXXXX — pode ser outro número"
-            value={expressPhone}
-            onChange={(e) => setExpressPhone(e.target.value)}
-            style={{ marginTop: '.35rem' }}
-          />
-          <div className="section-note" style={{ marginTop: '.25rem' }}>
-            O pedido Express vai para este número — pode ser o teu ou de outra pessoa.
-          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem' }}>
           <button className="btn-primary" data-testid="button-portal-pay-express" onClick={() => doPagar('express')} disabled={paying || !nextAmount}>
