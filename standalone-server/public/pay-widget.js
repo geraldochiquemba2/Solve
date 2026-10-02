@@ -158,7 +158,7 @@
       try {
         var saved = JSON.parse(localStorage.getItem("spw_profile") || "null");
         if (saved) {
-          if (nameEl && !nameEl.value && saved.name) { nameEl.value = saved.name; report.push("memória: nome"); }
+          if (nameEl && !nameEl.value && saved.name) { nameEl.value = saved.name; nameEl.dataset.auto = "1"; report.push("memória: nome"); }
           if (emailEl && !emailEl.value && saved.email) { emailEl.value = saved.email; report.push("memória: email"); }
           if (phoneEl && !phoneEl.value && saved.phone) { phoneEl.value = saved.phone; report.push("memória: telefone"); }
         }
@@ -226,14 +226,19 @@
         }
       } catch (e4) {}
       if (email && !emailEl.value) { emailEl.value = email; report.push("página: email"); }
-      if (name && !nameEl.value) { nameEl.value = name; report.push("página: nome"); }
+      if (name && !nameEl.value) { nameEl.value = name; nameEl.dataset.auto = "1"; report.push("página: nome"); }
       if (phone && phone.length === 9 && phoneEl && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
       // Nome oficial: pergunta ao CRM (Cademi → CRM → OVG) pelo email.
+      // O oficial ganha sempre a valores adivinhados (memória/página).
       try {
         var em = (emailEl.value || "").trim();
-        if (em && em.indexOf("@") > 0 && !nameEl.value) {
+        if (em && em.indexOf("@") > 0) {
           h(API + "/api/v1/cademi/nome?email=" + encodeURIComponent(em)).then(function (r) { return r.json().catch(function () { return {}; });           }).then(function (j) {
-            if (j && j.data && j.data.nome && !nameEl.value) nameEl.value = j.data.nome;
+            if (j && j.data && j.data.nome && (!nameEl.value || nameEl.dataset.auto)) {
+              nameEl.value = j.data.nome;
+              try { delete nameEl.dataset.auto; } catch (e7) {}
+              report.push("oficial: nome");
+            }
             loadHist(m);
           }).catch(function () {});
         }
