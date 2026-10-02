@@ -3423,7 +3423,16 @@ setInterval(async () => {
 import { existsSync } from "fs";
 const staticDir = join(__dirname, "public");
 if (existsSync(staticDir)) {
-  app.use(express.static(staticDir));
+  // pay-widget.js corre em sites terceiros: sem cache para atualizações
+  // (remoção de campos, etc.) chegarem de imediato, sem Ctrl+F5.
+  app.use(express.static(staticDir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith("pay-widget.js")) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+      }
+    },
+  }));
   app.use((req, res, next) => {
     if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/healthz")) {
       res.sendFile(join(staticDir, "index.html"));
