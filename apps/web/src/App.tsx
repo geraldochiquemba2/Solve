@@ -875,6 +875,10 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
   // KPIs (que são cruzamentos de etapa) saem fora para não se contradizerem.
   const statusVista = pasta ? 'Todos' : status;
   const kpiVista = pasta ? 'todos' : filtro;
+  // Numa lista só de convertidas, a coluna passa a ser a data da conversão e não um
+  // próximo contacto a marcar: quem filtra por "Convertidas" (ou entra na pasta da
+  // etapa) quer saber quando cada uma fechou, não agendar o que já fechou.
+  const soConvertidas = pasta === 'convertido' || kpiVista === 'convertidas' || statusVista === 'Convertida';
   const semFiltros = q.trim() === '' && statusVista === 'Todos' && source === 'Todas' && owner === 'Todos' && acomp === 'Todos' && canal === 'Todos' && kpiVista === 'todos';
   // A pesquisa também atravessa o telefone e o WhatsApp: quando o gestor tem o
   // número, procura por ele para ligar — não sabe o nome de quem o forneceu.
@@ -1061,7 +1065,7 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
         <table className="data-table">
           <thead><tr>
             <th scope="col">Nome</th><th scope="col">Contacto</th><th scope="col">Origem</th><th scope="col">Etapa</th>
-            <th scope="col">Responsável</th><th scope="col">Último contacto</th><th scope="col">Próx. contacto</th>
+            <th scope="col">Responsável</th><th scope="col">Último contacto</th><th scope="col">{soConvertidas ? 'Data da conversão' : 'Próx. contacto'}</th>
             <th scope="col">Observações</th><th scope="col"><span className="sr-only">Acções</span></th>
           </tr></thead>
           <tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-lead-${l.id}`} className={chegouAgora(l) ? 'lead-recem' : undefined}>
