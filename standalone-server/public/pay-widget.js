@@ -650,14 +650,18 @@
       }
     } catch (eLogin) {}
     if (!isLoggedIn()) return;
-    var b = el("button", "spw-btn", "Pagar mensalidade");
-    document.body.appendChild(b);
-    var entregas = [{ id: "samorafit-workout", nome: "SamoraFit Workout" }];
+    // Conteúdos vindos do CRM (mesma lista e mesma ordem que a Academia mostra):
+    // só os planos de duração do SamoraFit Workout. Sem lista não há botão — não se
+    // oferece nada para pagar, e em especial não o produto genérico de 100 Kz.
+    var entregas = [];
     try {
       var r = await h(API + "/api/v1/cademi/entregas");
       var j = await r.json().catch(function () { return {}; });
       if (j && Array.isArray(j.data) && j.data.length) entregas = j.data;
     } catch (e) {}
+    if (!entregas.length) return;
+    var b = el("button", "spw-btn", "Pagar mensalidade");
+    document.body.appendChild(b);
     // Aviso imediato ao clicar: o modal pode demorar 2–4s (rede Render/Cademi).
     b.addEventListener("click", function () {
       if (b.disabled) return;

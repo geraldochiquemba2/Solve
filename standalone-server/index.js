@@ -2294,6 +2294,29 @@ function slugify(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
+
+// Catálogo SamoraFit Workout: só os planos de duração, por ordem crescente de meses
+// (1, 3, 6, 12). Mesma regra e mesma ordem da página da Academia (catalogoWorkout em
+// apps/web/src/App.tsx) — a lista que o CRM mostra e a que o widget de pagamento
+// oferece têm de ser a mesma, por isso a curadoria vive aqui, no servidor.
+// A Cademi escreve o nome com acento ("SamoraFit Workout- 1 Mês") e o slug com hífen
+// ("samorafit-workout-1-mes"): a duração lê-se pelo número que antecede "mes", sem
+// acentos e com qualquer separador pelo caminho. Ficam de fora o "Time Filmes" e o
+// "SamoraFit Workout" genérico de 100 Kz.
+const DURACAO_WORKOUT = [
+  [/(^|\D)1(\D*)mes(es)?\b/, 1],
+  [/(^|\D)3(\D*)mes(es)?\b/, 3],
+  [/(^|\D)6(\D*)mes(es)?\b/, 6],
+  [/(^|\D)12(\D*)mes(es)?\b/, 12],
+];
+function catalogoWorkout(lista) {
+  const duracao = (o) => {
+    const alvo = `${o?.id || ""} ${o?.nome || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!/samora?fit[-\s]?workout/.test(alvo)) return -1;
+    return DURACAO_WORKOUT.find(([re]) => re.test(alvo))?.[1] ?? -1;
+  };
+  return lista.filter((o) => duracao(o) >= 0).sort((a, b) => duracao(a) - duracao(b));
+}
 app.get("/api/v1/cademi/entregas", rateLimit(60), async (req, res) => {
   try {
     const byId = new Map();
@@ -2317,7 +2340,8 @@ app.get("/api/v1/cademi/entregas", rateLimit(60), async (req, res) => {
       const def = String(await cfg("cademi_produto_id", "samorafit-workout")).trim() || "samorafit-workout";
       list = [{ id: def, nome: "SamoraFit Workout" }];
     }
-    res.json({ data: list });
+    // Só os planos de duração, pela mesma ordem do CRM.
+    res.json({ data: catalogoWorkout(list) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }

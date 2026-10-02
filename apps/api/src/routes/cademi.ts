@@ -102,10 +102,32 @@ function slugify(s: unknown): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+// Catálogo SamoraFit Workout: só os planos de duração, por ordem crescente de meses
+// (1, 3, 6, 12) — mesma regra e mesma ordem da Academia e do widget de pagamento
+// (paridade com standalone-server de produção). A Cademi escreve o nome com acento
+// ("SamoraFit Workout- 1 Mês") e o slug com hífen ("samorafit-workout-1-mes"), por isso
+// a duração lê-se pelo número que antecede "mes". Ficam de fora o "Time Filmes" e o
+// "SamoraFit Workout" genérico de 100 Kz.
+const DURACAO_WORKOUT: Array<[RegExp, number]> = [
+  [/(^|\D)1(\D*)mes(es)?\b/, 1],
+  [/(^|\D)3(\D*)mes(es)?\b/, 3],
+  [/(^|\D)6(\D*)mes(es)?\b/, 6],
+  [/(^|\D)12(\D*)mes(es)?\b/, 12],
+];
+function catalogoWorkout<T extends { id: string; nome?: string }>(lista: T[]): T[] {
+  const duracao = (o: T) => {
+    const alvo = `${o?.id ?? ""} ${o?.nome ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!/samora?fit[-\s]?workout/.test(alvo)) return -1;
+    return DURACAO_WORKOUT.find(([re]) => re.test(alvo))?.[1] ?? -1;
+  };
+  return lista.filter((o) => duracao(o) >= 0).sort((a, b) => duracao(a) - duracao(b));
+}
+
 // Lista de entregas Cademi (paridade com standalone-server de produção):
 // 1) manual em settings@cademi_entregas (traz nome bonito + preço)
 // 2) slugs derivados dos produtos reais da API (/produto)
 // 3) fallback para settings@cademi_produto_id ou 'samorafit-workout'
+// Só saem os planos de duração, na ordem do CRM (ver catalogoWorkout).
 router.get("/cademi/entregas", authenticate, async (req, res, next) => {
   try {
     const byId = new Map<string, { id: string; nome: string; preco?: number }>();
@@ -136,7 +158,7 @@ router.get("/cademi/entregas", authenticate, async (req, res, next) => {
       } catch {}
       list = [{ id: def, nome: "SamoraFit Workout" }];
     }
-    res.json({ data: list });
+    res.json({ data: catalogoWorkout(list) });
   } catch (err) {
     next(err);
   }
