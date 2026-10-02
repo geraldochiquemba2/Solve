@@ -172,6 +172,7 @@ const waLink = (p?: string | null) => { const d = waDigits(p); return d ? `https
 // aparelho, para ligar ao interessado sem sair do ecrã.
 const telHref = (p?: string | null) => { const d = String(p || '').replace(/[^\d+]/g, ''); return d ? `tel:${d}` : ''; };
 const fmtDateShort = (d?: string | null) => { if (!d) return '—'; try { return new Date(d.length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('pt-AO', { day: '2-digit', month: 'short' }); } catch { return d; } };
+const fmtDataHora = (d?: string | null) => { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-AO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return d; } };
 const passoParaDataLocal = (passo: string) => {
   const d = new Date();
   if (passo === 'Contactar amanhã') d.setDate(d.getDate() + 1);
@@ -564,7 +565,7 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated, allowCreat
   const zap = waLink(zapNum);
   const telDigits = waDigits(lead.phone || zapNum);
   const tel = telDigits ? `tel:+${telDigits}` : '';
-  const fmtH = (d: string) => { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-AO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return d; } };
+  const fmtH = fmtDataHora;
   const guardar = async () => {
     setBusy(true); setMsg('');
     try {
@@ -769,6 +770,7 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
   // profundos e para o botão de cada pasta; sem rota e "total" mostram a base.
   const pasta = etapaUrl && LEAD_ETAPAS.includes(etapaUrl) ? etapaUrl : null;
   const trackOf = (l: Lead) => etapaNome(etapaDe(l));
+  const convertida = (l: Lead) => etapaDe(l) === 'convertido';
   const [q, setQ] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).q || ''; } catch { return ''; } });
   const [status, setStatus] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).status || 'Todos'; } catch { return 'Todos'; } });
   const [source, setSource] = useState(() => { try { return (JSON.parse(localStorage.getItem('leads-view') || '{}') as any).source || 'Todas'; } catch { return 'Todas'; } });
@@ -1093,10 +1095,18 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
               <input type="date" className="input input-data" data-testid={`input-lead-ultimo-${l.id}`} aria-label={`Último contacto de ${l.name}`} max={hoje}
                 value={dataInput(l.ultimoContactoAt)} onChange={e => mudarData(l, 'ultimoContactoAt', e.target.value)} />
             </td>
-            <td className="lead-datas" data-label="Próx. contacto">
-              <input type="date" className="input input-data" data-testid={`input-lead-proximo-${l.id}`} aria-label={`Próximo contacto de ${l.name}`} min={hoje}
-                value={dataInput(l.proximoContato)} onChange={e => mudarData(l, 'proximoContato', e.target.value)} />
-            </td>
+            {/* Uma lead convertida não tem próximo contacto a marcar: o que interessa
+                é quando foi convertida (data marcada pelo servidor na mudança de etapa). */}
+            {convertida(l)
+              ? <td className="lead-datas" data-label="Convertida em">
+                <span className="input-data" data-testid={`lead-convertida-em-${l.id}`} style={{ whiteSpace: 'nowrap' }}>
+                  {l.convertedAt ? fmtDataHora(l.convertedAt) : '—'}
+                </span>
+              </td>
+              : <td className="lead-datas" data-label="Próx. contacto">
+                <input type="date" className="input input-data" data-testid={`input-lead-proximo-${l.id}`} aria-label={`Próximo contacto de ${l.name}`} min={hoje}
+                  value={dataInput(l.proximoContato)} onChange={e => mudarData(l, 'proximoContato', e.target.value)} />
+              </td>}
             <td data-label="Observações"><LeadNotesCell lead={l} updateMut={updateMut} onSaved={refreshResumo} /></td>
             <td className="sem-rotulo"><div style={{ display: 'flex', gap: '.25rem' }}><IconButton label="ficha lead" onClick={() => setFicha(l)}><Eye size={14} /></IconButton><IconButton label="editar lead" onClick={() => { setEditing(l); setOpen(true); }}><Edit3 size={14} /></IconButton></div></td>
           </tr>)}</tbody>
@@ -1988,21 +1998,24 @@ function IntegrationsPage() {
   return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar…' : 'Sincronizar tudo'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi, isPay, pay }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar…'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `SamoraFit Workout OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar…'}</div>}{isPay && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{pay ? (pay.connected ? `✓ ${pay.message}` : `✗ ${pay.message}`) : 'A verificar…'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{(isOVG || isCademi) && <button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : cademiSyncMut.mutate()} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar…' : 'Sincronizar') : (cademiSyncMut.isPending ? 'A sincronizar…' : 'Sincronizar')}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'SamoraFit Workout · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
-// Catálogo de conteúdos do SamoraFit Workout: só os quatro planos de duração, pela
-// ordem em que se vendem (12 meses, 1, 3 e 6). A Cademi devolve também produtos que
-// não são planos — "Time Filmes" e o "SamoraFit Workout" genérico com preço de 100 —
-// e ficavam na lista de preços e no seletor de cobrança a trocar com os planos.
-// Entram aqui os quatro, pela ordem pedida; o resto sai do ecrã.
-const ORDEM_WORKOUT: Array<[RegExp, number]> = [
-  [/12\s*mes/i, 0],
-  [/(^|[^0-9])1\s*mes/i, 1],
-  [/3\s*mes/i, 2],
-  [/6\s*mes/i, 3],
+// Catálogo de conteúdos do SamoraFit Workout: só os planos de duração, em ordem
+// crescente de meses (1, 3, 6 e 12). A Cademi devolve também produtos que não são
+// planos — "Time Filmes" e o "SamoraFit Workout" genérico com preço de 100 — e ficavam
+// na lista de preços e no seletor de cobrança a trocar com os planos. Entram aqui os
+// quatro, pela ordem crescente; o resto sai do ecrã.
+// A duração lê-se do slug e do nome porque a Cademi escreve de formas diferentes:
+// "samorafit-workout-1-mes" e "SamoraFit Workout- 1 Mês". Por isso comparamos apenas o
+// número seguido de "mes", com qualquer separador pelo caminho e sem acentos.
+const DURACAO_WORKOUT: Array<[RegExp, number]> = [
+  [/(^|\D)1(\D*)mes(es)?\b/, 1],
+  [/(^|\D)3(\D*)mes(es)?\b/, 3],
+  [/(^|\D)6(\D*)mes(es)?\b/, 6],
+  [/(^|\D)12(\D*)mes(es)?\b/, 12],
 ];
 const ordemWorkout = (o: { id: string; nome?: string }) => {
-  const alvo = `${o.id} ${o.nome ?? ''}`;
-  if (!/samora?fit[-\s]?workout/i.test(alvo)) return -1;
-  return ORDEM_WORKOUT.find(([re]) => re.test(alvo))?.[1] ?? -1;
+  const alvo = `${o.id} ${o.nome ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!/samora?fit[-\s]?workout/.test(alvo)) return -1;
+  return DURACAO_WORKOUT.find(([re]) => re.test(alvo))?.[1] ?? -1;
 };
 const catalogoWorkout = <T extends { id: string; nome?: string }>(lista: T[]): T[] =>
   lista.filter((o) => ordemWorkout(o) >= 0).sort((a, b) => ordemWorkout(a) - ordemWorkout(b));
