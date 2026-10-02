@@ -148,9 +148,68 @@
     if (b) b.remove();
   }
 
+  // Perfil Cademi (Minha conta): nome/email/celular do aluno com sessão.
+  // Lê o HTML da página de perfil (mesma origem, com cookies) — é a fonte
+  // mais fiável e ganha a valores adivinhados da página.
+  function perfilPreencher(m, nameEl, emailEl, report) {
+    try {
+      fetch("/area/aluno/perfil", { credentials: "same-origin", headers: { Accept: "text/html" } })
+        .then(function (r) { if (!r.ok) throw 0; return r.text(); })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          var found = { nome: "", email: "", celular: "" };
+          var inputs = doc.querySelectorAll("input");
+          for (var i = 0; i < inputs.length; i++) {
+            var inp = inputs[i];
+            var val = String(inp.value || "").trim();
+            if (!val) continue;
+            var lab = ((inp.name || "") + " " + (inp.id || "") + " " + (inp.placeholder || "")).toLowerCase();
+            try {
+              var lb = inp.closest("label");
+              if (lb && lb.innerText) lab += " " + lb.innerText.toLowerCase();
+              var pv = inp.previousElementSibling;
+              if (pv && pv.innerText) lab += " " + pv.innerText.toLowerCase();
+              var pp = inp.parentElement;
+              if (pp && pp.previousElementSibling && pp.previousElementSibling.innerText) lab += " " + pp.previousElementSibling.innerText.toLowerCase();
+            } catch (eL) {}
+            if (!found.email && val.indexOf("@") > 0 && /email|mail|usuario|user|aluno|conta|login/.test(lab)) found.email = val;
+            else if (!found.nome && val.indexOf("@") < 0 && /nome|name|aluno|usuario|user/.test(lab) && val.length > 1 && val.length < 60) found.nome = val;
+            else if (!found.celular && /cel|phone|tel|fone|numero|whatsapp/.test(lab)) found.celular = val;
+          }
+          if (found.email && emailEl) {
+            emailEl.value = found.email; report.push("perfil: email");
+            try { refreshAccess(m, m._entregas || []); loadHist(m); } catch (eR) {}
+          }
+          if (found.nome && nameEl) {
+            nameEl.value = found.nome;
+            try { delete nameEl.dataset.auto; } catch (eD) {}
+            report.push("perfil: nome");
+          }
+          if (found.celular) {
+            try {
+              var prev = JSON.parse(localStorage.getItem("spw_profile") || "{}");
+              prev.phone = found.celular;
+              localStorage.setItem("spw_profile", JSON.stringify(prev));
+              report.push("perfil: celular");
+            } catch (eS) {}
+          }
+        }).catch(function () {});
+    } catch (e) {}
+  }
+
   // Deteta o aluno logado na Cademi (nome/email/telefone visíveis na página) e preenche.
   // 1) perfil guardado pelo próprio widget (último pagamento neste browser)
   // 2) heurísticas da página. Devolve relatório para diagnóstico (?spw_debug=1).
+  // Nome plausível de pessoa: bloqueia lixo de UI ("User Found",
+  // "teste", "visitante", "undefined", ...). Sem isto, contas ficavam
+  // gravadas com o nome errado.
+  function nomeValido(t) {
+    t = String(t || "").trim();
+    if (t.length < 2 || t.length > 60 || t.indexOf("@") >= 0) return false;
+    if (/found|undefined|null|teste|demo|visitante|guest|convidado|desconhecido|usu[aá]rio|encontrad|an[oô]nimo|admin|suporte|support|unknown/i.test(t)) return false;
+    return true;
+  }
+
   function autodetect(m) {
     var report = [];
     try {
@@ -158,11 +217,14 @@
       try {
         var saved = JSON.parse(localStorage.getItem("spw_profile") || "null");
         if (saved) {
-          if (nameEl && !nameEl.value && saved.name) { nameEl.value = saved.name; nameEl.dataset.auto = "1"; report.push("memória: nome"); }
+          if (nameEl && !nameEl.value && nomeValido(saved.name)) { nameEl.value = saved.name; nameEl.dataset.auto = "1"; report.push("memória: nome"); }
           if (emailEl && !emailEl.value && saved.email) { emailEl.value = saved.email; report.push("memória: email"); }
           if (phoneEl && !phoneEl.value && saved.phone) { phoneEl.value = saved.phone; report.push("memória: telefone"); }
         }
       } catch (e0) {}
+      // Perfil Cademi (Minha conta): o mais fiável — corre em fundo e
+      // substitui valores adivinhados quando chegar.
+      try { perfilPreencher(m, nameEl, emailEl, report); } catch (eP) {}
       var email = "";
       var mailto = document.querySelector('a[href^="mailto:"]');
       if (mailto) email = (mailto.getAttribute("href") || "").replace(/^mailto:/i, "").split("?")[0].trim();
@@ -181,11 +243,11 @@
       var cands = document.querySelectorAll("header .user-name, header .username, .user-info .name, .profile-name, [class*='user-name'], [class*='username']");
       for (var j = 0; j < cands.length; j++) {
         var t = (cands[j].innerText || "").trim();
-        if (t && t.indexOf("@") < 0 && t.length > 1 && t.length < 60) { name = t; break; }
+        if (nomeValido(t)) { name = t; break; }
       }
       if (!name) {
         var avatar = document.querySelector("header img[alt], .avatar[alt], .profile img[alt]");
-        if (avatar) { var a = (avatar.getAttribute("alt") || "").trim(); if (a && a.indexOf("@") < 0 && a.length < 60) name = a; }
+        if (avatar) { var a = (avatar.getAttribute("alt") || "").trim(); if (nomeValido(a)) name = a; }
       }
       var phone = "";
       var tel = document.querySelector('a[href^="tel:"]');
@@ -208,7 +270,7 @@
               var dg = val.replace(/\D/g, "").slice(-9);
               if (dg.length === 9) phone = dg;
             }
-            if (!name && /nome|name|aluno|usuario|user/.test(idn) && val.indexOf("@") < 0 && val.length < 60) name = val;
+            if (!name && /nome|name|aluno|usuario|user/.test(idn) && nomeValido(val)) name = val;
           }
         }
       } catch (e2) {}
