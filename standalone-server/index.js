@@ -1770,7 +1770,10 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     }
     const m = method || "mcx_express";
     const customer_phone = normPhone(raw_phone) || null;
-    if (m === "mcx_express" && (!customer_phone || customer_phone.length !== 9)) {
+    // Sem número: segue se houver página hospedada (WiPay) — o método e o número
+    // escolhem-se na página seguinte. Só exige número quando for preciso
+    // disparar push Express direto (É-kwanza, sem WiPay).
+    if (m === "mcx_express" && (!customer_phone || customer_phone.length !== 9) && !(await wipayReady())) {
       return res.status(400).json({ error: "Número Express inválido (usa 9XXXXXXXX)" });
     }
     const code = "SC" + Date.now().toString(36).toUpperCase();
@@ -1848,7 +1851,8 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     // - mcx_express + telefone → WiPay (página hospedada) se configurado,
     //   senão cobrança push É-kwanza (GPO_...) como antes.
     // - referencia → gera entidade + número de referência (REF_...).
-    if ((m === "mcx_express" && customer_phone) || m === "referencia") {
+    const wipay = m === "mcx_express" && await wipayReady();
+    if ((m === "mcx_express" && (customer_phone || wipay)) || m === "referencia") {
       const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null, return_url: typeof return_url === "string" && /^https?:\/\//.test(return_url) ? return_url.slice(0, 300) : null };
       setImmediate(async () => {
         try {
@@ -3419,7 +3423,16 @@ setInterval(async () => {
 import { existsSync } from "fs";
 const staticDir = join(__dirname, "public");
 if (existsSync(staticDir)) {
-  app.use(express.static(staticDir));
+  // pay-widget.js corre em sites terceiros: sem cache para atualizações
+  // (remoção de campos, etc.) chegarem de imediato, sem Ctrl+F5.
+  app.use(express.static(staticDir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith("pay-widget.js")) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+      }
+    },
+  }));
   app.use((req, res, next) => {
     if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/healthz")) {
       res.sendFile(join(staticDir, "index.html"));
