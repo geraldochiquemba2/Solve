@@ -875,10 +875,8 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
   // KPIs (que são cruzamentos de etapa) saem fora para não se contradizerem.
   const statusVista = pasta ? 'Todos' : status;
   const kpiVista = pasta ? 'todos' : filtro;
-  // Numa lista só de convertidas, a coluna passa a ser a data da conversão e não um
-  // próximo contacto a marcar: quem filtra por "Convertidas" (ou entra na pasta da
-  // etapa) quer saber quando cada uma fechou, não agendar o que já fechou.
-  const soConvertidas = pasta === 'convertido' || kpiVista === 'convertidas' || statusVista === 'Convertida';
+  // Na coluna "Acompanhamento", uma lead convertida mostra a data da conversão
+  // em vez do próximo contacto (marcado pelo servidor na mudança de etapa).
   const semFiltros = q.trim() === '' && statusVista === 'Todos' && source === 'Todas' && owner === 'Todos' && acomp === 'Todos' && canal === 'Todos' && kpiVista === 'todos';
   // A pesquisa também atravessa o telefone e o WhatsApp: quando o gestor tem o
   // número, procura por ele para ligar — não sabe o nome de quem o forneceu.
@@ -1061,15 +1059,15 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
       note={pasta ? `${filtered.length} nesta pasta · ${viewMsg ? ` · ${viewMsg}` : ''}` : `${filtered.length} de ${leads.length} · ${naBase === leads.length ? 'todos com etapa válida' : `${naBase} com etapa válida`}${viewMsg ? ` · ${viewMsg}` : ''}`}
       action={!pasta ? <button className="btn-quiet" onClick={saveView} data-testid="button-guardar-vista"><Filter size={13} /> Guardar vista</button> : undefined}
     >
-      {filtered.length === 0 ? <LeadsVazio tipo={tipoVazio as 'base' | 'pasta' | 'filtros' | 'kpi'} pasta={pasta ? etapaNome(pasta) : null} onLimpar={limparFiltros} onNovo={abrirNovo} /> : <div className="table-wrap sticky-first lead-cartoes">
+      {filtered.length === 0 ? <LeadsVazio tipo={tipoVazio as 'base' | 'pasta' | 'filtros' | 'kpi'} pasta={pasta ? etapaNome(pasta) : null} onLimpar={limparFiltros} onNovo={abrirNovo} /> : <div className="table-wrap lead-cartoes leads-tabela-fit">
         <table className="data-table">
           <thead><tr>
             <th scope="col">Nome</th><th scope="col">Contacto</th><th scope="col">Origem</th><th scope="col">Etapa</th>
-            <th scope="col">Responsável</th><th scope="col">Último contacto</th><th scope="col">{soConvertidas ? 'Data da conversão' : 'Próx. contacto'}</th>
-            <th scope="col">Observações</th><th scope="col"><span className="sr-only">Acções</span></th>
+            <th scope="col">Responsável</th><th scope="col">Acompanhamento</th>
+            <th scope="col">Observações</th>
           </tr></thead>
           <tbody>{filtered.map(l => <tr key={l.id} data-testid={`row-lead-${l.id}`} className={chegouAgora(l) ? 'lead-recem' : undefined}>
-            <td className="sem-rotulo"><div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{l.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{l.name}{chegouAgora(l) ? <span className="lead-recem-selo">nova</span> : null}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div></div></td>
+            <td className="sem-rotulo"><div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700, flexShrink: 0 }}>{l.name.slice(0, 2).toUpperCase()}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700 }}>{l.name}{chegouAgora(l) ? <span className="lead-recem-selo">nova</span> : null}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div><div style={{ display: 'flex', gap: '.1rem', flexShrink: 0 }}><IconButton label="ficha lead" onClick={() => setFicha(l)}><Eye size={14} /></IconButton><IconButton label="editar lead" onClick={() => { setEditing(l); setOpen(true); }}><Edit3 size={14} /></IconButton></div></div></td>
             <td data-label="Contacto">
               <div className="lead-contacto">
                 {l.whatsapp || l.phone ? <>
@@ -1095,24 +1093,18 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
                 {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </td>
-            <td className="lead-datas" data-label="Último contacto">
-              <input type="date" className="input input-data" data-testid={`input-lead-ultimo-${l.id}`} aria-label={`Último contacto de ${l.name}`} max={hoje}
-                value={dataInput(l.ultimoContactoAt)} onChange={e => mudarData(l, 'ultimoContactoAt', e.target.value)} />
+            <td data-label="Acompanhamento">
+              <div className="lead-datas-stack">
+                <label><span>Último</span><input type="date" className="input input-data" data-testid={`input-lead-ultimo-${l.id}`} aria-label={`Último contacto de ${l.name}`} max={hoje}
+                  value={dataInput(l.ultimoContactoAt)} onChange={e => mudarData(l, 'ultimoContactoAt', e.target.value)} /></label>
+                {/* Convertida: mostra quando foi convertida em vez do próximo contacto. */}
+                {convertida(l)
+                  ? <label><span>Convertida em</span><span className="input-data" data-testid={`lead-convertida-em-${l.id}`} style={{ whiteSpace: 'nowrap' }}>{l.convertedAt ? fmtDataHora(l.convertedAt) : '—'}</span></label>
+                  : <label><span>Próximo</span><input type="date" className="input input-data" data-testid={`input-lead-proximo-${l.id}`} aria-label={`Próximo contacto de ${l.name}`} min={hoje}
+                    value={dataInput(l.proximoContato)} onChange={e => mudarData(l, 'proximoContato', e.target.value)} /></label>}
+              </div>
             </td>
-            {/* Uma lead convertida não tem próximo contacto a marcar: o que interessa
-                é quando foi convertida (data marcada pelo servidor na mudança de etapa). */}
-            {convertida(l)
-              ? <td className="lead-datas" data-label="Convertida em">
-                <span className="input-data" data-testid={`lead-convertida-em-${l.id}`} style={{ whiteSpace: 'nowrap' }}>
-                  {l.convertedAt ? fmtDataHora(l.convertedAt) : '—'}
-                </span>
-              </td>
-              : <td className="lead-datas" data-label="Próx. contacto">
-                <input type="date" className="input input-data" data-testid={`input-lead-proximo-${l.id}`} aria-label={`Próximo contacto de ${l.name}`} min={hoje}
-                  value={dataInput(l.proximoContato)} onChange={e => mudarData(l, 'proximoContato', e.target.value)} />
-              </td>}
             <td data-label="Observações"><LeadNotesCell lead={l} updateMut={updateMut} onSaved={refreshResumo} /></td>
-            <td className="sem-rotulo"><div style={{ display: 'flex', gap: '.25rem' }}><IconButton label="ficha lead" onClick={() => setFicha(l)}><Eye size={14} /></IconButton><IconButton label="editar lead" onClick={() => { setEditing(l); setOpen(true); }}><Edit3 size={14} /></IconButton></div></td>
           </tr>)}</tbody>
         </table>
       </div>}

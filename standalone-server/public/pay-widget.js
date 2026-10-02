@@ -80,7 +80,6 @@
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Pagamento</label><div style='font-size:.78rem;font-weight:600;padding:.55rem 0'>Multicaixa na página seguinte</div></div></div>" +
       "<div id='spw-tempo' style='font-size:.72rem;color:#666;margin-top:.35rem'></div>" +
-      "<label class='spw-label' id='spw-phone-label'>Telefone *</label><input id='spw-phone' class='spw-input' placeholder='9XXXXXXXX'>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
@@ -112,8 +111,6 @@
     syncAmt();
 
     var method = "express"; // único fluxo: link WiPay (o método escolhe-se na página)
-    var phoneInput = m.querySelector("#spw-phone"), phoneLabel = m.querySelector("#spw-phone-label");
-    phoneLabel.textContent = "Telefone *";
     var tempoEl = m.querySelector("#spw-tempo");
     if (tempoEl) {
       tempoEl.textContent = "Geras o link e pagas na página seguinte (Multicaixa Express ou referência).";
@@ -142,7 +139,6 @@
       openHistModal(m, list);
     });
     m.querySelector("#spw-email").addEventListener("change", function () { refreshAccess(m, entregas); loadHist(m); });
-    m.querySelector("#spw-phone").addEventListener("change", function () { loadHist(m); });
     m.querySelector("#spw-go").addEventListener("click", function () { pagar(m, method, entregas); });
   }
 
@@ -162,9 +158,9 @@
       try {
         var saved = JSON.parse(localStorage.getItem("spw_profile") || "null");
         if (saved) {
-          if (!nameEl.value && saved.name) { nameEl.value = saved.name; report.push("memória: nome"); }
-          if (!emailEl.value && saved.email) { emailEl.value = saved.email; report.push("memória: email"); }
-          if (!phoneEl.value && saved.phone) { phoneEl.value = saved.phone; report.push("memória: telefone"); }
+          if (nameEl && !nameEl.value && saved.name) { nameEl.value = saved.name; report.push("memória: nome"); }
+          if (emailEl && !emailEl.value && saved.email) { emailEl.value = saved.email; report.push("memória: email"); }
+          if (phoneEl && !phoneEl.value && saved.phone) { phoneEl.value = saved.phone; report.push("memória: telefone"); }
         }
       } catch (e0) {}
       var email = "";
@@ -231,7 +227,7 @@
       } catch (e4) {}
       if (email && !emailEl.value) { emailEl.value = email; report.push("página: email"); }
       if (name && !nameEl.value) { nameEl.value = name; report.push("página: nome"); }
-      if (phone && phone.length === 9 && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
+      if (phone && phone.length === 9 && phoneEl && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
       // Nome oficial: pergunta ao CRM (Cademi → CRM → OVG) pelo email.
       try {
         var em = (emailEl.value || "").trim();
@@ -331,8 +327,9 @@
 
   // Histórico do aluno (pendentes, pagos, cancelados, referências) + cancelar.
   function histParams(m) {
-    var em = (m.querySelector("#spw-email").value || "").trim();
-    var ph = (m.querySelector("#spw-phone").value || "").replace(/\D/g, "").slice(-9);
+    var em = ((m.querySelector("#spw-email") || {}).value || "").trim();
+    var phEl = m.querySelector("#spw-phone");
+    var ph = phEl ? (phEl.value || "").replace(/\D/g, "").slice(-9) : "";
     var q = [];
     if (em && em.indexOf("@") > 0) q.push("email=" + encodeURIComponent(em));
     if (ph) q.push("phone=" + encodeURIComponent(ph));
@@ -434,8 +431,9 @@
   }
 
   async function cancelPay(m, code) {
-    var em = (m.querySelector("#spw-email").value || "").trim();
-    var ph = (m.querySelector("#spw-phone").value || "").trim();
+    var em = ((m.querySelector("#spw-email") || {}).value || "").trim();
+    var phEl = m.querySelector("#spw-phone");
+    var ph = phEl ? (phEl.value || "").trim() : "";
     if (!confirm("Cancelar o pagamento " + code + "?")) return;
     try {
       var r = await h(API + "/api/v1/payments/" + encodeURIComponent(code) + "/cancel", {
@@ -477,13 +475,13 @@
     (entregas || []).forEach(function (o) { if (o.id === prod) chosen = o; });
     if (!chosen || !chosen.preco) { msg(m, "Conteúdo ainda sem preço (disponível em breve).", true); return; }
     var amt = parseFloat(String(m.querySelector("#spw-amt").value).replace(/\s/g, ""));
-    var phone = m.querySelector("#spw-phone").value.trim();
+    var phoneEl = m.querySelector("#spw-phone");
+    var phone = phoneEl ? phoneEl.value.trim() : "";
     var name = m.querySelector("#spw-name").value.trim();
     var email = m.querySelector("#spw-email").value.trim();
     var btn = m.querySelector("#spw-go");
     if (!amt || amt <= 0) { msg(m, "Indica um montante válido.", true); return; }
-    // Só o Express usa o número (cobrança push); referência não precisa.
-    if (method === "express" && !phone) { msg(m, "Indica o número de telefone.", true); return; }
+    // O método (incl. número, se preciso) escolhe-se na página seguinte.
     btn.disabled = true;
     btn.textContent = "A verificar...";
     // Regra: 1 pagamento de cada vez — bloqueia se houver pendente aberto.
@@ -543,7 +541,7 @@
       var r = await h(API + "/api/v1/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi", return_url: String((window.location && window.location.href) || "").slice(0, 300) })
+        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone || undefined, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi", return_url: String((window.location && window.location.href) || "").slice(0, 300) })
       });
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);

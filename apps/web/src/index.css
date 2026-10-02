@@ -675,10 +675,16 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   .data-table .btn-quiet { min-width:2.5rem; min-height:2.5rem; }
 }
 @media (prefers-reduced-motion: reduce) { .lead-recem, .lead-recem-card { animation:none; } }
-/* Campo Observações na mesma tabela. A tabela de leads tem 10 colunas e não cabe
-   em 1440px — o scroll horizontal do .table-wrap trata disso, e sticky-first
-   mantém o nome visível enquanto se percorre. O campo fica no mínimo legível e o
-   texto completo lê-se no title (tooltip) enquanto a nota for curta. */
+/* Base de leads sem scroll lateral: 7 colunas compactas. As duas datas
+   partilham a coluna "Acompanhamento" (empilhadas) e as acções vivem na
+   célula do nome. O campo Observações fica no mínimo legível e o texto
+   completo lê-se no title (tooltip) enquanto a nota for curta. */
+.leads-tabela-fit .data-table th, .leads-tabela-fit .data-table td { padding:.55rem .6rem; }
+.lead-datas-stack { display:grid; gap:.3rem; min-width:9rem; }
+.lead-datas-stack label { display:grid; gap:.12rem; }
+.lead-datas-stack label > span { font-size:.58rem; letter-spacing:.07em; text-transform:uppercase; font-weight:700; color:hsl(var(--muted-foreground)); }
+.lead-datas-stack .input-data { width:100%; min-width:0; }
+.leads-tabela-fit .cell-notes { min-width:7rem; }
 .cell-notes-wrap { position:relative; display:block; }
 .cell-notes { padding:.32rem .5rem; font-size:.7rem; min-width:8.5rem; }
 .cell-notes.is-error { border-color:hsl(var(--destructive)); box-shadow:0 0 0 3px hsl(var(--destructive) / .15); }
@@ -694,7 +700,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 .section-note { color:hsl(var(--muted-foreground)); font-size:.72rem; margin-top:.2rem; }
 .modal-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; background:hsl(0 0% 2% / .65); backdrop-filter:blur(4px); }
 .modal { width:min(100%, 480px); max-height:calc(100dvh - 2rem); overflow:auto; background:hsl(var(--card)); border:1px solid hsl(var(--border)); border-radius:.8rem; box-shadow:var(--shadow-lg); }
-.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid hsl(var(--border)); }
+.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid hsl(var(--border)); position:sticky; top:0; z-index:2; background:hsl(var(--card)); border-top-left-radius:.7rem; border-top-right-radius:.7rem; }
 .modal-head > div:first-child { min-width:0; }
 .modal-head .section-title, .modal-head .section-note { overflow-wrap:anywhere; }
 .modal-body { padding:1.2rem; }
