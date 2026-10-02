@@ -2918,14 +2918,13 @@ app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
       COUNT(*) FILTER (WHERE status = 'qualificado') AS em_acompanhamento,
       COUNT(*) FILTER (WHERE status = 'convertido') AS convertidas,
       COUNT(*) FILTER (WHERE status = 'perdido') AS perdidas,
-      COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS contactadas,
-      COUNT(*) FILTER (WHERE status NOT IN ('convertido', 'perdido') AND NOT EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS pendentes
+      COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS contactadas
       FROM leads`);
     const row = r.rows[0] || {};
     const num = (v) => Number(v ?? 0);
     res.json({ data: {
       total: num(row.total), novas: num(row.novas), contactadas: num(row.contactadas),
-      pendentes: num(row.pendentes), emAcompanhamento: num(row.em_acompanhamento),
+      emAcompanhamento: num(row.em_acompanhamento),
       convertidas: num(row.convertidas), perdidas: num(row.perdidas),
     } });
   } catch (err) {

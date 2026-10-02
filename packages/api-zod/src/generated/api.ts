@@ -162,14 +162,13 @@ export const CreateLeadResponse = zod.object({
 
 
 /**
- * @summary KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+ * @summary KPIs de acompanhamento (total, contactadas, convertidas, perdidas)
  */
 export const GetLeadsResumoResponse = zod.object({
   "data": zod.object({
   "total": zod.number().int().optional(),
   "novas": zod.number().int().optional(),
   "contactadas": zod.number().int().optional(),
-  "pendentes": zod.number().int().optional(),
   "emAcompanhamento": zod.number().int().optional(),
   "convertidas": zod.number().int().optional(),
   "perdidas": zod.number().int().optional()

@@ -119,7 +119,6 @@ export interface LeadsResumo {
   total?: number;
   novas?: number;
   contactadas?: number;
-  pendentes?: number;
   emAcompanhamento?: number;
   convertidas?: number;
   perdidas?: number;

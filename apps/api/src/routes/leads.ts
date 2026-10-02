@@ -194,7 +194,7 @@ router.get("/leads", authenticate, async (req, res, next) => {
   }
 });
 
-// ─── KPIs organizados: total, contactadas (com %), pendentes, convertidas, perdidas ───
+// ─── KPIs organizados: total, contactadas (com %), convertidas, perdidas ───
 // IMPORTANTE: antes de /:id para não colidir
 router.get("/leads/resumo", authenticate, async (req, res, next) => {
   try {
@@ -207,11 +207,10 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
     const convertidas = await countBy(eq(leadsTable.status, "convertido"));
     const perdidas = await countBy(eq(leadsTable.status, "perdido"));
     const emAcompanhamento = await countBy(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]));
-    // contactadas = têm ≥1 registo em lead_contacts; pendentes = nunca contactadas
+    // contactadas = têm ≥1 registo em lead_contacts
     const contactadasRows = await db.select({ leadId: leadContactsTable.leadId }).from(leadContactsTable).groupBy(leadContactsTable.leadId);
     const contactadas = contactadasRows.length;
-    const pendentes = Math.max(total - contactadas, 0);
-    res.json({ data: { total, novas, contactadas, pendentes, emAcompanhamento, convertidas, perdidas } });
+    res.json({ data: { total, novas, contactadas, emAcompanhamento, convertidas, perdidas } });
   } catch (err) {
     next(err);
   }

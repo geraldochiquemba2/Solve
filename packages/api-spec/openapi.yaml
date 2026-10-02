@@ -218,7 +218,7 @@ paths:
     get:
       operationId: getLeadsResumo
       tags: [leads]
-      summary: KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+      summary: KPIs de acompanhamento (total, contactadas, convertidas, perdidas)
       security:
         - bearerAuth: []
       responses:
@@ -1610,8 +1610,6 @@ components:
         novas:
           type: integer
         contactadas:
-          type: integer
-        pendentes:
           type: integer
         emAcompanhamento:
           type: integer

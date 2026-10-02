@@ -828,8 +828,6 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
     if (f === 'todos') return true;
     const t = trackOf(l);
     if (f === 'novas') return t === 'Nova';
-    // "Pendentes" cruza etapas (ainda sem contacto e em aberto) - do PROD, mantido.
-    if (f === 'pendentes') return (l.contactosTotal ?? 0) === 0 && t !== 'Convertida' && t !== 'Perdida';
     if (f === 'emAcomp') return t === 'Em acompanhamento';
     if (f === 'convertidas') return t === 'Convertida';
     if (f === 'perdidas') return t === 'Perdida';
@@ -1041,7 +1039,6 @@ function LeadsPage({ leads, userName, onChanged, loading, erro, onRetry }: { lea
     </div>}
     {!pasta && resumo ? <div className="metric-compact" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '.5rem', marginBottom: '.6rem' }}>
       <Metric testId="kpi-novas" label="Novas" value={String(resumo.novas)} note={pct(resumo.novas, resumo.total)} active={filtro === 'novas'} onClick={() => toggleFiltro('novas')} />
-      <Metric testId="kpi-pendentes" label="Pendentes" value={String(resumo.pendentes)} note={pct(resumo.pendentes, resumo.total)} active={filtro === 'pendentes'} onClick={() => toggleFiltro('pendentes')} />
       <Metric testId="kpi-emAcompanhamento" label="Em acompanhamento" value={String(resumo.emAcompanhamento)} note={pct(resumo.emAcompanhamento, resumo.total)} active={filtro === 'emAcomp'} onClick={() => toggleFiltro('emAcomp')} />
       <Metric testId="kpi-convertidas" label="Convertidas" value={String(resumo.convertidas)} note={pct(resumo.convertidas, resumo.total)} active={filtro === 'convertidas'} onClick={() => toggleFiltro('convertidas')} />
       <Metric testId="kpi-perdidas" label="Perdidas" value={String(resumo.perdidas)} note={pct(resumo.perdidas, resumo.total)} active={filtro === 'perdidas'} onClick={() => toggleFiltro('perdidas')} />

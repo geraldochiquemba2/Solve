@@ -492,7 +492,7 @@ export const getGetLeadsResumoUrl = () => {
 }
 
 /**
- * @summary KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+ * @summary KPIs de acompanhamento (total, contactadas, convertidas, perdidas)
  */
 export const getLeadsResumo = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetLeadsResumo200> => {
 
@@ -539,7 +539,7 @@ export type GetLeadsResumoQueryError = ErrorType<unknown>
 
 
 /**
- * @summary KPIs de acompanhamento (total, contactadas, pendentes, convertidas, perdidas)
+ * @summary KPIs de acompanhamento (total, contactadas, convertidas, perdidas)
  */
 
 export function useGetLeadsResumo<TData = Awaited<ReturnType<typeof getLeadsResumo>>, TError = ErrorType<unknown>>(
