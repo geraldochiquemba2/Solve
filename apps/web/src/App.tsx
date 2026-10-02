@@ -304,12 +304,14 @@ function EmptyState({ title, text, action }: { title: string; text: string; acti
 }
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
   const caixa = useRef<HTMLDivElement>(null);
+  // Foco só ao abrir: se ficasse aqui dentro com [onClose], cada tecla
+  // (novo onClose a cada render) roubava o foco do campo onde se escreve.
+  useEffect(() => { caixa.current?.focus(); }, []);
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', tecla);
     const overflowAnterior = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    caixa.current?.focus();
     return () => { document.removeEventListener('keydown', tecla); document.body.style.overflow = overflowAnterior; };
   }, [onClose]);
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className="modal" ref={caixa} tabIndex={-1}><div className="modal-head"><div><div className="section-title">{title}</div>{subtitle && <div className="section-note">{subtitle}</div>}</div><IconButton label="fechar" onClick={onClose}><X size={16} /></IconButton></div><div className="modal-body">{children}</div></div></div>;
