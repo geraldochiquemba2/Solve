@@ -24,6 +24,7 @@ export interface Lead {
   proximoContato?: Date;
   motivoPerda?: string;
   contactosTotal?: number;
+  convertedAt?: Date;
   ultimoContactoAt?: Date;
   ultimoResultado?: string;
   ultimoStaff?: string;

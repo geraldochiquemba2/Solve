@@ -1555,6 +1555,9 @@ components:
           type: string
         contactosTotal:
           type: integer
+        convertedAt:
+          type: string
+          format: date-time
         ultimoContactoAt:
           type: string
           format: date-time

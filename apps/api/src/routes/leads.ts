@@ -441,6 +441,12 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
       else if (k === "status") patch.status = canonStatus(v);
       else patch[k] = v;
     }
+    // Entrar em Convertida marca a data. A etapa muda-se na tabela, sem passar por um
+    // contacto com resultado "Converteu", e o rasto não pode depender de o gestor ter
+    // registado esse contacto. Sair da etapa desfaz a data, para não deixar uma conversão
+    // antiga em cima de uma lead que voltou ao funil.
+    if (patch.status === "convertido" && canonStatus((existing as any).status) !== "convertido") patch.convertedAt = new Date();
+    else if (canonStatus((existing as any).status) === "convertido") patch.convertedAt = null;
 
     const [lead] = await db
       .update(leadsTable)

@@ -56,7 +56,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type Lead = { id: string; name: string; company: string; source: string; status: string; statusApi?: string; owner: string; value: number; last: string; email: string; phone: string; notes: string; code: string; createdAt: string; whatsapp?: string | null; produtoInteresse?: string | null; proximoContato?: string | null; motivoPerda?: string | null; contactosTotal?: number | null; ultimoContactoAt?: string | null; ultimoResultado?: string | null; ultimoStaff?: string | null; externalId?: string | null; campanhas?: Array<{ source: string; produtoInteresse?: string | null; createdAt?: string | null }> | null };
+type Lead = { id: string; name: string; company: string; source: string; status: string; statusApi?: string; owner: string; value: number; last: string; email: string; phone: string; notes: string; code: string; createdAt: string; whatsapp?: string | null; produtoInteresse?: string | null; proximoContato?: string | null; motivoPerda?: string | null; contactosTotal?: number | null; convertedAt?: string | null; ultimoContactoAt?: string | null; ultimoResultado?: string | null; ultimoStaff?: string | null; externalId?: string | null; campanhas?: Array<{ source: string; produtoInteresse?: string | null; createdAt?: string | null }> | null };
 type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; nif?: string | null; club?: string | null; ovgId?: string | null; cademiId?: string | null; entryDate?: string | null; lessonsLeft?: number | null; lessonsLimit?: number | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
 
 // ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
@@ -92,6 +92,7 @@ function mapApiLead(l: ApiLead): Lead {
     proximoContato: (l as any).proximoContato ?? null,
     motivoPerda: (l as any).motivoPerda ?? null,
     contactosTotal: (l as any).contactosTotal ?? null,
+    convertedAt: (l as any).convertedAt ?? null,
     ultimoContactoAt: (l as any).ultimoContactoAt ?? null,
     ultimoResultado: (l as any).ultimoResultado ?? null,
     ultimoStaff: (l as any).ultimoStaff ?? null,
@@ -599,6 +600,9 @@ function LeadFicha({ lead, staff, onClose, onChanged, onStaffCreated, allowCreat
         {lead.email ? <div>Email: {lead.email}</div> : null}
         {lead.company ? <div>Empresa: {lead.company}</div> : null}
         <div>Produto de interesse: {lead.produtoInteresse || '—'}</div>
+        {/* A data em que a lead passou a Convertida, marcada pelo servidor na mudança
+            de etapa (ver PATCH /leads/:id). Fica vazia enquanto não houver conversão. */}
+        {lead.convertedAt ? <div>Convertida em: {fmtH(lead.convertedAt)}</div> : null}
       </div>
       {(lead.campanhas && lead.campanhas.length > 0) ? <div>
         <div className="eyebrow" style={{ marginBottom: '.45rem' }}>Campanhas / interesses</div>
@@ -1722,7 +1726,9 @@ function PaymentsPage() {
     fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() })
       .then(r => r.json())
       .then(j => {
-        const list = Array.isArray(j.data) ? j.data : [];
+        // Só os quatro planos de duração, pela ordem de venda (ver catalogoWorkout).
+        const list = catalogoWorkout(Array.isArray(j.data) ? j.data : [])
+          .map((o: any) => ({ id: String(o.id), nome: String(o.nome || o.id), ...(o.preco ? { preco: Number(o.preco) } : {}) }));
         setCEntregas(list);
         if (!cProduto && list.length > 0) setCProduto(list[0].id);
       })
@@ -1982,6 +1988,25 @@ function IntegrationsPage() {
   return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar…' : 'Sincronizar tudo'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi, isPay, pay }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar…'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `SamoraFit Workout OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar…'}</div>}{isPay && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{pay ? (pay.connected ? `✓ ${pay.message}` : `✗ ${pay.message}`) : 'A verificar…'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{(isOVG || isCademi) && <button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : cademiSyncMut.mutate()} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar…' : 'Sincronizar') : (cademiSyncMut.isPending ? 'A sincronizar…' : 'Sincronizar')}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'SamoraFit Workout · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
 
+// Catálogo de conteúdos do SamoraFit Workout: só os quatro planos de duração, pela
+// ordem em que se vendem (12 meses, 1, 3 e 6). A Cademi devolve também produtos que
+// não são planos — "Time Filmes" e o "SamoraFit Workout" genérico com preço de 100 —
+// e ficavam na lista de preços e no seletor de cobrança a trocar com os planos.
+// Entram aqui os quatro, pela ordem pedida; o resto sai do ecrã.
+const ORDEM_WORKOUT: Array<[RegExp, number]> = [
+  [/12\s*mes/i, 0],
+  [/(^|[^0-9])1\s*mes/i, 1],
+  [/3\s*mes/i, 2],
+  [/6\s*mes/i, 3],
+];
+const ordemWorkout = (o: { id: string; nome?: string }) => {
+  const alvo = `${o.id} ${o.nome ?? ''}`;
+  if (!/samora?fit[-\s]?workout/i.test(alvo)) return -1;
+  return ORDEM_WORKOUT.find(([re]) => re.test(alvo))?.[1] ?? -1;
+};
+const catalogoWorkout = <T extends { id: string; nome?: string }>(lista: T[]): T[] =>
+  lista.filter((o) => ordemWorkout(o) >= 0).sort((a, b) => ordemWorkout(a) - ordemWorkout(b));
+
 function AcademiaPage() {
   const apiBase = import.meta.env.VITE_API_URL || '';
   const [products, setProducts] = useState<any[]>([]);
@@ -1999,6 +2024,7 @@ function AcademiaPage() {
   // Entrega Cademi fixa (não editável): produto sempre 'samorafit-workout', envio sempre ligado.
   const FIXO_PRODUTO_ID = 'samorafit-workout';
   const [entregasArr, setEntregasArr] = useState<Array<{ id: string; nome: string; preco?: number }>>([]);
+  const [entregasCarregadas, setEntregasCarregadas] = useState(false);
   const [cfgMsg, setCfgMsg] = useState('');
   const [savingCfg, setSavingCfg] = useState(false);
 
@@ -2008,14 +2034,21 @@ function AcademiaPage() {
       // (produto de entrega e envio automático são fixos — ver FIXO_PRODUTO_ID.)
       try {
         const e: any = await fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() }).then(r => r.json());
-        const list = Array.isArray(e.data) ? e.data : [];
-        if (list.length > 0) setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
+        // Só os quatro planos de duração, pela ordem de venda (ver catalogoWorkout).
+        const list = catalogoWorkout(Array.isArray(e.data) ? e.data : []);
+        setEntregasArr(list.map((o: any) => ({ id: o.id, nome: o.nome || o.id, ...(o.preco ? { preco: Number(o.preco) } : {}) })));
       } catch {}
+      setEntregasCarregadas(true);
     } catch {}
   };
 
   const saveCfg = async () => {
     setSavingCfg(true); setCfgMsg('');
+    // Guardar reescreve a lista de conteúdos: sem catálogo lido não se apaga nada.
+    if (!entregasCarregadas || entregasArr.length === 0) {
+      setCfgMsg('Nada para guardar: nenhum conteúdo de SamoraFit Workout foi lido.');
+      setSavingCfg(false); return;
+    }
     try {
       const res = await fetch(`${apiBase}/api/v1/settings`, {
         method: 'PUT',
@@ -2093,7 +2126,7 @@ function AcademiaPage() {
     </div>
     <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
     <div style={{ display: 'grid', gap: '.45rem' }}>
-      {entregasArr.length === 0 && <div className="section-note">A carregar entregas…</div>}
+      {entregasArr.length === 0 && <div className="section-note">{entregasCarregadas ? 'Nenhum plano de SamoraFit Workout encontrado na Cademi.' : 'A carregar entregas…'}</div>}
       {entregasArr.map(o => <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
         <div style={{ flex: 1, fontSize: '.78rem', fontWeight: 600 }}>{o.nome}<div className="mono" style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))', fontWeight: 400 }}>{o.id}</div></div>
         <input className="input" type="number" min="0" value={o.preco ?? ''} onChange={e => setEntregasArr(entregasArr.map(x => x.id === o.id ? { ...x, preco: e.target.value === '' ? undefined : Number(e.target.value) } : x))} placeholder="Preço" style={{ width: '130px' }} />

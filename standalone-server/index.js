@@ -2843,7 +2843,7 @@ const mapLead = (r) => ({
   proximoContato: r.proximo_contato || null, motivoPerda: r.motivo_perda || null,
   contactosTotal: r.contactos_total != null ? Number(r.contactos_total) : null,
   ultimoContactoAt: r.ultimo_contacto_at || null, ultimoResultado: r.ultimo_resultado || null,
-  ultimoStaff: r.ultimo_staff || null,
+  ultimoStaff: r.ultimo_staff || null, convertedAt: r.converted_at || null,
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -3049,6 +3049,12 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     if (req.body.status !== undefined) {
       if (!LEAD_STATUS.includes(req.body.status)) return res.status(400).json({ error: "Status inválido" });
       fields.push(`status = $${params.length + 1}`); params.push(req.body.status);
+      // Entrar em Convertida marca a data. A etapa muda-se na tabela, sem passar por
+      // um contacto com resultado "Converteu", e o rasto não pode depender de o gestor
+      // ter registado esse contacto. Sair da etapa desfaz a data, para não ficar uma
+      // conversão antiga em cima de uma lead que voltou ao funil.
+      if (req.body.status === "convertido" && cur.rows[0].status !== "convertido") fields.push("converted_at = NOW()");
+      else if (cur.rows[0].status === "convertido") fields.push("converted_at = NULL");
     }
     if (req.body.estimatedValue !== undefined) { fields.push(`estimated_value = $${params.length + 1}`); params.push(req.body.estimatedValue); }
     if (req.body.ownerId !== undefined) { fields.push(`owner_id = $${params.length + 1}`); params.push(req.body.ownerId); }

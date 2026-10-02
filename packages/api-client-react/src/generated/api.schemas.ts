@@ -78,6 +78,7 @@ export interface Lead {
   proximoContato?: string;
   motivoPerda?: string;
   contactosTotal?: number;
+  convertedAt?: string;
   ultimoContactoAt?: string;
   ultimoResultado?: string;
   ultimoStaff?: string;
