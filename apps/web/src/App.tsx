@@ -2146,12 +2146,8 @@ const [produtoEntrega, setProdutoEntrega] = useState('');
   {syncMsg && <div className="card" style={{ padding: '.7rem 1rem', marginBottom: '.8rem', fontSize: '.78rem' }}>{syncMsg}</div>}
   <Section title="Acesso automático" note="Ao confirmar pagamento, liberta o curso no SamoraFit Workout">
     <div className="grid-2">
-      <div><label className="label">Entrega por omissão *</label>
-      <select className="select" data-testid="select-cademi-entrega" aria-label="Plano entregue por omissão na Cademi" value={produtoEntrega} onChange={e => setProdutoEntrega(e.target.value)} disabled={entregasArr.length === 0}>
-        {entregasArr.length === 0 && <option value="">A carregar planos…</option>}
-        {entregasArr.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-      </select>
-      <div className="section-note">A Cademi entrega o plano que o cliente comprou; este é o usado quando o pagamento não traz produto.</div></div>
+      {/* Entrega por omissão oculta (o sistema exige sempre produto): usa-se o
+          primeiro plano em silêncio para os raros pagamentos sem produto. */}
       <div><label className="label">Envio automático</label>
       <div style={{ padding: '.55rem .7rem' }}><Status tone="good">Ligado</Status></div></div>
     </div>
