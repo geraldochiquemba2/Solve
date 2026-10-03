@@ -115,15 +115,6 @@ export function useCreateAutomation() {
   });
 }
 
-export function useUpdateAutomation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; trigger?: string; action?: string }) =>
-      apiMutate<{ data: Automation }>(`/api/v1/automations/${id}`, 'PATCH', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
-  });
-}
-
 export function useDeleteAutomation() {
   const qc = useQueryClient();
   return useMutation({
@@ -260,25 +251,6 @@ export function useSolveAccessTerminals() {
   return useQuery({
     queryKey: ['solve-access-terminals'],
     queryFn: () => accessGet<{ success: boolean; data: any }>('/api/v1/terminal/status'),
-    refetchInterval: 180000, // fase Cademi-CRM: sem ginásio, polling reduzido (cota Neon)
-    retry: false,
-  });
-}
-
-export function useSolveAccessClients(params?: { busca?: string; pagina?: number; por_pagina?: number }) {
-  const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
-  return useQuery({
-    queryKey: ['solve-access-clients', params],
-    queryFn: () => accessGet<{ success: boolean; data: any }>(`/api/v1/access/clients${qs}`),
-    retry: false,
-  });
-}
-
-export function useSolveAccessLogs(params?: { limite?: number; cliente_id?: number }) {
-  const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
-  return useQuery({
-    queryKey: ['solve-access-logs', params],
-    queryFn: () => accessGet<{ success: boolean; data: any; pagination?: any }>(`/api/v1/access/logs${qs}`),
     refetchInterval: 180000, // fase Cademi-CRM: sem ginásio, polling reduzido (cota Neon)
     retry: false,
   });
@@ -504,22 +476,6 @@ export function useCademiHealth() {
   });
 }
 
-export function useCademiProducts() {
-  return useQuery({
-    queryKey: ['cademi-products'],
-    queryFn: () => apiGet<{ data: Array<{ id: number; nome: string }>; total: number }>('/api/v1/cademi/products'),
-    retry: false,
-  });
-}
-
-export function useCademiUsers() {
-  return useQuery({
-    queryKey: ['cademi-users'],
-    queryFn: () => apiGet<{ data: Array<{ id: number; nome: string; email: string; ultimo_acesso_em: string | null }>; total: number }>('/api/v1/cademi/users'),
-    retry: false,
-  });
-}
-
 export function useCademiSync() {
   const qc = useQueryClient();
   return useMutation({
@@ -644,13 +600,5 @@ export function useImportCustomerDates() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['customers-manual'] });
     },
-  });
-}
-
-export function useOVGMembers() {
-  return useQuery({
-    queryKey: ['ovg-members'],
-    queryFn: () => apiGet<{ data: any[]; total: number }>('/api/v1/ovg/members'),
-    retry: false,
   });
 }

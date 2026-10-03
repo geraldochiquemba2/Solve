@@ -1,44 +1,11 @@
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import { webhooksTable, webhookDeliveriesTable } from "@workspace/db/schema";
-import { eq, and, lte, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
-
-export async function deliverWebhook(
-  webhookId: string,
-  event: string,
-  payload: Record<string, unknown>,
-): Promise<string> {
-  const webhook = await db.query.webhooksTable.findFirst({
-    where: eq(webhooksTable.id, webhookId),
-  });
-
-  if (!webhook) {
-    throw new Error("Webhook not found");
-  }
-
-  const [delivery] = await db
-    .insert(webhookDeliveriesTable)
-    .values({
-      webhookId,
-      event,
-      payload,
-      status: "pendente",
-      attempts: 0,
-    })
-    .returning();
-
-  logger.info({ deliveryId: delivery.id, event, webhookId }, "Webhook delivery created");
-
-  processSingleDelivery(delivery.id, webhook.url, event, payload, webhook.secret || undefined).catch((err) => {
-    logger.error({ err, deliveryId: delivery.id }, "Initial webhook delivery failed");
-  });
-
-  return delivery.id;
-}
 
 async function processSingleDelivery(
   deliveryId: string,
@@ -135,86 +102,6 @@ async function scheduleRetry(
       logger.error({ err, deliveryId }, "Retry delivery failed");
     });
   }, delay);
-}
-
-export async function retryDelivery(deliveryId: string): Promise<void> {
-  const delivery = await db.query.webhookDeliveriesTable.findFirst({
-    where: eq(webhookDeliveriesTable.id, deliveryId),
-  });
-
-  if (!delivery) {
-    throw new Error("Delivery not found");
-  }
-
-  const webhook = await db.query.webhooksTable.findFirst({
-    where: eq(webhooksTable.id, delivery.webhookId),
-  });
-
-  if (!webhook) {
-    throw new Error("Webhook not found");
-  }
-
-  const payload = (delivery.payload as Record<string, unknown>) || {};
-
-  await db
-    .update(webhookDeliveriesTable)
-    .set({ status: "pendente", attempts: 0 })
-    .where(eq(webhookDeliveriesTable.id, deliveryId));
-
-  processSingleDelivery(deliveryId, webhook.url, delivery.event, payload, webhook.secret || undefined, 1).catch((err) => {
-    logger.error({ err, deliveryId }, "Retry delivery failed");
-  });
-}
-
-export async function processQueue(): Promise<void> {
-  const now = new Date();
-
-  const pendingDeliveries = await db
-    .select({
-      deliveryId: webhookDeliveriesTable.id,
-      webhookId: webhookDeliveriesTable.webhookId,
-      event: webhookDeliveriesTable.event,
-      payload: webhookDeliveriesTable.payload,
-      attempts: webhookDeliveriesTable.attempts,
-    })
-    .from(webhookDeliveriesTable)
-    .where(
-      and(
-        eq(webhookDeliveriesTable.status, "pendente"),
-        lte(webhookDeliveriesTable.nextRetryAt, now),
-      )
-    )
-    .orderBy(desc(webhookDeliveriesTable.createdAt))
-    .limit(50);
-
-  logger.info({ count: pendingDeliveries.length }, "Processing webhook queue");
-
-  for (const item of pendingDeliveries) {
-    const webhook = await db.query.webhooksTable.findFirst({
-      where: eq(webhooksTable.id, item.webhookId),
-    });
-
-    if (!webhook || !webhook.active) {
-      await db
-        .update(webhookDeliveriesTable)
-        .set({ status: "falha", responseCode: 0 })
-        .where(eq(webhookDeliveriesTable.id, item.deliveryId));
-      continue;
-    }
-
-    const payload = (item.payload as Record<string, unknown>) || {};
-
-    processSingleDelivery(
-      item.deliveryId,
-      webhook.url,
-      item.event,
-      payload,
-      webhook.secret || undefined,
-      item.attempts + 1,
-    ).catch((err) => {
-      logger.error({ err, deliveryId: item.deliveryId }, "Queue processing delivery failed");
-    });
-  }
 }
 
 export async function triggerWebhooks(event: string, payload: Record<string, unknown>): Promise<void> {

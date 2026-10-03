@@ -176,14 +176,6 @@ export function startBackgroundSync(): void {
   }, SYNC_INTERVAL_MS);
 }
 
-export function stopBackgroundSync(): void {
-  if (syncTimer) {
-    clearInterval(syncTimer);
-    syncTimer = null;
-    logger.info("OVG Sync: Sincronização em segundo plano parada");
-  }
-}
-
 export function getSyncStatus(): { isSyncing: boolean; lastSync: SyncResult | null; nextSyncIn: number } {
   return {
     isSyncing,
