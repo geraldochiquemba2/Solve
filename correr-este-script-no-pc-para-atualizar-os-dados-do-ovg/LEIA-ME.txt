@@ -1,0 +1,70 @@
+================================================================
+ATUALIZAR OS DADOS DO OVG - LEIA-ME
+================================================================
+
+PARA QUE SERVE ESTA PASTA
+------------------------
+O sistema do ginasio (OVG) so aceita ligacoes de computadores com
+IP autorizado. O servidor na nuvem (Render) esta bloqueado, por isso
+NAO consegue ir buscar os alunos novos sozinho.
+
+Esta pasta instala no PC um programa que, de 6 em 6 horas, copia os
+alunos do OVG para a base de dados. O site depois mostra esses dados.
+Sem isto a correr num PC ligado, os alunos novos NAO aparecem no CRM.
+
+Ficheiros desta pasta:
+  instalar-sync.cmd  -> instalador (correr uma vez por PC)
+  LEIA-ME.txt        -> este documento
+
+REQUISITOS DO PC
+----------------
+1. Windows com Node.js 20 LTS instalado
+   (https://nodejs.org -> botao LTS -> instalar -> seguinte, seguinte)
+2. Internet com IP autorizado pelo OVG (rede do ginasio ou de casa).
+   Teste rapido: abrir no browser samorafitstudio.onvirtualgym.com.
+   Se nao abrir, este PC nao serve.
+3. Esta pasta tem de estar DENTRO da pasta do projeto
+   (Solve-Corporate-CRM), porque o instalador vai buscar la o
+   programa (packages/db/ovg-reseed.cjs) e as chaves (.env).
+
+COMO INSTALAR (5 minutos)
+-------------------------
+1. Copiar a pasta do projeto para o PC (ou fazer git pull).
+2. Clicar com o botao DIREITO em instalar-sync.cmd ->
+   "Executar como administrador".
+3. Responder as perguntas (pode carregar Enter para aceitar tudo):
+   - Destino [C:\solve-sync]
+   - Hora de inicio [02:00] -> IMPORTANTE: usar hora DIFERENTE
+     em cada PC (ex: PC1 02:00, PC2 04:00, PC3 06:00).
+4. O instalador faz um teste imediato. Tem de aparecer no fim:
+     OK upserted=NNN total=NNN
+   e depois:
+     OK: sync instalado...
+5. Se o teste FALHAR, a tarefa NAO e criada. Causas comuns:
+   - "Login OVG falhou" -> IP deste PC nao autorizado, ou
+     OVG_USERNAME/OVG_PASSWORD errados no .env da raiz.
+   - "CRM_DATABASE_URL em falta" -> falta essa linha no .env.
+   - "npm falhou" -> sem internet.
+
+COMO CONFIRMAR QUE ESTA A FUNCIONAR
+-----------------------------------
+- No PC: abrir "Agendador de Tarefas" -> SolveCRM-OVG-Sync ->
+  "Ultimo resultado" deve ser 0x0 e a hora a avancar de 6 em 6h.
+- No site /admin ou na base de dados:
+    SELECT synced_at, records_synced FROM sync_log
+    ORDER BY id DESC LIMIT 5;
+  Deve mostrar linhas novas ao longo do dia.
+
+AVISOS
+------
+- O ficheiro C:\solve-sync\.env contem passwords (OVG + base de
+  dados). Nao partilhar, nao enviar por email/WhatsApp.
+- Pode instalar em varios PCs (ginasio + casa). E seguro: o
+  programa atualiza sem duplicar (upsert por numero de socio).
+- Se levar o portatil para fora da rede autorizada, o sync desse
+  PC falha. Nao ha problema se outro PC continuar a correr.
+
+EM CASO DE DUVIDA
+-----------------
+Falar com o tecnico e mostrar a mensagem de erro exata que aparece
+na janela preta. Nao fechar a janela antes de ler o resultado.

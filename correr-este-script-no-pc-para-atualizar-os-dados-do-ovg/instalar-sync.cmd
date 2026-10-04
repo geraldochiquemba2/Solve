@@ -1,12 +1,14 @@
 @echo off
 REM Instalador do sync OVG -> CRM numa maquina nova (rede com IP autorizado).
-REM Correr COMO ADMINISTRADOR a partir da pasta do repo.
+REM Correr COMO ADMINISTRADOR a partir desta pasta.
 REM Faz: pasta destino + .env minimo + deps (pg, dotenv) + teste + tarefa 6/6h.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
-
-if not exist ".env" (
-  echo [ERRO] .env da raiz nao encontrado. Corre a partir da pasta do repo.
+REM Raiz do repo = pasta acima desta.
+set "ROOT=%~dp0.."
+if not exist "%ROOT%\.env" (
+  echo [ERRO] .env da raiz nao encontrado em %ROOT%. Esta pasta tem de estar
+  echo dentro da pasta do repo (Solve-Corporate-CRM).
   pause
   exit /b 1
 )
@@ -36,21 +38,22 @@ if not exist "%DEST%" (
 )
 
 echo [2/5] A copiar script...
-copy /y "packages\db\ovg-reseed.cjs" "%DEST%\ovg-reseed.cjs" >nul
+copy /y "%ROOT%\packages\db\ovg-reseed.cjs" "%DEST%\ovg-reseed.cjs" >nul
 if %errorlevel% neq 0 (
-  echo [ERRO] Nao encontrei packages\db\ovg-reseed.cjs. Corre a partir da pasta do repo.
+  echo [ERRO] Nao encontrei packages\db\ovg-reseed.cjs em %ROOT%. Esta pasta tem de estar
+  echo dentro da pasta do repo (Solve-Corporate-CRM).
   pause
   exit /b 1
 )
 
 echo [3/5] A gerar .env minimo...
 if not exist "%DEST%\.env" (
-  findstr /R "^OVG_API_URL= ^OVG_USERNAME= ^OVG_PASSWORD= ^OVG_CLUB_CODE= ^CRM_DATABASE_URL=" ".env" > "%DEST%\.env"
+  findstr /R "^OVG_API_URL= ^OVG_USERNAME= ^OVG_PASSWORD= ^OVG_CLUB_CODE= ^CRM_DATABASE_URL=" "%ROOT%\.env" > "%DEST%\.env"
 ) else (
   for %%V in (OVG_API_URL OVG_USERNAME OVG_PASSWORD OVG_CLUB_CODE CRM_DATABASE_URL) do (
     findstr /B /R "^%%V=" "%DEST%\.env" >nul 2>nul
     if !errorlevel! neq 0 (
-      findstr /B /R "^%%V=" ".env" >> "%DEST%\.env" 2>nul
+      findstr /B /R "^%%V=" "%ROOT%\.env" >> "%DEST%\.env" 2>nul
     )
   )
 )
