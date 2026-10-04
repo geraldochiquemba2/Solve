@@ -19,8 +19,7 @@ const PAY4ALL_API_KEY = import.meta.env.VITE_PAY4ALL_API_KEY || ''
 
 export const createPay4AllPayment = async (data: PaymentRequest) => {
   // --- MOCK IMPLEMENTATION ---
-  console.log('[Pay4All API] Iniciando pedido de pagamento...', data)
-  
+
   return new Promise<{ success: boolean; message: string; payment_url?: string }>((resolve) => {
     setTimeout(() => {
       resolve({

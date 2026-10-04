@@ -48,7 +48,6 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
             }
           }),
         })
-        console.log('Lead enviada para o GoHighLevel!')
       } catch (error) {
         console.error('Erro ao enviar para o GoHighLevel:', error)
       }
