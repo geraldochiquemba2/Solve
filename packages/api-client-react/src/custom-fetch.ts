@@ -11,6 +11,29 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
+// O servidor só exige CSRF quando a sessão vem do cookie `token` (um `Bearer`
+// ou um `X-API-Key` não são forjáveis a partir de outro site). O token é lido do
+// cookie `csrf`, que é legível por JavaScript, e devolvido em X-CSRF-Token.
+const CSRF_COOKIE = "csrf";
+const CSRF_HEADER = "x-csrf-token";
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined" || !document.cookie) return null;
+  for (const part of document.cookie.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    const raw = part.slice(eq + 1);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Module-level configuration
 // ---------------------------------------------------------------------------
@@ -364,6 +387,15 @@ export async function customFetch<T = unknown>(
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  // Requests that change state and fall back to the session cookie must echo
+  // the CSRF token, otherwise the server rejects them with 403.
+  if (UNSAFE_METHODS.has(method) && !headers.has(CSRF_HEADER)) {
+    const csrfToken = readCookie(CSRF_COOKIE);
+    if (csrfToken) {
+      headers.set(CSRF_HEADER, csrfToken);
     }
   }
 

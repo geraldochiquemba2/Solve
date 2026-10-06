@@ -21,7 +21,7 @@ services:
       - key: OVG_API_URL
         value: https://samorafitstudio.onvirtualgym.com
       - key: OVG_USERNAME
-        value: solvecorporate@partners.onvirtualgym.com
+        sync: false
       - key: OVG_PASSWORD
         sync: false
       - key: OVG_CLUB_CODE

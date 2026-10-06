@@ -462,16 +462,40 @@
     return list;
   }
 
+  // SEGURANÇA: URLs vindas da API (hosted_url) são usadas como href. Mesmo com
+  // setAttribute, um esquema como javascript: ou data: executaria código ao
+  // clicar. Aceitamos apenas http/https (absolutos ou relativos à página), o que
+  // preserva todos os links legítimos do WiPay. A validação passa por URL(),
+  // que aplica a mesma normalização do browser (trim e remoção de tabs/newlines),
+  // evitando bypasses como "java\nscript:".
+  function safeHttpUrl(v) {
+    if (typeof v !== "string" || !v.trim()) return null;
+    var base = "https://localhost/";
+    try { if (window.location && /^https?:$/.test(window.location.protocol)) base = window.location.href; } catch (e) {}
+    try {
+      var u = new URL(v, base);
+      return (u.protocol === "https:" || u.protocol === "http:") ? v : null;
+    } catch (e) { return null; }
+  }
+
   function renderHist(m, box, list) {
     if (!box) return;
     if (!list.length) { box.innerHTML = "<div style='font-size:.78rem;color:#666'>Sem pagamentos ainda.</div>"; return; }
     if (!list.length) { box.innerHTML = ""; return list; }
-    var html = "<div style='font-size:.72rem;font-weight:700;margin-bottom:.3rem'>Os meus pagamentos</div>";
+    // SEGURANÇA: o histórico é montado com createElement/textContent em vez
+    // de concatenar HTML. Os valores (reference_code, entity, code,
+    // hosted_url, nome do conteúdo) vêm da API e não podem ser interpretados
+    // como markup. Mesma estrutura, mesmos estilos, mesmos eventos.
+    var titulo = document.createElement("div");
+    titulo.setAttribute("style", "font-size:.72rem;font-weight:700;margin-bottom:.3rem");
+    titulo.textContent = "Os meus pagamentos";
+    box.textContent = "";
+    box.appendChild(titulo);
     var entList = m._entregas || [];
     list.forEach(function (p) {
       var hasRealRef = p.reference_code && p.reference_code !== p.code;
       var ref = (p.method !== "mcx_express" && hasRealRef) ? (" · Referência " + p.reference_code + (p.entity ? " · Entidade " + p.entity : "")) : "";
-      var pendingRef = (p.method !== "mcx_express" && p.status === "pendente" && !hasRealRef) ? " · <span style='color:#b45309'>a gerar referência...</span>" : "";
+      var mostrarRef = (p.method !== "mcx_express" && p.status === "pendente" && !hasRealRef);
       var prodNome = "";
       if (p.cademi_produto) {
         for (var ei = 0; ei < entList.length; ei++) {
@@ -479,15 +503,51 @@
         }
         if (!prodNome) prodNome = p.cademi_produto;
       }
-      html += "<div style='display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem'>"
-        + "<span style='font-weight:700'>" + (prodNome ? prodNome + " · " : "") + fmtKz(p.amount) + " Kz</span>"
-        + "<span style='color:#666'>" + statusLabel(p.status) + ref + pendingRef + "</span>"
-        + "<span style='margin-left:auto;color:#999;font-size:.65rem'>" + (p.code || "") + "</span>"
-        + ((p.status === "pendente" && p.hosted_url) ? "<a href='" + p.hosted_url + "' target='_blank' rel='noopener' style='border:1px solid #16a34a;background:#16a34a;color:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;text-decoration:none;font-weight:700'>Pagar</a>" : "")
-        + (p.status === "pendente" ? "<button data-cancel='" + p.code + "' style='border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer'>Cancelar</button>" : "")
-        + "</div>";
+
+      var linha = document.createElement("div");
+      linha.setAttribute("style", "display:flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.4rem .5rem;background:#f4f4f5;border-radius:6px;margin-bottom:.25rem");
+
+      var spanValor = document.createElement("span");
+      spanValor.setAttribute("style", "font-weight:700");
+      if (prodNome) spanValor.appendChild(document.createTextNode(prodNome + " · "));
+      spanValor.appendChild(document.createTextNode(fmtKz(p.amount) + " Kz"));
+      linha.appendChild(spanValor);
+
+      var spanEstado = document.createElement("span");
+      spanEstado.setAttribute("style", "color:#666");
+      spanEstado.appendChild(document.createTextNode(statusLabel(p.status) + ref));
+      if (mostrarRef) {
+        var aGerar = document.createElement("span");
+        aGerar.setAttribute("style", "color:#b45309");
+        aGerar.textContent = "a gerar referência...";
+        spanEstado.appendChild(document.createTextNode(" · "));
+        spanEstado.appendChild(aGerar);
+      }
+      linha.appendChild(spanEstado);
+
+      var spanCode = document.createElement("span");
+      spanCode.setAttribute("style", "margin-left:auto;color:#999;font-size:.65rem");
+      spanCode.textContent = p.code || "";
+      linha.appendChild(spanCode);
+
+      if (p.status === "pendente" && safeHttpUrl(p.hosted_url)) {
+        var linkPagar = document.createElement("a");
+        linkPagar.setAttribute("href", safeHttpUrl(p.hosted_url));
+        linkPagar.setAttribute("target", "_blank");
+        linkPagar.setAttribute("rel", "noopener");
+        linkPagar.setAttribute("style", "border:1px solid #16a34a;background:#16a34a;color:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;text-decoration:none;font-weight:700");
+        linkPagar.textContent = "Pagar";
+        linha.appendChild(linkPagar);
+      }
+      if (p.status === "pendente") {
+        var btnCancelar = document.createElement("button");
+        btnCancelar.setAttribute("data-cancel", p.code);
+        btnCancelar.setAttribute("style", "border:1px solid #d4d4d8;background:#fff;border-radius:6px;padding:.25rem .5rem;font-size:.68rem;cursor:pointer");
+        btnCancelar.textContent = "Cancelar";
+        linha.appendChild(btnCancelar);
+      }
+      box.appendChild(linha);
     });
-    box.innerHTML = html;
     var btns = box.querySelectorAll("[data-cancel]");
     for (var i = 0; i < btns.length; i++) {
       (function (btn) {
@@ -513,7 +573,14 @@
       msg(m, "Pagamento " + code + " cancelado.");
       // Volta ao normal: limpa o bloco da referência e recarrega tudo.
       var refBox = m.querySelector("#spw-ref");
-      if (refBox) refBox.innerHTML = "<div style='font-size:.78rem;color:#666'>Pagamento " + code + " cancelado.</div>";
+      if (refBox) {
+        // SEGURANÇA: o code vai como texto, não concatenado em HTML.
+        var aviso = document.createElement("div");
+        aviso.setAttribute("style", "font-size:.78rem;color:#666");
+        aviso.textContent = "Pagamento " + code + " cancelado.";
+        refBox.textContent = "";
+        refBox.appendChild(aviso);
+      }
       await loadHist(m);
       await refreshAccess(m, currentEntregas(m));
     } catch (e) { msg(m, "Erro: " + (e.message || "falha"), true); }
@@ -629,13 +696,47 @@
         if (s0 === "confirmado" || s0 === "rejeitado") break;
       }
       var box2 = m.querySelector("#spw-ref");
-      if (payUrl) {
-        box2.innerHTML = "<div class='spw-ref'>"
-          + "<div style='margin-bottom:.4rem'>Valor: <b>" + fmtKz(amt) + " Kz</b></div>"
-          + "<a href='" + payUrl + "' target='_blank' rel='noopener' style='display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:.6rem;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:.4rem'>Pagar agora no Multicaixa</a>"
-          + "<div style='font-size:.72rem;color:#666;margin-bottom:.5rem'>Abre o link, escolhe o método e confirma no teu telemóvel.</div>"
-          + "<button id='spw-cancelref' style='width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c'>Cancelar este pagamento</button>"
-          + "</div>";
+      var payHref = safeHttpUrl(payUrl);
+      if (payHref) {
+        // SEGURANÇA: payUrl e o valor do cabeçalho Location devolvido pelo
+        // WiPay (api.wipay.ao) e guardado em payments.metadata. Antes ia
+        // concatenado num innerHTML, onde um simples apóstrofo no URL
+        // fechava o atributo href e o resto era interpretado como markup.
+        // Monta-se com createElement/setAttribute/textContent: o valor passa
+        // a ser sempre um atributo ou texto, nunca código HTML. Mesmo
+        // aspeto, mesmos estilos, mesmos eventos.
+        var wrap = document.createElement("div");
+        wrap.className = "spw-ref";
+
+        var linhaValor = document.createElement("div");
+        linhaValor.setAttribute("style", "margin-bottom:.4rem");
+        linhaValor.appendChild(document.createTextNode("Valor: "));
+        var valorKz = document.createElement("b");
+        valorKz.textContent = fmtKz(amt) + " Kz";
+        linhaValor.appendChild(valorKz);
+        wrap.appendChild(linhaValor);
+
+        var botaoPagar = document.createElement("a");
+        botaoPagar.setAttribute("href", payHref);
+        botaoPagar.setAttribute("target", "_blank");
+        botaoPagar.setAttribute("rel", "noopener");
+        botaoPagar.setAttribute("style", "display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:.6rem;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:.4rem");
+        botaoPagar.textContent = "Pagar agora no Multicaixa";
+        wrap.appendChild(botaoPagar);
+
+        var dica = document.createElement("div");
+        dica.setAttribute("style", "font-size:.72rem;color:#666;margin-bottom:.5rem");
+        dica.textContent = "Abre o link, escolhe o método e confirma no teu telemóvel.";
+        wrap.appendChild(dica);
+
+        var botaoCancelar = document.createElement("button");
+        botaoCancelar.setAttribute("id", "spw-cancelref");
+        botaoCancelar.setAttribute("style", "width:100%;border:1px solid #f0b4b4;background:#fff;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer;color:#b91c1c");
+        botaoCancelar.textContent = "Cancelar este pagamento";
+        wrap.appendChild(botaoCancelar);
+
+        box2.textContent = "";
+        box2.appendChild(wrap);
         msg(m, "Link pronto. Paga e volta aqui.");
         var cancelBtn = box2.querySelector("#spw-cancelref");
         if (cancelBtn) cancelBtn.addEventListener("click", function () { cancelPay(m, code); });

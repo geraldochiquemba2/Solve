@@ -1,6 +1,19 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { User } from '@workspace/api-client-react';
-import { login as apiLogin } from '@workspace/api-client-react';
+import { login as apiLogin, UserRole } from '@workspace/api-client-react';
+
+// Nunca assumimos o papel mais permissivo. Um valor desconhecido, forjado ou
+// adulterado no localStorage cai sempre no papel mais restrito.
+const PAPEL_POR_OMISSAO = UserRole.comercial;
+
+function normalizarRole(valor: unknown): User['role'] {
+  if (typeof valor === 'string' && Object.prototype.hasOwnProperty.call(UserRole, valor)) {
+    return UserRole[valor as keyof typeof UserRole];
+  }
+  // A landing guarda 'admin' | 'client'; 'admin' corresponde a 'administrador'.
+  if (valor === 'admin') return UserRole.administrador;
+  return PAPEL_POR_OMISSAO;
+}
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -25,7 +38,7 @@ function getUserFromToken(token: string): User | null {
     id: (payload.sub ?? payload.userId ?? '') as string,
     name: (payload.name ?? '') as string,
     email: (payload.email ?? '') as string,
-    role: payload.role as User['role'],
+    role: normalizarRole(payload.role),
   };
 }
 
@@ -39,12 +52,12 @@ function getLandingUser(): User | null {
   try {
     const raw = localStorage.getItem('samora_user');
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { id: string; name: string; email: string; role: string };
+    const parsed = JSON.parse(raw) as { id?: string; name?: string; email?: string; role?: string };
     return {
       id: parsed.id ?? '',
       name: parsed.name ?? '',
       email: parsed.email ?? '',
-      role: (parsed.role === 'admin' ? 'admin' : 'admin') as any,
+      role: normalizarRole(parsed.role),
     };
   } catch {
     return null;
