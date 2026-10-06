@@ -59,7 +59,9 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 
   if (!token) {
-    const key = req.headers["x-api-key"] || req.query.api_key;
+    // VULN-16: a chave só via header. `?api_key=` fica de fora — os query
+    // strings ficam em logs/proxies e em URLs partilhadas.
+    const key = req.headers["x-api-key"];
     const expected = getApiKey();
     if (expected && typeof key === "string" && apiKeyMatches(key, expected)) {
       req.user = { userId: "api-key", role: "administrador", email: "" };

@@ -95,7 +95,8 @@ app.use("/api/v1/webhooks/pay4all", webhookRateLimit);
 // API routes (versioned)
 app.use("/api/v1", router);
 
-// SSE: Real-time payment updates (só staff logado; EventSource passa ?api_key=)
+// SSE: Real-time payment updates (só staff logado; o EventSource abre com
+// withCredentials e leva o cookie httpOnly — nunca ?api_key= no URL)
 app.get("/api/v1/payments/stream", authenticate, (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",

@@ -97,7 +97,9 @@ router.get("/access/clients", authenticate, async (req, res, next) => {
 
 // ─── Sync: PC da catraca envia acessos novos para o CRM ──────────────────────
 
-router.post("/access/sync", async (req, res) => {
+// SEGURANÇA: antes qualquer da internet escrevia acessos falsos. Agora exige
+// JWT de staff ou X-API-Key da máquina (authenticate aceita os dois).
+router.post("/access/sync", authenticate, async (req, res) => {
   try {
     const { acessos } = req.body;
     if (!Array.isArray(acessos) || acessos.length === 0) {
@@ -193,7 +195,9 @@ router.post("/access/ovg-reseed", authenticate, async (req, res, next) => {
   }
 });
 
-router.get("/access/stream", async (req, res) => {
+// SEGURANÇA: o stream devolve histórico de acessos — só staff (o frontend abre
+// com withCredentials, portanto o cookie httpOnly chega).
+router.get("/access/stream", authenticate, async (req, res) => {
   // SEGURANÇA: reflete a origem só se estiver na allowlist — "*" desliga a
   // Same Origin Policy e o front abre o stream com withCredentials.
   const allowedOrigin = resolveAllowedOrigin(req);

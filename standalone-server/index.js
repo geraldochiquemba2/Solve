@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import pg from "pg";
 import jwt from "jsonwebtoken";
@@ -131,13 +131,95 @@ function parseCookies(req) {
   return out;
 }
 
-function requireAuth(req, res, next) {
+// ─── CSRF (double-submit assinado) ────────────────────────────────────────
+// Só estão expostos os pedidos autenticados EXCLUSIVAMENTE pelo cookie `token`:
+// um `Authorization: Bearer` ou um `X-API-Key` exigem preflight CORS, que a
+// allowlist de origens recusa. O par (cookie legível + header) é assinado com o
+// JWT_SECRET para que um subdomínio irmão não consiga injetar o cookie e
+// montar o ataque de "cookie injection" do double-submit puro.
+const CSRF_COOKIE = "csrf";
+const CSRF_HEADER = "x-csrf-token";
+const CSRF_MAX_AGE = 24 * 60 * 60 * 1000;
+
+function csrfMac(raw) {
+  return crypto.createHmac("sha256", JWT_SECRET).update(raw).digest("base64url");
+}
+
+function issueCsrfToken() {
+  const raw = crypto.randomBytes(32).toString("base64url");
+  return `${raw}.${csrfMac(raw)}`;
+}
+
+function csrfCookieOptions() {
+  return {
+    httpOnly: false, // tem de ser legível pelo browser para voltar no header
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+    maxAge: CSRF_MAX_AGE,
+  };
+}
+
+function verifyCsrfToken(value) {
+  if (typeof value !== "string" || !JWT_SECRET) return false;
+  const cut = value.lastIndexOf(".");
+  if (cut <= 0) return false;
+  const esperado = csrfMac(value.slice(0, cut));
+  const recebido = value.slice(cut + 1);
+  if (recebido.length !== esperado.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado));
+}
+
+// Métodos seguros não mudam estado e ficam de fora (ex.: o GET de perfil que o
+// widget do Cademi faz na própria origem).
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function csrfGuard(req) {
+  if (SAFE_METHODS.has(req.method)) return true;
+  const header = req.headers[CSRF_HEADER];
+  const cookie = parseCookies(req)[CSRF_COOKIE];
+  if (typeof header !== "string" || !header || header !== cookie) return false;
+  return verifyCsrfToken(header);
+}
+
+// ─── Epoch de sessão (revogação após alteração de password) ───────────────
+// O JWT é stateless: sem isto, um token roubado continuava válido até às 24h
+// depois de o dono mudar a password. Guardamos um contador de sessão na
+// tabela `settings` (que já existe — sem migração) e pomos-lo no JWT no login.
+// O requireAuth compara o valor do token com o atual.
+const SESSION_EPOCH_TTL_MS = 30 * 1000;
+const _sessionEpochCache = new Map();
+
+async function getSessionEpoch(userId) {
+  const cached = _sessionEpochCache.get(userId);
+  const now = Date.now();
+  if (cached && now - cached.at < SESSION_EPOCH_TTL_MS) return cached.epoch;
+  const row = await pool.query("SELECT value FROM settings WHERE key = $1", [`session_epoch_${userId}`]);
+  const epoch = String(row.rows[0]?.value ?? "");
+  _sessionEpochCache.set(userId, { epoch, at: now });
+  return epoch;
+}
+
+async function rotateSessionEpoch(userId) {
+  const epoch = crypto.randomBytes(16).toString("hex");
+  await pool.query(
+    `INSERT INTO settings (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+    [`session_epoch_${userId}`, epoch]
+  );
+  _sessionEpochCache.set(userId, { epoch, at: Date.now() });
+  return epoch;
+}
+
+async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   let token;
+  let viaCookie = false;
   if (authHeader?.startsWith("Bearer ")) {
     token = authHeader.split(" ")[1];
   } else {
     token = parseCookies(req).token;
+    viaCookie = Boolean(token);
   }
   if (!token) {
     // VULN-16: chave só via header (nunca ?api_key= no URL — vaza em logs).
@@ -156,6 +238,20 @@ function requireAuth(req, res, next) {
     if (decoded && decoded.role === "cliente") {
       return res.status(403).json({ error: "Sem permissão para esta acção" });
     }
+    // Uma sessão por cookie num pedido que muda estado tem de provar que vem do
+    // nosso frontend (header CSRF assinado). Bearer/API-Key não são forjáveis a
+    // partir de outro site e ficam de fora para não partir clientes legítimos.
+    if (viaCookie && !csrfGuard(req)) {
+      audit(req, "auth.csrf_rejected", { details: { method: req.method, path: String(req.path || "").slice(0, 100) } });
+      return res.status(403).json({ error: "Token CSRF em falta ou inválido. Recarrega a página." });
+    }
+    // Revogação: o token tem de ter sido emitido com o epoch de sessão atual.
+    // Tokens antigos (sem `se`) só passam enquanto o epoch continuar vazio.
+    const epochAtual = await getSessionEpoch(decoded.userId);
+    if (String(decoded.se ?? "") !== epochAtual) {
+      audit(req, "auth.session_revoked", { actorId: decoded.userId, details: { motivo: "password_alterada" } });
+      return res.status(401).json({ error: "Sessão invalidada. Faz login de novo." });
+    }
     req.user = decoded;
     next();
   } catch {
@@ -171,12 +267,37 @@ function requireEdgeAuth(req, res, next) {
   return res.status(401).json({ error: "Chave de máquina inválida" });
 }
 
+// Auditoria de acesso negado com throttle: uma página que consulta a cada
+// 5 min e leva 403 não pode encher a audit_logs. Máx. 1 registo por
+// utilizador+rota por minuto.
+const _denyAuditAt = new Map();
+function auditDenied(req, action, opts = {}) {
+  const who = opts.actorId ?? (req.user && req.user.userId) ?? "?";
+  const rota = String(req.path || "").slice(0, 80);
+  const key = `${action}:${who}:${rota}`;
+  const now = Date.now();
+  if ((_denyAuditAt.get(key) || 0) > now - 60000) return;
+  _denyAuditAt.set(key, now);
+  if (_denyAuditAt.size > 2000) _denyAuditAt.clear();
+  audit(req, action, opts);
+}
+
 function requireRole(...allowed) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: "Não autenticado" });
     // Chave de máquina (userId api-key) vale como admin para ingestão, mas
     // nunca para gestão: rotas admin exigem JWT de utilizador com papel.
     if (req.user.userId === "api-key" || !allowed.includes(req.user.role)) {
+      auditDenied(req, "auth.access_denied", {
+        actor: req.user.name || "sistema",
+        actorId: req.user.userId,
+        details: {
+          papel: req.user.role,
+          permitidos: allowed,
+          metodo: req.method,
+          path: String(req.path || "").slice(0, 120),
+        },
+      });
       return res.status(403).json({ error: "Sem permissão para esta acção" });
     }
     next();
@@ -185,6 +306,53 @@ function requireRole(...allowed) {
 const requireAdmin = requireRole("administrador");
 const requireManager = requireRole("administrador", "gestor");
 const requireFinance = requireRole("administrador", "gestor", "financeiro");
+
+// ─── Painel /admin: sessão verificada no servidor ───────────────────────────
+// O CRM é uma SPA: o browser decide as rotas e o servidor entrega sempre o
+// mesmo index.html, por isso sem esta guarda qualquer visitante recebia o HTML
+// do backoffice (os dados já vêm de /api/v1, mas a página é um activo
+// administrativo). Aqui só é entregue a quem tem sessão de staff válida —
+// exactamente as mesmas regras de requireAuth (papel, epoch de sessão).
+function isAdminPath(p) {
+  return p === "/admin" || p.startsWith("/admin/");
+}
+
+async function adminPageGuard(req, res, next) {
+  if (req.method !== "GET" && req.method !== "HEAD") return next();
+  if (!isAdminPath(req.path)) return next();
+
+  const negar = (motivo, status) => {
+    auditDenied(req, "admin.page_denied", {
+      details: { motivo, metodo: req.method, path: String(req.path).slice(0, 120) },
+    });
+    res.setHeader("Cache-Control", "no-store");
+    if (status === 302) return res.redirect(302, "/login");
+    return res.status(status).send("403 - Sem permissão para esta área");
+  };
+
+  const token = parseCookies(req).token;
+  if (!token) return negar("sem_sessao", 302);
+  if (!JWT_SECRET) return negar("servidor_sem_segredo", 302);
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch {
+    return negar("token_invalido_ou_expirado", 302);
+  }
+  if (!decoded || decoded.role === "cliente") return negar("papel_sem_permissao", 403);
+
+  try {
+    const epochAtual = await getSessionEpoch(decoded.userId);
+    if (String(decoded.se ?? "") !== epochAtual) return negar("sessao_revogada", 302);
+  } catch {
+    return negar("sessao_indisponivel", 302);
+  }
+
+  // O HTML do painel nunca fica em cache (contém sessão/app em estado inicial).
+  res.setHeader("Cache-Control", "no-store");
+  next();
+}
 
 const app = express();
 app.disable("x-powered-by"); // VULN-15: não anunciar framework.
@@ -222,6 +390,111 @@ function rateLimit(maxPerMin) {
   };
 }
 setInterval(() => _hits.clear(), 5 * 60 * 1000).unref?.();
+
+// Limite por alvo e não só por IP. Um atacante a rodar de vários IPs não pode
+// massificar pedidos de recuperação contra a mesma conta (ou martelar um login
+// só num cliente). Sem chave (pedido sem email) deixa passar: quem não dá um
+// alvo não consegue usar isto para enumerar.
+const _hitsByKey = new Map();
+function rateLimitBy(maxCount, windowMs, keyFn, message) {
+  return (req, res, next) => {
+    const key = keyFn(req);
+    if (!key) return next();
+    const now = Date.now();
+    const arr = (_hitsByKey.get(key) || []).filter((t) => now - t < windowMs);
+    if (arr.length >= maxCount) {
+      return res.status(429).json({ error: message || "Demasiados pedidos. Tente mais tarde" });
+    }
+    arr.push(now);
+    _hitsByKey.set(key, arr);
+    if (_hitsByKey.size > 5000) _hitsByKey.clear();
+    next();
+  };
+}
+setInterval(() => _hitsByKey.clear(), 10 * 60 * 1000).unref?.();
+
+// Limites das leituras públicas do widget Cademi (histórico, acessos, nome).
+//
+// Estes endpoints não exigem JWT — o aluno prova a posse com o email/telefone
+// que acabou de escrever — por isso precisam de dois travões:
+//
+//  * por IP, contra recolha em massa a partir de uma máquina;
+//  * por conta, contra martelar o histórico de uma vítima específica a partir
+//    de IPs diferentes (é o vector que o limite por IP não apanha).
+//
+// Dimensionado a partir do consumo real do widget (num checkout chega a ~5
+// chamadas por endpoint, sem polling): 15 por 15 min por conta dão margem para
+// recarregar a página ou repetir o clique em "Pagar" sem partir o fluxo, e
+// limitam um atacante a 15 leituras por trimestre de hora sobre um alvo.
+// Nota honesta: um limite por conta NÃO impede enumerar muitos e-mails
+// diferentes (cada um tem a sua quota). Isso só se fecha comfactor adicional
+// de posse (sessão do aluno ou link por e-mail) — o que exige decisão do dono.
+const STUDENT_LOOKUP = { perIpPerMin: 30, perAccount: 15, windowMs: 15 * 60 * 1000 };
+
+function studentLookupLimit() {
+  return [
+    rateLimit(STUDENT_LOOKUP.perIpPerMin),
+    rateLimitBy(
+      STUDENT_LOOKUP.perAccount,
+      STUDENT_LOOKUP.windowMs,
+      (req) => {
+        const email = String(req.query?.email || "").trim().toLowerCase();
+        const digits = String(req.query?.phone || "").replace(/\D/g, "").slice(-9);
+        const raw = email || digits;
+        if (!raw) return null; // sem chave o request segue para o 400 de validação
+        // o endpoint entra na chave para não gastar a quota de outro
+        const endpoint = String(req.path || req.originalUrl || "").split("?")[0];
+        return `student_lookup:${endpoint}:${raw}`;
+      },
+      "Demasiadas consultas. Aguarde um momento e tente de novo."
+    ),
+  ];
+}
+
+// Hash descartável para igualar o tempo de resposta quando a conta não existe.
+// Sem isto, "email inexistente" respondia em microssegundos e "email existente
+// com password errada" demorava um bcrypt — a diferença denunciava que emails
+// estão registados. A primeira chamada paga a geração do dummy, que só torna a
+// resposta mais lenta (o sentido seguro).
+let _dummyHashPromise = null;
+function dummyPasswordHash() {
+  if (!_dummyHashPromise) {
+    _dummyHashPromise = bcrypt.hash(crypto.randomBytes(24).toString("hex"), SALT_ROUNDS);
+  }
+  return _dummyHashPromise;
+}
+
+// ─── Registo de eventos de segurança ──────────────────────────────────────
+// A tabela `audit_logs` existia no schema mas nunca era escrita, por isso não
+// havia rasto de tentativas de intrusão. Aqui registamos os eventos de
+// segurança sem PII, sem tokens e sem passwords: o email de quem tenta entrar
+// entra apenas como hash truncado, o que permite correlacionar ataques à mesma
+// conta sem guardar o endereço. É fire-and-forget — um log nunca pode fazer
+// falhar um pedido.
+function audit(req, action, { actor, actorId, entity, entityId, details } = {}) {
+  try {
+    const ip = String(req?.ip || req?.socket?.remoteAddress || "").slice(0, 50) || null;
+    pool.query(
+      `INSERT INTO audit_logs (actor, actor_id, action, entity, entity_id, details, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        String(actor ?? "sistema").slice(0, 255),
+        actorId ?? null,
+        String(action).slice(0, 255),
+        entity === undefined ? null : String(entity).slice(0, 100),
+        entityId ?? null,
+        details === undefined ? null : JSON.stringify(details),
+        ip,
+      ]
+    ).catch(() => {});
+  } catch {}
+}
+
+// Referência a uma conta sem guardar o email: hash SHA-256 truncado.
+function emailRef(email) {
+  if (!email) return null;
+  return crypto.createHash("sha256").update(String(email).trim().toLowerCase()).digest("hex").slice(0, 16);
+}
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com,https://brunosamora.cademi.com.br";
 app.use(cors({
@@ -323,7 +596,9 @@ pool.query(`CREATE TABLE IF NOT EXISTS settings (
 // Chaves que nunca saem em claro pela API (devolve true/false = existe ou não)
 const SECRET_RE = /secret|password|token|api[_-]?key/i;
 
-app.get("/api/v1/settings", requireAuth, async (req, res) => {
+// GET também é gestão: devolve a configuração (inclui chaves/segredos
+// mascarados) e a mesma barreira de escrita já existente em PUT.
+app.get("/api/v1/settings", requireAuth, requireManager, async (req, res) => {
   try {
     const r = await pool.query("SELECT key, value FROM settings WHERE key NOT LIKE 'password\\_reset\\_%' ESCAPE '\\'");
     const data = {};
@@ -336,7 +611,7 @@ app.get("/api/v1/settings", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/v1/settings", requireAuth, requireManager, async (req, res) => {
+app.put("/api/v1/settings", rateLimit(40), requireAuth, requireManager, async (req, res) => {
   try {
     const settings = req.body?.settings || req.body || {};
     for (const [key, value] of Object.entries(settings)) {
@@ -356,6 +631,12 @@ app.put("/api/v1/settings", requireAuth, requireManager, async (req, res) => {
       }
     }
     _settingsCache = { at: 0, map: {} };
+    // Auditoria com as CHAVES alteradas (nunca os valores — podem ser segredos).
+    audit(req, "settings.updated", {
+      actorId: req.user?.userId,
+      entity: "settings",
+      details: { chaves: Object.keys(settings).slice(0, 50) },
+    });
     res.json({ message: "Definições guardadas" });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -980,19 +1261,25 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
     }
 
     if (!user) {
+      // Custo de bcrypt equivalente ao de uma conta real, para não revelar pelo
+      // tempo que o email não existe.
+      await bcrypt.compare(password, await dummyPasswordHash());
+      audit(req, "auth.login_failed", { details: { reason: "conta_desconhecida", email_hash: emailRef(email) } });
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
 
     if (user.active === false) {
+      audit(req, "auth.login_failed", { actorId: user.id, details: { reason: "conta_desactivada" } });
       return res.status(403).json({ error: "Conta desactivada" });
     }
 
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
+      audit(req, "auth.login_failed", { actorId: user.id, details: { reason: "password_incorrecta", email_hash: emailRef(email) } });
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
 
-    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name };
+    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name, se: await getSessionEpoch(user.id) };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.cookie("token", token, {
@@ -1003,10 +1290,17 @@ app.post("/api/v1/auth/login", rateLimit(20), async (req, res) => {
       path: "/",
     });
 
+    const csrfToken = issueCsrfToken();
+    res.cookie(CSRF_COOKIE, csrfToken, csrfCookieOptions());
+
     await pool.query("UPDATE users SET last_login_at = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1", [user.id]);
+    // Este handler não tem acesso ao indicador de meio de sessão (está dentro
+    // de requireAuth): o login emite cookie httpOnly E devolve bearer.
+    audit(req, "auth.login_ok", { actorId: user.id, details: { role: user.role, via: "senha" } });
 
     res.json({
       token,
+      csrfToken,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (err) {
@@ -1047,7 +1341,7 @@ app.post("/api/v1/auth/register", rateLimit(20), async (req, res) => {
     );
     const user = result.rows[0];
 
-    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name };
+    const payload = { userId: user.id, role: user.role, email: user.email, name: user.name, se: await getSessionEpoch(user.id) };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({ token, user });
@@ -1066,12 +1360,19 @@ app.post("/api/v1/auth/logout", (_req, res) => {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
   });
+  res.clearCookie(CSRF_COOKIE, { ...csrfCookieOptions(), maxAge: undefined });
   res.json({ message: "Sessão terminada" });
 });
 
 // ─── Auth: Forgot Password ──────────────────────────────────────────────────
 
-app.post("/api/v1/auth/forgot-password", rateLimit(20), async (req, res) => {
+app.post("/api/v1/auth/forgot-password",
+  rateLimit(20),
+  // 5 pedidos por conta por 15 min: trava a inundação de "esqueci-me a senha"
+  // vinda de vários IPs sem bloquear quem precisa de recuperar-se depressa.
+  rateLimitBy(5, 15 * 60 * 1000, (req) => String(req.body?.email || "").trim().toLowerCase() || null,
+    "Demasiados pedidos de recuperação para esta conta. Tente dentro de alguns minutos."),
+  async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email é obrigatório" });
@@ -1082,16 +1383,21 @@ app.post("/api/v1/auth/forgot-password", rateLimit(20), async (req, res) => {
       const resetToken = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
+      // Só a hash do token vai para a BD: um dump/leak de `settings` não dá
+      // acesso a nenhuma conta enquanto o link estiver vivo.
       await pool.query(
         `INSERT INTO settings (key, value) VALUES ($1, $2)
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
-        [`password_reset_${user.id}`, JSON.stringify({ token: resetToken, expiresAt: expiresAt.toISOString() })]
+        [`password_reset_${user.id}`, JSON.stringify({ tokenHash: hashResetToken(resetToken), expiresAt: expiresAt.toISOString() })]
       );
-      // SEGURANÇA: token nunca vai para logs. Em produção enviar por email
-      // (fornecedor SMTP); o link expira em 1h e é de uso único.
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[PASSWORD RESET] pedido para ${email} (token guardado, ver BD local)`);
-      }
+// SEGURANÇA: token nunca vai para logs. Em produção enviar por email
+        // (fornecedor SMTP); o link expira em 1h e é de uso único.
+        // O email também não é registado: a linha em `settings` identifica o
+        // pedido sem expor dados pessoais nos logs.
+        audit(req, "auth.password_reset_requested", { actorId: user.id, details: { email_hash: emailRef(email) } });
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[PASSWORD RESET] pedido registado (chave ${`password_reset_${user.id}`.slice(0, 25)}..., ver BD local)`);
+        }
     }
 
     res.json({ message: "Se o email existir, receberá um link de recuperação" });
@@ -1103,6 +1409,10 @@ app.post("/api/v1/auth/forgot-password", rateLimit(20), async (req, res) => {
 
 // ─── Auth: Reset Password ───────────────────────────────────────────────────
 
+function hashResetToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
 app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -1112,12 +1422,18 @@ app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
       return res.status(400).json({ error: "Password deve ter pelo menos 8 caracteres" });
     }
 
+    const presented = hashResetToken(token);
     const result = await pool.query("SELECT key, value FROM settings WHERE key LIKE 'password_reset_%'");
     let resetEntry = null;
     for (const row of result.rows) {
       try {
         const data = typeof row.value === "string" ? JSON.parse(row.value) : row.value;
-        if (data.token === token) { resetEntry = { key: row.key, data }; break; }
+        // `tokenHash` é o caminho normal; a comparação com `token` em texto
+        // claro só serve para pedidos pendentes criados antes do endurecimento.
+        const bate = data?.tokenHash
+          ? data.tokenHash === presented
+          : typeof data?.token === "string" && hashResetToken(data.token) === presented;
+        if (bate) { resetEntry = { key: row.key, data }; break; }
       } catch {}
     }
 
@@ -1128,6 +1444,10 @@ app.post("/api/v1/auth/reset-password", rateLimit(20), async (req, res) => {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [passwordHash, userId]);
     await pool.query("DELETE FROM settings WHERE key = $1", [resetEntry.key]);
+    // Todas as sessões abertas (JWTs já emitidos) deixam de valer: quem roubar
+    // um token antes da troca perde o acesso assim que o pedido é concluído.
+    await rotateSessionEpoch(userId);
+    audit(req, "auth.password_changed", { actorId: userId, details: { sessoes_revogadas: true } });
 
     res.json({ message: "Password atualizada com sucesso" });
   } catch (err) {
@@ -1186,6 +1506,7 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
     const cur = await pool.query("SELECT id, status, amount, metadata FROM payments WHERE code = $1", [merchantTransactionId]);
     if (cur.rows.length === 0) {
       // Nunca criar pagamento por callback — responde ok sem enumerar.
+      audit(req, "payment.webhook_unknown_code", { details: { provedor: "ekwanza" } });
       return res.json({ received: true });
     }
     const payment = cur.rows[0];
@@ -1196,6 +1517,7 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
     }
     if (operationData?.amount != null && Number(operationData.amount) !== Number(payment.amount)) {
       meta.ekwanza_unverified_callback = { reason: "amount_mismatch", at: new Date().toISOString() };
+      audit(req, "payment.webhook_unverified", { entity: "payment", entityId: payment.id, details: { provedor: "ekwanza", motivo: "amount_mismatch" } });
       await pool.query("UPDATE payments SET metadata = $1, updated_at = NOW() WHERE id = $2", [JSON.stringify(meta), payment.id]);
       return res.json({ received: true, verified: false });
     }
@@ -1219,11 +1541,30 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
 
     if (authoritativeSuccess === null) {
       meta.ekwanza_unverified_callback = { reason: "no_authoritative_confirmation", at: new Date().toISOString() };
+      audit(req, "payment.webhook_unverified", { entity: "payment", entityId: payment.id, details: { provedor: "ekwanza", motivo: "sem_confirmacao_oficial" } });
       await pool.query("UPDATE payments SET metadata = $1, updated_at = NOW() WHERE id = $2", [JSON.stringify(meta), payment.id]);
       return res.json({ received: true, verified: false });
     }
 
-    const mappedStatus = authoritativeSuccess ? "confirmado" : statusMap[Number(operationStatus)];
+    // A API oficial é a fonte da verdade. Um callback que pede "confirmado" quando a
+    // É-kwanza responde que a carga NÃO teve sucesso nunca pode marcar o pagamento como
+    // pago: registamos a divergência e deixamos o pagamento por resolver (novo callback
+    // ou reconciliação manual) em vez de forjar um estado que o provedor não confirmou.
+    if (!authoritativeSuccess && Number(operationStatus) === 1) {
+      meta.ekwanza_unverified_callback = {
+        reason: "confirmed_callback_without_authoritative_confirmation",
+        operation_status: Number(operationStatus),
+        at: new Date().toISOString(),
+      };
+      await pool.query("UPDATE payments SET metadata = $1, updated_at = NOW() WHERE id = $2", [JSON.stringify(meta), payment.id]);
+      console.log(`[EKWANZA-WEBHOOK] divergência (callback=confirmado, oficial=não-sucedido) para ${merchantTransactionId} — pagamento mantido por resolver`);
+      audit(req, "payment.webhook_unverified", { entity: "payment", entityId: payment.id, details: { provedor: "ekwanza", motivo: "confirmado_sem_confirmacao_oficial", operation_status: Number(operationStatus) } });
+      return res.json({ received: true, verified: false });
+    }
+
+    // Só a confirmação oficial produz "confirmado". Tudo o que a É-kwanza recusou é
+    // "rejeitado" — o operationStatus do callback nunca escolhe o estado final.
+    const mappedStatus = authoritativeSuccess ? "confirmado" : "rejeitado";
     if (mappedStatus === "confirmado") {
       await pool.query(
         `UPDATE payments SET status = 'confirmado', ekwanza_operation_code = $1, paid_at = NOW(), reconciled_at = NOW(), updated_at = NOW() WHERE code = $2`,
@@ -1318,6 +1659,50 @@ async function applyWipayConfirm(code, wipayId) {
   console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${j?.status})`);
   if (mapped === "confirmado") setImmediate(() => sendCademiDelivery(code));
   return mapped;
+}
+// ─── return_url: allowlist de origens (anti open-redirect) ──────────────────
+// O return_url do checkout vira success_url/failure_url na WiPay: depois de
+// pagar, o aluno é redirecionado para lá. Sem validação, qualquer endpoint
+// público permitia escolher um destino arbitrário (open redirect + phishing
+// logo após um pagamento genuine).
+// Só aceitamos origens explicitamente autorizadas. As origens da própria
+// aplicação entram sozinhas; a origem da página do Cademi onde o widget vive
+// tem de ser declarada em RETURN_URL_ALLOWED_ORIGINS pelo operador.
+// Se a origem não estiver na lista, ignoramos o return_url: a WiPay usa a
+// página de retorno por omissão e o pagamento continua a concluir-se — não
+// se perde dinheiro, só deixa de haver redireccionamento para a origem pedida.
+const RETURN_URL_MAX = 300;
+let _returnUrlAviso = false;
+function origensPermitidasReturnUrl() {
+  const bruto = [
+    process.env.RETURN_URL_ALLOWED_ORIGINS,
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGIN,
+    process.env.APP_URL,
+    process.env.RENDER_EXTERNAL_URL,
+  ].filter(Boolean).join(",");
+  const set = new Set();
+  for (const parte of bruto.split(/[,\s]+/)) {
+    const p = parte.trim();
+    if (!p) continue;
+    try { set.add(new URL(p).origin.toLowerCase()); } catch { /* entrada inválida: ignorada */ }
+  }
+  if (!set.size && !_returnUrlAviso) {
+    _returnUrlAviso = true;
+    console.warn("[PAYMENTS] sem origens de return_url autorizadas: return_url sera sempre ignorado (defeito por omissão seguro). Defina RETURN_URL_ALLOWED_ORIGINS para repor o redireccionamento apos pagamento.");
+  }
+  return set;
+}
+function sanitizarReturnUrl(valor) {
+  if (typeof valor !== "string" || !valor.trim()) return null;
+  const candidatas = origensPermitidasReturnUrl();
+  if (!candidatas.size) return null;
+  let u;
+  try { u = new URL(valor.trim()); } catch { return null; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  if (!candidatas.has(u.origin.toLowerCase())) return null;
+  const s = u.href;
+  return s.length > RETURN_URL_MAX ? null : s;
 }
 // Cria pagamento WiPay e guarda id + URL hospedada nos metadata.
 // return_url (opcional, ex. página Cademi onde o widget vive): a WiPay
@@ -1477,8 +1862,15 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 });
 
 // Histórico do aluno (widget Cademi): por email e/ou telefone.
-// PÚBLICO (widget corre sem JWT): só devolve os próprios (filtro por email/telefone) + rate-limit.
-app.get("/api/v1/payments/minha-historico", rateLimit(60), async (req, res) => {
+// PÚBLICO (widget corre sem JWT): a posse prova-se pelo email/telefone que o
+// aluno acabou de escrever + rate-limit por IP e por conta.
+//
+// SEGURANÇA: só se devolve o que o widget consome de facto (code, status,
+// amount, method, reference_code, entity, produto, hosted_url). Ficam de fora o
+// código da transacção no É-kwanza e as datas — dados que o browser do aluno
+// nunca usa e que, num endpoint público, só servem para alimentar recolha de
+// dados de outros clientes.
+app.get("/api/v1/payments/minha-historico", studentLookupLimit(), async (req, res) => {
   try {
     const email = String(req.query.email || "").toLowerCase().trim();
     const digits = String(req.query.phone || "").replace(/\D/g, "").slice(-9);
@@ -1487,9 +1879,14 @@ app.get("/api/v1/payments/minha-historico", rateLimit(60), async (req, res) => {
     if (email) { conds.push(`LOWER(COALESCE(p.metadata->>'email','')) = $${params.length + 1}`); params.push(email); }
     if (digits) { conds.push(`RIGHT(REGEXP_REPLACE(COALESCE(p.metadata->>'phone',''), '[^0-9]', '', 'g'), 9) = $${params.length + 1}`); params.push(digits); }
     const r = await pool.query(
-      `SELECT p.code, p.amount, p.method, p.status, p.reference_code, p.entity, p.ekwanza_code, p.created_at, p.expires_at, p.paid_at,
+      `SELECT p.code, p.amount, p.method, p.status, p.reference_code, p.entity,
               p.metadata->>'cademi_produto' AS cademi_produto, p.metadata->>'hosted_url' AS hosted_url
        FROM payments p WHERE (${conds.join(" OR ")}) ORDER BY p.created_at DESC LIMIT 20`, params);
+    // e-mail só como hash: permite ver quem foi consultado sem guardar o endereço.
+    audit(req, "student.history_viewed", {
+      entity: "payment", entityId: null,
+      details: { email_hash: emailRef(email), por_telefone: !email, resultados: r.rows.length },
+    });
     res.json({ data: r.rows });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -1798,7 +2195,7 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
         const lr = await pool.query("SELECT email FROM customers WHERE id = $1", [linkedId]);
         const linkEm = String(lr.rows[0]?.email || "").toLowerCase().trim();
         if (linkEm && linkEm !== formEm) {
-          console.log(`[PAYMENTS] ${code}: email formulário (${customer_email}) != cliente ligado (${lr.rows[0].email}) — entrega vai para o formulário`);
+          console.log(`[PAYMENTS] ${code}: email do formulario != email do cliente ligado - entrega vai para o formulario`);
         }
       }
     } catch {}
@@ -1853,7 +2250,7 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     // - referencia → gera entidade + número de referência (REF_...).
     const wipay = m === "mcx_express" && await wipayReady();
     if ((m === "mcx_express" && (customer_phone || wipay)) || m === "referencia") {
-      const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null, return_url: typeof return_url === "string" && /^https?:\/\//.test(return_url) ? return_url.slice(0, 300) : null };
+      const bg = { code, paymentId: payment.id, amt, m, customer_phone: customer_phone || null, description: description || null, return_url: sanitizarReturnUrl(return_url) };
       setImmediate(async () => {
         try {
           if (m === "mcx_express" && await wipayReady()) {
@@ -2285,7 +2682,7 @@ async function sendCademiDelivery(paymentCode, force = false) {
       meta.cademi_delivery = "sent_unverified";
     }
     await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]);
-    console.log(`[CADEMI] Acesso enviado: ${payment.code} → ${email} (produto ${produtoId}) verificado=${verified} acessos=${acessosCount}`);
+    console.log(`[CADEMI] Acesso enviado: ${payment.code} →  (produto ${produtoId}) verificado=${verified} acessos=${acessosCount}`);
     if (!verified) return { ok: false, skipped: "entrega aceite pela Cademi mas acesso não confirmado (ver painel Cademi > Vendas e a regra de entrega)" };
     return { ok: true, email };
   } catch (e) { return { ok: false, skipped: e.message }; }
@@ -2353,10 +2750,11 @@ app.get("/api/v1/cademi/entregas", rateLimit(60), async (req, res) => {
 
 // Nome do aluno na Cademi pelo email (para o widget pré-preencher).
 // PÚBLICO (widget sem JWT): só devolve nome por email exato + rate-limit.
-app.get("/api/v1/cademi/nome", rateLimit(60), async (req, res) => {
+app.get("/api/v1/cademi/nome", studentLookupLimit(), async (req, res) => {
   try {
     const email = String(req.query.email || "").trim();
     if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
+    audit(req, "student.name_lookup", { details: { email_hash: emailRef(email) } });
     // 1) Cademi primeiro (nome oficial do aluno)
     try {
       const r = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
@@ -2370,19 +2768,24 @@ app.get("/api/v1/cademi/nome", rateLimit(60), async (req, res) => {
       if (cr.rows[0]?.name) return res.json({ data: { nome: cr.rows[0].name, fonte: "crm" } });
       const or = await pool.query("SELECT name FROM ovg_members WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
       if (or.rows[0]?.name) return res.json({ data: { nome: or.rows[0].name, fonte: "ovg" } });
-    } catch {}
-    res.status(404).json({ error: "nome não encontrado" });
+} catch {}
+  // Email desconhecido responde 200 com objecto vazio, igual ao encontrado sem
+  // nome. Um 404 aqui era um oráculo de enumeração: bastava comparar o status
+  // para saber que emails são clientes. O widget não olha para o status (só
+  // para `data.nome`), por isso o comportamento no browser é idêntico.
+  res.json({ data: {} });
   } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
+  console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
 // Acessos do aluno na Cademi por email (produto + validade) — para o widget.
 // PÚBLICO (widget sem JWT): só os acessos do próprio email + rate-limit.
-app.get("/api/v1/cademi/acesso", rateLimit(60), async (req, res) => {
+app.get("/api/v1/cademi/acesso", studentLookupLimit(), async (req, res) => {
   try {
     const email = String(req.query.email || "").trim();
     if (!email || email.indexOf("@") < 0) return res.status(400).json({ error: "email inválido" });
+    audit(req, "student.access_viewed", { details: { email_hash: emailRef(email) } });
     const u = await cademiFetch("/usuario?usuario_email_id_doc=" + encodeURIComponent(email));
     const users = u.data?.usuario || [];
     // Sem fallback: email inexistente = sem acessos (nunca os do 1º da lista).
@@ -2575,7 +2978,7 @@ app.get("/api/v1/integrations", requireAuth, async (req, res) => {
 
 // ─── Audit log (feed de actividade real) ────────────────────────────────────
 
-app.get("/api/v1/audit-logs", requireAuth, async (req, res) => {
+app.get("/api/v1/audit-logs", requireAuth, requireManager, async (req, res) => {
   try {
     const events = [];
     try {
@@ -2708,7 +3111,7 @@ app.get("/api/v1/users", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => {
+app.post("/api/v1/users/invite", rateLimit(10), requireAuth, requireAdmin, async (req, res) => {
   try {
     const { name, email, role, phone, password } = req.body;
     if (!name || (!email && !phone)) return res.status(400).json({ error: "Nome e email ou número são obrigatórios" });
@@ -2751,18 +3154,34 @@ app.post("/api/v1/users/invite", requireAuth, requireAdmin, async (req, res) => 
       );
       row = r.rows[0];
     }
+    // Alteração de permissões: sem a password temporária em claro no registo.
+    audit(req, "user.invite", {
+      actor: req.user?.name || "sistema",
+      actorId: req.user?.userId,
+      entity: "user",
+      entityId: row.id,
+      details: { papel: roleNorm, email_hash: emailRef(emailNorm) },
+    });
     res.status(201).json({ data: { ...row, tempPassword: tempPass } });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
 
-app.patch("/api/v1/users/:id/toggle", requireAuth, requireAdmin, async (req, res) => {
+app.patch("/api/v1/users/:id/toggle", rateLimit(50), requireAuth, requireAdmin, async (req, res) => {
   try {
     const cols = await usersColumns();
     if (!cols.has("active")) return res.status(400).json({ error: "Tabela users sem coluna active" });
     const r = await pool.query("UPDATE users SET active = NOT active WHERE id = $1 RETURNING id, name, email", [req.params.id]);
     if (r.rows.length === 0) return res.status(404).json({ error: "Utilizador não encontrado" });
+    // Alteração de permissões de acesso: regista sempre o alvo.
+    audit(req, "user.toggle_active", {
+      actor: req.user?.name || "sistema",
+      actorId: req.user?.userId,
+      entity: "user",
+      entityId: r.rows[0].id,
+      details: { operacao: "toggle_active" },
+    });
     res.json({ data: r.rows[0] });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -3418,6 +3837,12 @@ setInterval(async () => {
     }
   } catch {}
 }, 15 * 1000);
+
+// /admin: o HTML do backoffice só é entregue com sessão de staff válida.
+// Registado antes do fallback SPA; sem isto, express.static + sendFile
+// serviriam /admin a qualquer visitante. Os dados continuam protegidos por
+// requireAuth/requireRole nas rotas /api/v1.
+app.use(adminPageGuard);
 
 // ─── Serve frontend (built files) ─────────────────────────────────────────
 import { existsSync } from "fs";

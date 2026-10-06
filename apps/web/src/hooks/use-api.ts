@@ -5,11 +5,31 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const ACCESS_API = import.meta.env.VITE_ACCESS_API_URL || 'https://solve-sqoh.onrender.com';
 const ACCESS_API_KEY = import.meta.env.VITE_ACCESS_API_KEY || "";
 
+/** Lê o cookie `csrf` (legível por JS) para o devolver no header X-CSRF-Token. */
+function readCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const part of document.cookie.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() !== 'csrf') continue;
+    const raw = part.slice(eq + 1);
+    try { return decodeURIComponent(raw); } catch { return raw; }
+  }
+  return null;
+}
+
+/** Header CSRF para pedidos que mudam estado (o servidor só o exige com sessão por cookie). */
+function csrfHeader(): Record<string, string> {
+  const token = readCsrfCookie();
+  return token ? { 'X-CSRF-Token': token } : {};
+}
+
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...csrfHeader(),
   };
 }
 
@@ -17,15 +37,19 @@ function getAccessHeaders(): HeadersInit {
   // SEGURANÇA Set/2026: staff logado usa o JWT (Bearer); X-API-Key só recurso.
   try {
     const token = localStorage.getItem('token');
-    if (token) return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    if (token) return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...csrfHeader() };
   } catch {}
   return {
     'Content-Type': 'application/json',
     'X-API-Key': ACCESS_API_KEY,
+    ...csrfHeader(),
   };
 }
 
 let _isHandling401 = false;
+
+/** Opções de query aceites pelos hooks que não recebem parâmetros de rota. */
+type OpcoesQuery = { refetchInterval?: number; staleTime?: number; enabled?: boolean };
 
 async function handleUnauthorized() {
   if (_isHandling401) return;
@@ -99,10 +123,11 @@ export interface Automation {
   updatedAt: string;
 }
 
-export function useListAutomations() {
+export function useListAutomations(options?: OpcoesQuery) {
   return useQuery({
     queryKey: ['automations'],
     queryFn: () => apiGet<{ data: Automation[]; total: number }>('/api/v1/automations'),
+    ...options,
   });
 }
 
@@ -143,12 +168,15 @@ export interface AuditLog {
   createdAt: string;
 }
 
-export function useListAuditLogs(entity?: string, options?: { refetchInterval?: number }) {
+export function useListAuditLogs(entity?: string, options?: { refetchInterval?: number; enabled?: boolean }) {
   const params = entity ? `?entity=${entity}` : '';
   return useQuery({
     queryKey: ['audit-logs', entity],
     queryFn: () => apiGet<{ data: AuditLog[]; total: number }>(`/api/v1/audit-logs${params}`),
     refetchInterval: options?.refetchInterval,
+    // O endpoint exige papel admin/gestor: sem `enabled` o resto da equipa
+    // fica a levar 403 a cada refetch.
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -183,10 +211,11 @@ export interface User {
   updatedAt: string;
 }
 
-export function useListUsersAll() {
+export function useListUsersAll(options?: OpcoesQuery) {
   return useQuery({
     queryKey: ['users-all'],
     queryFn: () => apiGet<{ data: User[]; total: number }>('/api/v1/users'),
+    ...options,
   });
 }
 
@@ -199,28 +228,37 @@ export function useToggleUser() {
 }
 
 // ─── Solve Access ────────────────────────────────────────────────────────────
+// Formas de resposta derivatives das queries em `standalone-server/index.js`
+// (`/api/v1/access/stats` e `/api/v1/access/logs`). `cliente_nome` e
+// `hora_acesso` são anuláveis porque ambas as queries usam LEFT JOIN.
 export interface AccessStats {
   clients: { total: number; active: number; online: number; blocked: number };
   accesses: { today: number; month: number; authorizedToday: number; deniedToday: number };
   recentAccesses: Array<{
-    id_acesso: number; cliente_id: number; cliente_nome: string;
-    data_acesso: string; hora_acesso: string; tipo_acesso: string;
+    id_acesso: number; cliente_id: number; cliente_nome: string | null;
+    data_acesso: string; hora_acesso: string | null; tipo_acesso: string;
     resultado: string; motivo: string | null;
   }>;
-  accessByDay: Array<{ date: string; count: number; authorized: number; denied: number }>;
+  accessByDay: unknown[];
   peakHours: Array<{ hour: number; count: number }>;
 }
 
 export interface AccessLog {
-  id_acesso: number; cliente_id: number; cliente_nome: string; numero_cartao: string;
-  terminal_id: number; nome_terminal: string; data_acesso: string; hora_acesso: string;
+  id_acesso: number; cliente_id: number; cliente_nome: string | null;
+  data_acesso: string; hora_acesso: string | null;
   tipo_acesso: string; resultado: string; motivo: string | null;
+}
+
+export interface AccessLogsResponse {
+  data: AccessLog[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
 export function useAccessStats() {
   return useQuery({
     queryKey: ['access-stats'],
-    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/stats`, { headers: getAccessHeaders() }).then(r => r.json()),
+    queryFn: () => fetch(`${ACCESS_API}/api/v1/access/stats`, { headers: getAccessHeaders() })
+      .then(r => r.json() as Promise<{ success: boolean; data: AccessStats }>),
     refetchInterval: 300000,
     retry: false,
   });
@@ -231,7 +269,7 @@ export function useAccessLogs(params?: { client_id?: string; resultado?: string;
   const qs = Object.keys(filtered).length > 0 ? '?' + new URLSearchParams(filtered as any).toString() : '';
   return useQuery({
     queryKey: ['access-logs', params],
-    queryFn: () => accessGet<any>(`/api/v1/access/logs${qs}`),
+    queryFn: () => accessGet<AccessLogsResponse>(`/api/v1/access/logs${qs}`),
     refetchInterval: 180000,
     retry: false,
   });

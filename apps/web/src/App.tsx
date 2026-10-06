@@ -46,6 +46,15 @@ import {
 import type { Lead as ApiLead, Plan as ApiPlan, Payment as ApiPayment, Integration as ApiIntegration, User as ApiUser } from '@workspace/api-client-react';
 
 import { solveAtivo } from '@/lib/marca';
+
+// orval 8.23.0 gera `query?: UseQueryOptions<...>` para os hooks do cliente
+// React. Em @tanstack/react-query v5 esse tipo continua a exigir `queryKey`,
+// mas o hook já calcula a sua em runtime
+// (`queryOptions?.queryKey ?? get<Op>QueryKey()`), por isso só o tipo está
+// errado. O cast isola a incompatibilidade do gerador num único sítio e não
+// altera o comportamento.
+const REFETCH_5_MIN = () => ({ query: { refetchInterval: 300000 } }) as any;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -357,8 +366,8 @@ function Topbar({ onMenu, userName }: { onMenu: () => void; userName?: string })
 
 function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: Customer[]; userName?: string }) {
   const [, setLocation] = useLocation();
-  const statsQuery = useGetDashboardStats({ query: { refetchInterval: 300000 } });
-  const chartsQuery = useGetDashboardCharts({ query: { refetchInterval: 300000 } });
+  const statsQuery = useGetDashboardStats(REFETCH_5_MIN());
+  const chartsQuery = useGetDashboardCharts(REFETCH_5_MIN());
   const overview = statsQuery.data?.data?.overview;
   const ov: any = overview as any;
   const integrations = statsQuery.data?.data?.integrations ?? [];
@@ -1928,7 +1937,7 @@ const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof Briefcase
   { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2 },
 ];
 function IntegrationsPage() {
-  const { data } = useListIntegrations({ query: { refetchInterval: 300000 } });
+  const { data } = useListIntegrations(REFETCH_5_MIN());
   const ovgSync = useOVGSyncStatus();
   const ovgHealth = useOVGHealth();
   const syncNowMut = useOVGSyncNow();
@@ -2283,7 +2292,7 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
 }
 
 function AutomationsPage() {
-  const { data, refetch } = useListAutomations({ query: { refetchInterval: 300000 } });
+  const { data, refetch } = useListAutomations({ refetchInterval: 300000 });
   const toggleMut = useToggleAutomation();
   const deleteMut = useDeleteAutomation();
   const createMut = useCreateAutomation();
@@ -2325,7 +2334,7 @@ function ApiPage() {
 }
 
 function UsersPage() {
-  const { data, refetch } = useListUsersAll({ query: { refetchInterval: 300000 } });
+  const { data, refetch } = useListUsersAll({ refetchInterval: 300000 });
   const toggleMut = useToggleUser();
   const users = data?.data ?? [];
   const roles = ['Administrador', 'Gestor', 'Comercial', 'Financeiro', 'Operacional'];
@@ -2446,7 +2455,12 @@ function EquipaPage({ leads }: { leads: Lead[] }) {
   {inviteOpen && <Modal title="Adicionar comercial" subtitle="Acesso so a Clientes e Leads - passe padrao 0987654321" onClose={() => setInviteOpen(false)}><div style={{ display: 'grid', gap: '.6rem' }}><FormField label="Nome completo *" value={iName} onChange={setIName} placeholder="Nome completo" /><FormField label="Numero (login) *" value={iPhone} onChange={setIPhone} placeholder="Ex.: 943412688" type="tel" />{iMsg ? <div style={{ fontSize: '.75rem' }}>{iMsg}</div> : null}<div style={{ display: 'flex', gap: '.5rem' }}><button className="btn-secondary" onClick={() => setInviteOpen(false)} style={{ flex: 1 }}>Fechar</button><button className="btn-primary" onClick={invite} disabled={inviting} style={{ flex: 1 }}><Check size={14} /> {inviting ? 'A criar...' : 'Criar acesso'}</button></div></div></Modal>}</>;
 }
 function AuditPage() {
-  const { data } = useListAuditLogs(undefined, { refetchInterval: 300000 });
+  // GET /audit-logs exige administrador/gestor no backend — sem o papel, o
+  // pedido devolveria 403 (não mostrar dados de auditoria a toda a equipa).
+  const { user } = useAuth();
+  const papel = (user as any)?.role as string | undefined;
+  const podeVerAuditoria = papel === 'administrador' || papel === 'gestor';
+  const { data } = useListAuditLogs(undefined, { refetchInterval: 300000, enabled: podeVerAuditoria });
   const logs = data?.data ?? [];
   const [tab, setTab] = useState('Eventos');
   const [reprocMsg, setReprocMsg] = useState('');
@@ -2680,9 +2694,11 @@ function CRM() {
       if (!ok) setLocation('/admin/meu-progresso');
     }
   }, [location, userRole]);
-  const leadsQuery = useListLeads(undefined, { query: { refetchInterval: 300000 } });
+  const leadsQuery = useListLeads(undefined, REFETCH_5_MIN());
   const customersQuery = useListCustomersManual();
-  const auditQuery = useListAuditLogs(undefined, { refetchInterval: 300000 });
+  // GET /audit-logs exige administrador/gestor no backend — só esses papéis fazem o pedido.
+  const podeVerAuditoria = userRole === 'administrador' || userRole === 'gestor';
+  const auditQuery = useListAuditLogs(undefined, { refetchInterval: 300000, enabled: podeVerAuditoria });
   const auditCount = auditQuery.data?.total ?? auditQuery.data?.data?.length ?? 0;
 
   const qc = useQueryClient();
