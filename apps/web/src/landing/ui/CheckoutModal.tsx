@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CreditCard, Loader2, ShieldCheck } from 'lucide-react'
 import { useCart } from '../context/CartContext'
@@ -12,6 +12,8 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   const { cart, cartTotal, shippingCost, grandTotal, formatKz } = useCart()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const caixa = useRef<HTMLDivElement>(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -20,6 +22,16 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
     nif: ''
   })
 
+  // Foco e Escape: sem isto o teclado não entra no modal de pagamento.
+  useEffect(() => {
+    if (!isOpen) return
+    setError(null)
+    caixa.current?.focus()
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', tecla)
+    return () => document.removeEventListener('keydown', tecla)
+  }, [isOpen, onClose])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
@@ -27,6 +39,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
     try {
       const response = await createPay4AllPayment({
@@ -39,11 +52,11 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         // Redirecionar para o portal da Pay4All
         window.location.href = response.payment_url
       } else {
-        alert('Ocorreu um erro ao gerar o pagamento. Tente novamente.')
+        setError('Ocorreu um erro ao gerar o pagamento. Tente novamente.')
       }
-    } catch (error) {
-      console.error(error)
-      alert('Erro de comunicação com a Pay4All.')
+    } catch (falha) {
+      console.error(falha)
+      setError('Erro de comunicação com a Pay4All.')
     } finally {
       setLoading(false)
     }
@@ -61,7 +74,12 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
           
           <motion.div
-            className="relative w-full max-w-5xl bg-white dark:bg-zinc-950 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            ref={caixa}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Finalizar Encomenda"
+            tabIndex={-1}
+            className="relative w-full max-w-5xl bg-white dark:bg-zinc-950 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] outline-none"
             initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -71,7 +89,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
               <div>
                 <h2 className="font-heading font-bold text-xl text-zinc-900 dark:text-white">Finalizar Encomenda</h2>
               </div>
-              <button onClick={onClose} className="p-2 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 transition-colors shadow-sm">
+              <button onClick={onClose} aria-label="Fechar" className="p-2 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 transition-colors shadow-sm">
                 <X size={20} />
               </button>
             </div>
@@ -82,7 +100,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
               <div className="w-full md:w-3/5 p-6 md:p-10 overflow-y-auto border-r border-zinc-100 dark:border-zinc-800">
                 <div className="hidden md:flex justify-between items-center mb-8">
                   <h2 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white">Finalizar Encomenda</h2>
-                  <button onClick={onClose} className="p-2 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors">
+                  <button onClick={onClose} aria-label="Fechar" className="p-2 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors">
                     <X size={20} />
                   </button>
                 </div>
@@ -90,29 +108,29 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                 <form id="checkout-form" onSubmit={handleSubmit} className="space-y-5">
                 
                 <div>
-                  <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Nome Completo *</label>
-                  <input required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="O seu nome" />
+                  <label htmlFor="checkout-name" className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Nome Completo *</label>
+                  <input id="checkout-name" required type="text" name="name" value={formData.name} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="O seu nome" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Email *</label>
-                    <input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="exemplo@email.com" />
+                    <label htmlFor="checkout-email" className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Email *</label>
+                    <input id="checkout-email" required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="exemplo@email.com" />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Telemóvel *</label>
-                    <input required type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="+244 ..." />
+                    <label htmlFor="checkout-phone" className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Telemóvel *</label>
+                    <input id="checkout-phone" required type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="+244 ..." />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Morada Completa *</label>
-                  <input required type="text" name="address" value={formData.address} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Rua, Número, Código Postal, Cidade" />
+                  <label htmlFor="checkout-address" className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">Morada Completa *</label>
+                  <input id="checkout-address" required type="text" name="address" value={formData.address} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Rua, Número, Código Postal, Cidade" />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">NIF <span className="text-zinc-400 font-normal">(Opcional)</span></label>
-                  <input type="text" name="nif" value={formData.nif} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Número de Contribuinte" />
+                  <label htmlFor="checkout-nif" className="block text-sm font-semibold text-zinc-900 dark:text-white mb-1.5">NIF <span className="text-zinc-400 font-normal">(Opcional)</span></label>
+                  <input id="checkout-nif" type="text" name="nif" value={formData.nif} onChange={handleChange} className="w-full h-12 px-4 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-[#042251] focus:ring-1 focus:ring-[#042251] transition-all outline-none" placeholder="Número de Contribuinte" />
                 </div>
 
               </form>
@@ -159,6 +177,10 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                   <span className="font-heading font-bold text-lg text-zinc-900 dark:text-white">Total</span>
                   <span className="font-heading font-black text-3xl text-teal-600">{formatKz(grandTotal)}</span>
                 </div>
+
+                {error && (
+                  <p role="alert" className="text-sm text-center font-medium" style={{ color: '#D71920' }}>{error}</p>
+                )}
 
                 <button 
                   type="submit" 
