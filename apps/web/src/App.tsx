@@ -1294,12 +1294,12 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
   {newOpen && <div className="modal-backdrop" onClick={() => setNewOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Novo cliente</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista como lead de Balcão para acompanhamento comercial.</div>
-    <label className="label">Nome *</label>
+    <label className="form-label">Nome *</label>
     <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nome completo" style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Telefone</label>
+      <div style={{ flex: 1 }}><label className="form-label">Telefone</label>
       <input className="input" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="9XXXXXXXX" /></div>
-      <div style={{ flex: 1 }}><label className="label">Email</label>
+      <div style={{ flex: 1 }}><label className="form-label">Email</label>
       <input className="input" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="email@..." /></div>
     </div>
     {newMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{newMsg}</div>}
@@ -1393,15 +1393,15 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
   {editOpen && <div className="modal-backdrop" onClick={() => setEditOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Editar cliente</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Só nome, telefone, email e género (a catraca gere o resto).</div>
-    <label className="label">Nome *</label>
+    <label className="form-label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Telefone</label>
+      <div style={{ flex: 1 }}><label className="form-label">Telefone</label>
       <input className="input" value={fPhone} onChange={e => setFPhone(e.target.value)} /></div>
-      <div style={{ flex: 1 }}><label className="label">Email</label>
+      <div style={{ flex: 1 }}><label className="form-label">Email</label>
       <input className="input" value={fEmail} onChange={e => setFEmail(e.target.value)} /></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Género</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Género</label>
       <select className="select" value={fGender} onChange={e => setFGender(e.target.value)} style={{ width: '100%' }}><option value="">Não definido</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div>
     {editMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{editMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
@@ -1502,14 +1502,14 @@ function PlansPage() {
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.8rem' }}>{plans.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Nenhum plano configurado</div>}{(plans).map((p, i) => <div className="card" key={p.id} style={{ padding: '1.1rem', borderTop: i === 0 ? '3px solid hsl(var(--accent))' : undefined }}><div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}><div><div className="eyebrow">{i === 0 ? 'Mais subscrito' : `Plano 0${i + 1}`}</div><h2 style={{ fontSize: '1.05rem', marginTop: '.35rem' }}>{p.name}</h2></div><Status tone={p.active ? 'good' : 'warn'}>{p.active ? 'Activo' : 'Inactivo'}</Status></div><p className="section-note" style={{ minHeight: 33 }}>{p.description || 'Plano disponível'}</p><div className="mono" style={{ fontSize: '1.2rem', margin: '1rem 0' }}>{p.price ? money(p.price) : 'Gratuito'}<span style={{ fontFamily: 'var(--app-font-sans)', color: 'hsl(var(--muted-foreground))', fontSize: '.67rem' }}> / {p.periodicity || 'mês'}</span></div><div style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => openEdit(p)} style={{ flex: 1 }}>Editar</button><button className="btn-secondary" onClick={() => del(p)} style={{ color: 'hsl(0 70% 50%)' }}><Trash2 size={14} /></button></div></div>)}</div>}
   {showModal && <div className="modal-backdrop" onClick={() => setShowModal(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '1rem' }}>{editing ? 'Editar plano' : 'Novo plano'}</h3>
-    <label className="label">Nome *</label>
+    <label className="form-label">Nome *</label>
     <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: SamoraFit Mensal" />
-    <label className="label" style={{ marginTop: '.6rem' }}>Descrição</label>
+    <label className="form-label" style={{ marginTop: '.6rem' }}>Descrição</label>
     <textarea className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição do plano" rows={2} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Preço (Kz)</label>
+      <div style={{ flex: 1 }}><label className="form-label">Preço (Kz)</label>
       <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
-      <div style={{ flex: 1 }}><label className="label">Periodicidade</label>
+      <div style={{ flex: 1 }}><label className="form-label">Periodicidade</label>
       <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="avulso">Avulso</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="3_semanas">3 semanas</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
     </div>
     <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginTop: '.8rem', fontSize: '.8rem' }}><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> Plano activo</label>
@@ -1888,31 +1888,31 @@ function PaymentsPage() {
     <h3 style={{ marginBottom: '.2rem' }}>Nova cobrança</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente e gera o link de pagamento (o método escolhe-se na página).</div>
     <div className="fila-dupla">
-      <div style={{ flex: 1 }}><label className="label">Montante (Kz) *</label>
+      <div style={{ flex: 1 }}><label className="form-label">Montante (Kz) *</label>
       <input className="input" type="number" min="1" value={cAmount} onChange={e => setCAmount(e.target.value)} placeholder="100" /></div>
-      <div style={{ flex: 1 }}><label className="label">Pagamento</label>
+      <div style={{ flex: 1 }}><label className="form-label">Pagamento</label>
       <div style={{ fontSize: '.78rem', fontWeight: 600, padding: '.55rem 0' }}>Multicaixa na página</div></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Telefone *</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Telefone *</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Aluno (preenche nome, email e telefone)</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Aluno (preenche nome, email e telefone)</label>
     <input className="input" value={cAlunoBusca} onChange={e => setCAlunoBusca(e.target.value)} placeholder="Pesquisar aluno…" style={{ width: '100%', marginBottom: '.35rem' }} />
     <select className="select" value="" onChange={e => { if (e.target.value) pickAluno(e.target.value); e.target.value = ''; }} style={{ width: '100%' }}>
       <option value="">Selecionar aluno… ({cAlunos.length})</option>
       {cAlunos.filter(a => { const q = cAlunoBusca.trim().toLowerCase(); if (!q) return true; return (a.name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q); }).slice(0, 150).map(a => <option key={a.id} value={a.id}>{a.name}{a.phone ? ` · ${a.phone}` : ''}</option>)}
     </select></div>
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Nome (p/ SamoraFit Workout)</label>
+      <div style={{ flex: 1 }}><label className="form-label">Nome (p/ SamoraFit Workout)</label>
       <input className="input" value={cName} onChange={e => setCName(e.target.value)} placeholder="Nome do aluno" style={{ width: '100%' }} /></div>
-      <div style={{ flex: 1 }}><label className="label">Email (p/ SamoraFit Workout)</label>
+      <div style={{ flex: 1 }}><label className="form-label">Email (p/ SamoraFit Workout)</label>
       <input className="input" type="email" value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="aluno@email.com" style={{ width: '100%' }} /></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Conteúdo (SamoraFit Workout) *</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Conteúdo (SamoraFit Workout) *</label>
     <select className="select" value={cProduto} onChange={e => pickProduto(e.target.value)} style={{ width: '100%' }}>
       {cEntregas.length === 0 && <option value="">A carregar…</option>}
       {cEntregas.map(o => <option key={o.id} value={o.id}>{o.nome}{o.preco ? ` — ${o.preco} Kz` : ''}</option>)}
     </select></div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Descrição</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Descrição</label>
     <input className="input" value={cDesc} onChange={e => setCDesc(e.target.value)} placeholder="Ex: Mensalidade Setembro" style={{ width: '100%' }} /></div>
     {cMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{cMsg}</div>}
     {cLink && <div style={{ marginTop: '.6rem', padding: '.7rem', background: '#f4f4f5', borderRadius: '8px' }}>
@@ -2157,10 +2157,10 @@ const [produtoEntrega, setProdutoEntrega] = useState('');
     <div className="grid-2">
       {/* Entrega por omissão oculta (o sistema exige sempre produto): usa-se o
           primeiro plano em silêncio para os raros pagamentos sem produto. */}
-      <div><label className="label">Envio automático</label>
+      <div><label className="form-label">Envio automático</label>
       <div style={{ padding: '.55rem .7rem' }}><Status tone="good">Ligado</Status></div></div>
     </div>
-    <div style={{ marginTop: '.6rem' }}><label className="label">Preços por conteúdo (Kz)</label>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Preços por conteúdo (Kz)</label>
     <div style={{ display: 'grid', gap: '.45rem' }}>
       {entregasArr.length === 0 && <div className="section-note">{entregasCarregadas ? 'Nenhum plano de SamoraFit Workout encontrado na Cademi.' : 'A carregar entregas…'}</div>}
       {entregasArr.map(o => <div key={o.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
@@ -2279,7 +2279,7 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
   return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Configurar {name}</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>{fields.length > 0 ? 'Se a chave existir no servidor (Render), ela tem prioridade. O que guardares aqui serve de fallback.' : 'Sem opções configuráveis de momento.'}</div>
-    {fields.map(f => <div key={f.key} style={{ marginBottom: '.6rem' }}><label className="label">{f.label}</label>
+    {fields.map(f => <div key={f.key} style={{ marginBottom: '.6rem' }}><label className="form-label">{f.label}</label>
       <input className="input" type={f.type || 'text'} placeholder={f.type === 'password' ? '•••••• (guardada — vazio mantém)' : (f.placeholder || '')} value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ width: '100%' }} /></div>)}
     {testMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem', color: testMsg.startsWith('OK') ? 'hsl(155 41% 35%)' : 'hsl(0 70% 50%)' }}>{testMsg}</div>}
     {saveMsg && <div style={{ fontSize: '.75rem', marginBottom: '.6rem' }}>{saveMsg}</div>}
@@ -2313,12 +2313,12 @@ function AutomationsPage() {
   {open && <div className="modal-backdrop" onClick={() => setOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Nova automação</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regra guardada como ativa. A execução agenda-se no motor.</div>
-    <label className="label">Nome *</label>
+    <label className="form-label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} placeholder="Ex: Alertar aulas esgotadas" style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Quando</label>
+      <div style={{ flex: 1 }}><label className="form-label">Quando</label>
       <select className="select" value={fTrigger} onChange={e => setFTrigger(e.target.value)}>{['pagamento.confirmado', 'pagamento.pendente', 'acesso.negado', 'aulas.esgotadas', 'cliente.bloqueado'].map(v => <option key={v}>{v}</option>)}</select></div>
-      <div style={{ flex: 1 }}><label className="label">Executar</label>
+      <div style={{ flex: 1 }}><label className="form-label">Executar</label>
       <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{['send_notification', 'create_task', 'update_customer_state', 'sync_to_cademi', 'sync_to_ovg'].map(v => <option key={v}>{v}</option>)}</select></div>
     </div>
     {fMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{fMsg}</div>}
@@ -2366,12 +2366,12 @@ function UsersPage() {
   {inviteOpen && <div className="modal-backdrop" onClick={() => setInviteOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Convidar utilizador</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Cria o acesso com password temporária.</div>
-    <label className="label">Nome *</label>
+    <label className="form-label">Nome *</label>
     <input className="input" value={iName} onChange={e => setIName(e.target.value)} placeholder="Nome completo" style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="label">Email *</label>
+      <div style={{ flex: 1 }}><label className="form-label">Email *</label>
       <input className="input" value={iEmail} onChange={e => setIEmail(e.target.value)} placeholder="email@..." /></div>
-      <div style={{ flex: 1 }}><label className="label">Papel</label>
+      <div style={{ flex: 1 }}><label className="form-label">Papel</label>
       <select className="select" value={iRole} onChange={e => setIRole(e.target.value)}>{roles.map(r => <option key={r}>{r}</option>)}</select></div>
     </div>
     {iMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem' }}>{iMsg}</div>}
@@ -2711,7 +2711,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin" component={() => <Dashboard leads={leads} customers={customers} userName={userName} />} /><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso" component={() => <MeuProgressoPage leads={leads} userName={userName} />} /><Route path="/admin/fit90-leads" component={() => <Fit90LeadsPage leads={leads} onChanged={reloadLeads} />} /><Route path="/admin/pipeline" component={() => <PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} />} /><Route path="/admin/clientes/:id" component={() => <CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} />} /><Route path="/admin/clientes" component={() => <CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} />} /><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa" component={() => <EquipaPage leads={leads} />} /><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route component={() => <EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} />} /></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin"><Dashboard leads={leads} customers={customers} userName={userName} /></Route><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso"><MeuProgressoPage leads={leads} userName={userName} /></Route><Route path="/admin/fit90-leads"><Fit90LeadsPage leads={leads} onChanged={reloadLeads} /></Route><Route path="/admin/pipeline"><PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} /></Route><Route path="/admin/clientes/:id"><CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} /></Route><Route path="/admin/clientes"><CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} /></Route><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa"><EquipaPage leads={leads} /></Route><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route><EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} /></Route></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (
@@ -2739,14 +2739,14 @@ function App() {
               {/* Login (raiz) → CRM */}
               <Route path="/login" component={LandingLoginPage} />
               <Route path="/" component={LandingLoginPage} />
-              <Route path="/fit-studio" component={() => <LandingSubPage><FitStudio /></LandingSubPage>} />
+              <Route path="/fit-studio"><LandingSubPage><FitStudio /></LandingSubPage></Route>
               {/* Portal do Cliente (OTP, sessão portal_token) */}
               <Route path="/conta/login" component={ContaLogin} />
-              <Route path="/conta/pagamentos" component={() => <ProtectedPortal><PortalShell><PortalPagamentos /></PortalShell></ProtectedPortal>} />
-              <Route path="/conta/recibos/:id" component={() => <ProtectedPortal><PortalShell><PortalRecibo /></PortalShell></ProtectedPortal>} />
-              <Route path="/conta" component={() => <ProtectedPortal><PortalShell><MinhaConta /></PortalShell></ProtectedPortal>} />
+              <Route path="/conta/pagamentos"><ProtectedPortal><PortalShell><PortalPagamentos /></PortalShell></ProtectedPortal></Route>
+              <Route path="/conta/recibos/:id"><ProtectedPortal><PortalShell><PortalRecibo /></PortalShell></ProtectedPortal></Route>
+              <Route path="/conta"><ProtectedPortal><PortalShell><MinhaConta /></PortalShell></ProtectedPortal></Route>
               {/* CRM (protected) */}
-              <Route component={() => <ProtectedRoute><CRM /></ProtectedRoute>} />
+              <Route><ProtectedRoute><CRM /></ProtectedRoute></Route>
             </Switch>
           </ErrorBoundary>
         </WouterRouter>
