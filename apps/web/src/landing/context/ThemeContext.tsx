@@ -69,17 +69,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return undefined
   }, [theme])
 
-  // A landing é quem monta o ThemeProvider; ao sair dela (CRM/conta) o <html>
-  // ficava com a classe que a landing deixou (`.dark`), herdada pelo admin.
-  // Remove as classes no unmount para o shell não herdar o tema da landing.
-  useEffect(() => {
-    const html = document.documentElement
-    return () => {
-      html.classList.remove('dark')
-      html.classList.remove('light')
-    }
-  }, [])
-
   return (
     <ThemeContext.Provider value={{ theme, setTheme, isDark }}>
       {children}

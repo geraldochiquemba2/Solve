@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'wouter';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { getRecibo, type ReciboResponse } from './api';
-import { money } from '@/lib/money';
+
+const money = (n: number) =>
+  new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
 
 function fmtDate(d?: string | null): string {
   if (!d) return '—';

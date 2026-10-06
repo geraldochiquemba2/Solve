@@ -3,8 +3,9 @@ import { Link } from 'wouter';
 import { Copy, Check, Eye, RefreshCw } from 'lucide-react';
 import { listPagamentos, type PortalPayment } from './api';
 import { randomId } from '@/lib/random';
-import { money } from '@/lib/money';
-import { statusLabel, statusTone } from '@/lib/status';
+
+const money = (n: number) =>
+  new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
 
 function fmtDate(d?: string | null): string {
   if (!d) return '—';
@@ -106,7 +107,7 @@ export default function Pagamentos() {
                   <div className="mono" style={{ fontSize: '.72rem', fontWeight: 700 }}>{p.code}</div>
                   <div className="section-note">{fmtDate(p.date)}</div>
                 </div>
-                <span className={`status status-${statusTone(p.status)}`}>{statusLabel(p.status)}</span>
+                <span className={`status status-${p.status.toLowerCase().includes('confirm') ? 'good' : p.status.toLowerCase().includes('pendente') ? 'pending' : 'warn'}`}>{p.status}</span>
                 <span className="mono" style={{ fontSize: '.76rem', fontWeight: 800 }}>{p.amount ? money(p.amount) : ''}</span>
               </div>
               <div style={{ display: 'flex', gap: '.4rem', marginTop: '.6rem' }}>

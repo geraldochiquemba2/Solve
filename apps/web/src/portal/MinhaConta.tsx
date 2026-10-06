@@ -9,8 +9,27 @@ import {
   type PortalPayment,
 } from './api';
 import { randomId } from '@/lib/random';
-import { money } from '@/lib/money';
-import { statusTone, statusLabel } from '@/lib/status';
+
+const money = (n: number) =>
+  new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
+
+function statusTone(s: string): 'good' | 'warn' | 'danger' | 'neutral' | 'pending' {
+  const v = (s || '').toLowerCase();
+  if (v === 'activo' || v === 'ativo' || v.includes('confirm')) return 'good';
+  if (v.includes('atraso') || v.includes('bloq') || v.includes('suspens')) return 'danger';
+  if (v.includes('pendente')) return 'pending';
+  return 'warn';
+}
+
+function statusLabel(state?: string): string {
+  const v = (state || 'activo').toLowerCase();
+  if (v === 'activo' || v === 'ativo') return 'Activo';
+  if (v === 'em_atraso' || v === 'em atraso') return 'Em atraso';
+  if (v.includes('bloq')) return 'Bloqueado';
+  if (v.includes('suspens')) return 'Suspenso';
+  if (v.includes('inactiv') || v.includes('inativ')) return 'Inactivo';
+  return state || 'Activo';
+}
 
 function fmtDate(d?: string | null): string {
   if (!d) return '—';
