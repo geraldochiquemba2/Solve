@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import ContactForm from './ContactForm'
@@ -10,17 +10,21 @@ interface FormModalProps {
 }
 
 export default function FormModal({ isOpen, onClose, context }: FormModalProps) {
-  // Prevent body scroll when modal is open
+  const caixa = useRef<HTMLDivElement>(null)
+
+  // Foco, Escape e scroll-lock, com restauro do overflow anterior.
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'auto'
-    }
+    if (!isOpen) return
+    caixa.current?.focus()
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', tecla)
+    const overflowAnterior = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.body.style.overflow = 'auto'
+      document.removeEventListener('keydown', tecla)
+      document.body.style.overflow = overflowAnterior
     }
-  }, [isOpen])
+  }, [isOpen, onClose])
 
   return (
     <AnimatePresence>
@@ -42,8 +46,13 @@ export default function FormModal({ isOpen, onClose, context }: FormModalProps) 
             data-lenis-prevent="true"
           >
             <motion.div
+              ref={caixa}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Agendar Diagnóstico"
+              tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#111111] border border-[#2A2A2A] p-6 sm:p-8 w-full max-w-xl relative shadow-2xl my-auto"
+              className="bg-[#111111] border border-[#2A2A2A] p-6 sm:p-8 w-full max-w-xl relative shadow-2xl my-auto outline-none"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}

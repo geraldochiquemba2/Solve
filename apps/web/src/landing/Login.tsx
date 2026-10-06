@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useId } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, ArrowRight, X } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
@@ -67,6 +67,7 @@ export default function Login() {
               {error && (
                 <motion.div
                   key="error"
+                  role="alert"
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
@@ -74,7 +75,7 @@ export default function Login() {
                   style={{ backgroundColor: 'rgba(215,25,32,0.08)', color: '#D71920', border: '1px solid rgba(215,25,32,0.2)' }}
                 >
                   <span>{error}</span>
-                  <button onClick={() => setError(null)}><X size={14} /></button>
+                  <button type="button" aria-label="Fechar aviso" onClick={() => setError(null)}><X size={14} /></button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -101,7 +102,13 @@ export default function Login() {
                   icon={<Lock size={14} />} inputBg={inputBg}
                   textPrimary={textPrimary} textMuted={textMuted} borderColor={borderColor}
                   endIcon={
-                    <button type="button" onClick={() => setShowPass(!showPass)} style={{ color: textMuted }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      aria-label={showPass ? 'Ocultar palavra-passe' : 'Mostrar palavra-passe'}
+                      aria-pressed={showPass}
+                      style={{ color: textMuted }}
+                    >
                       {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   }
@@ -125,17 +132,19 @@ interface FieldProps {
 }
 
 function Field({ label, type, value, onChange, placeholder, icon, endIcon, inputBg, textPrimary, textMuted, borderColor }: FieldProps) {
+  const id = useId()
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: textMuted }}>{label}</label>
+      <label htmlFor={id} className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: textMuted }}>{label}</label>
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: textMuted }}>{icon}</span>
         <input
+          id={id}
           required type={type} value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
           autoComplete={type === 'password' ? 'current-password' : 'username'}
-          className="w-full h-9 pl-9 pr-9 text-[13px] outline-none transition-all rounded-[7px]"
+          className="w-full h-11 pl-9 pr-9 text-[13px] outline-none transition-all rounded-[7px]"
           style={{ backgroundColor: inputBg, border: `1px solid ${borderColor}`, color: textPrimary }}
           onFocus={e => { const t = e.target as HTMLInputElement; t.style.borderColor = '#042251'; t.style.boxShadow = '0 0 0 3px rgba(4,34,81,0.18)' }}
           onBlur={e => { const t = e.target as HTMLInputElement; t.style.borderColor = borderColor; t.style.boxShadow = 'none' }}
@@ -153,7 +162,7 @@ function SubmitBtn({ children, loading }: { children: React.ReactNode; loading: 
     <button
       type="submit"
       disabled={loading}
-      className="w-full h-10 flex items-center justify-center gap-2 font-heading font-bold text-[13px] text-white transition-all rounded-[7px] mt-1"
+      className="w-full h-11 flex items-center justify-center gap-2 font-heading font-bold text-[13px] text-white transition-all rounded-[7px] mt-1"
       style={{ backgroundColor: loading ? '#999' : '#042251', boxShadow: loading ? 'none' : '0 4px 20px rgba(4,34,81,0.3)', cursor: loading ? 'not-allowed' : 'pointer' }}
     >
       {loading ? (

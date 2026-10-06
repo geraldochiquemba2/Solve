@@ -78,7 +78,7 @@ export default function Footer() {
           {/* Link columns */}
           {Object.entries(footerLinks).map(([title, links]) => (
             <div key={title}>
-              <h4 className="font-heading font-bold text-zinc-900 dark:text-white text-sm mb-5 tracking-wide">{title}</h4>
+              <h2 className="font-heading font-bold text-zinc-900 dark:text-white text-sm mb-5 tracking-wide">{title}</h2>
               <ul className="flex flex-col gap-3">
                 {links.map((link) => (
                   <li key={link.label}>
@@ -111,7 +111,6 @@ export default function Footer() {
           </p>
           <div className="flex items-center gap-1">
             <span className="text-zinc-400 text-xs font-body">Desenvolvido com</span>
-            <span className="text-[#042251] text-xs"></span>
             <span className="text-zinc-400 text-xs font-body">em Angola</span>
           </div>
         </div>

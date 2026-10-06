@@ -175,7 +175,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                               <Plus size={12} />
                             </button>
                           </div>
-                          <button onClick={() => removeFromCart(item.product.id, item.selectedSize, item.selectedColor)} className="text-[10px] uppercase font-bold text-red-500 hover:text-red-700 tracking-wider">
+                          <button onClick={() => removeFromCart(item.product.id, item.selectedSize, item.selectedColor)} className="text-xs uppercase font-bold text-red-500 hover:text-red-700 tracking-wider">
                             Remover
                           </button>
                         </div>

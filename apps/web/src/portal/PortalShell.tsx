@@ -26,7 +26,7 @@ export default function PortalShell({ children }: { children: ReactNode }) {
             <div style={{ fontWeight: 700, fontSize: '.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {customer?.name || 'A minha conta'}
             </div>
-            <div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))' }}>Portal do Cliente</div>
+            <div style={{ fontSize: '.75rem', color: 'hsl(var(--muted-foreground))' }}>Portal do Cliente</div>
           </div>
           <button className="btn-quiet" onClick={logout} aria-label="Sair do portal">
             <LogOut size={15} /> <span className="desktop-only">Sair</span>

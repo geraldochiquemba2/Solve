@@ -83,6 +83,7 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
   if (submitted) {
     return (
       <motion.div
+        role="status"
         className="text-center py-8"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -117,48 +118,53 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
           <div>
             <input
               {...register('nome')}
+              aria-label="Nome completo"
               placeholder="Nome completo *"
               className="input-field"
               id="form-nome"
             />
-            {errors.nome && <p className="text-[#D71920] text-xs mt-1 font-body">{errors.nome.message}</p>}
+            {errors.nome && <p role="alert" className="text-[#D71920] text-xs mt-1 font-body">{errors.nome.message}</p>}
           </div>
           <div>
             <input
               {...register('empresa')}
+              aria-label="Organização ou Instituição"
               placeholder="Organização ou Instituição *"
               className="input-field"
               id="form-empresa"
             />
-            {errors.empresa && <p className="text-[#D71920] text-xs mt-1 font-body">{errors.empresa.message}</p>}
+            {errors.empresa && <p role="alert" className="text-[#D71920] text-xs mt-1 font-body">{errors.empresa.message}</p>}
           </div>
         </div>
 
         <div>
           <input
             {...register('email')}
+            aria-label="Email profissional"
             type="email"
             placeholder="Email profissional *"
             className="input-field"
             id="form-email"
           />
-          {errors.email && <p className="text-[#D71920] text-xs mt-1 font-body">{errors.email.message}</p>}
+          {errors.email && <p role="alert" className="text-[#D71920] text-xs mt-1 font-body">{errors.email.message}</p>}
         </div>
 
         <div>
           <input
             {...register('telefone')}
+            aria-label="Telefone"
             type="tel"
             placeholder="Telefone *"
             className="input-field"
             id="form-telefone"
           />
-          {errors.telefone && <p className="text-[#D71920] text-xs mt-1 font-body">{errors.telefone.message}</p>}
+          {errors.telefone && <p role="alert" className="text-[#D71920] text-xs mt-1 font-body">{errors.telefone.message}</p>}
         </div>
 
         <div>
           <textarea
             {...register('mensagem')}
+            aria-label="Mensagem (opcional)"
             placeholder="Descreva brevemente o seu desafio (opcional)"
             className="textarea-field"
             id="form-mensagem"
@@ -190,7 +196,7 @@ export default function ContactForm({ initialMessage }: { initialMessage?: strin
               e o tratamento dos meus dados ao abrigo da Lei n.º 22/11 (Angola).
             </span>
           </label>
-          {errors.rgpd && <p className="text-[#D71920] text-xs mt-1 font-body">{errors.rgpd.message}</p>}
+          {errors.rgpd && <p role="alert" className="text-[#D71920] text-xs mt-1 font-body">{errors.rgpd.message}</p>}
         </div>
 
         <button

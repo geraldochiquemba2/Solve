@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronRight, User, Phone, MapPin, FileText, Package, CreditCard, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -28,6 +28,8 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [orderId, setOrderId] = useState<string | null>(null)
+  const caixa = useRef<HTMLDivElement>(null)
+  const overflowAnterior = useRef<string>('')
 
   const [form, setForm] = useState(() => {
     try {
@@ -64,15 +66,26 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
     
     // Scroll lock for background
     if (isOpen) {
+      overflowAnterior.current = document.body.style.overflow
       document.body.style.overflow = 'hidden'
     } else {
-      document.body.style.overflow = 'unset'
+      document.body.style.overflow = overflowAnterior.current
     }
     
     return () => {
-      document.body.style.overflow = 'unset'
+      document.body.style.overflow = overflowAnterior.current
     }
   }, [isOpen, initialPlanId, initialCycle, plans])
+
+  // Foco e Escape: o checkout pede dados de pagamento, por isso o teclado tem
+  // de conseguir entrar, sair e fechar (WCAG 2.1.2 / 2.4.3), como no Modal do CRM.
+  useEffect(() => {
+    if (!isOpen) return
+    caixa.current?.focus()
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
+    document.addEventListener('keydown', tecla)
+    return () => document.removeEventListener('keydown', tecla)
+  }, [isOpen])
 
   const cardBg = isDark ? '#111113' : '#ffffff'
   const textPrimary = isDark ? '#f4f4f5' : '#18181b'
@@ -182,7 +195,12 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
           <motion.div
-            className="relative w-full max-w-xl shadow-2xl overflow-hidden rounded-[7px] max-h-[90vh] flex flex-col"
+            ref={caixa}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Inscrição — ${program.name}`}
+            tabIndex={-1}
+            className="relative w-full max-w-xl shadow-2xl overflow-hidden rounded-[7px] max-h-[90vh] flex flex-col outline-none"
             style={{ backgroundColor: cardBg }}
             initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -194,7 +212,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                 <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#042251' }}>Inscrição</p>
                 <h2 className="font-heading font-bold text-lg" style={{ color: textPrimary }}>{program.name}</h2>
               </div>
-              <button onClick={handleClose} className="p-1.5 rounded-[7px] transition-colors" style={{ color: textMuted }}>
+              <button onClick={handleClose} aria-label="Fechar inscrição" className="p-1.5 rounded-[7px] transition-colors" style={{ color: textMuted }}>
                 <X size={20} />
               </button>
             </div>
@@ -235,10 +253,11 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                       { label: 'NIF (opcional)', key: 'nif', type: 'text', icon: <MapPin size={15} />, placeholder: 'Número de contribuinte' },
                     ].map(f => (
                       <div key={f.key}>
-                        <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: textMuted }}>{f.label}</label>
+                        <label htmlFor={`checkout-${f.key}`} className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: textMuted }}>{f.label}</label>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: textMuted }}>{f.icon}</span>
                           <input
+                            id={`checkout-${f.key}`}
                             required={f.key !== 'nif'}
                             type={f.type}
                             value={(form as any)[f.key]}
@@ -250,6 +269,9 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                         </div>
                       </div>
                     ))}
+                    {error && (
+                      <p role="alert" className="text-sm font-medium text-center" style={{ color: '#D71920' }}>{error}</p>
+                    )}
                   </motion.div>
                 )}
 
@@ -290,6 +312,9 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                         </ul>
                       </button>
                     ))}
+                    {error && (
+                      <p role="alert" className="text-sm font-medium text-center pt-1" style={{ color: '#D71920' }}>{error}</p>
+                    )}
                   </motion.div>
                 )}
 
@@ -328,7 +353,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                           <div className="flex items-center gap-3 mb-1">
                             <h4 className="font-heading font-bold" style={{ color: textPrimary }}>{opt.title}</h4>
                             {opt.discount && opt.discount > 0 && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#042251]/10 text-[#042251]">
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#042251]/10 text-[#042251]">
                                 Poupa {opt.discount}%
                               </span>
                             )}
@@ -387,7 +412,7 @@ export default function ProgramCheckoutModal({ isOpen, onClose, program, plans, 
                       </div>
                     </div>
                     {error && (
-                      <p className="text-sm text-center font-medium" style={{ color: '#D71920' }}>{error}</p>
+                      <p role="alert" className="text-sm text-center font-medium" style={{ color: '#D71920' }}>{error}</p>
                     )}
                   </motion.div>
                 )}

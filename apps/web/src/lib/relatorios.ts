@@ -1,6 +1,6 @@
-import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { descarregar, gerarXlsx, nomeFicheiro } from './xlsx';
 
 // Utilitário partilhado de relatórios (Excel + PDF) — só com dados reais
 // passados por cada página (Pagamentos, Clientes, Dashboard). Nada aqui vai
@@ -20,20 +20,11 @@ export interface SeccaoPDF {
 }
 
 export function nomeRelatorio(base: string, ext: string): string {
-  const d = new Date();
-  const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return `${base}-${dia}.${ext}`;
+  return nomeFicheiro(base, ext);
 }
 
 export function exportarExcel(base: string, folhas: FolhaExcel[]): void {
-  const wb = XLSX.utils.book_new();
-  folhas.forEach((f, i) => {
-    const ws = XLSX.utils.aoa_to_sheet([f.cabecalho, ...f.linhas]);
-    if (f.larguras) ws['!cols'] = f.larguras.map((w) => ({ wch: w }));
-    const nome = (f.nome || `Folha${i + 1}`).slice(0, 31);
-    XLSX.utils.book_append_sheet(wb, ws, nome);
-  });
-  XLSX.writeFile(wb, nomeRelatorio(base, 'xlsx'));
+  descarregar(gerarXlsx(folhas), nomeRelatorio(base, 'xlsx'));
 }
 
 export function exportarPDF(opts: {

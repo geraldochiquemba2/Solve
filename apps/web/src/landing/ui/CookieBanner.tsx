@@ -36,18 +36,22 @@ export default function CookieBanner() {
           exit={{ y: 20, opacity: 0, scale: 0.9 }}
           transition={{ type: 'spring', stiffness: 300, damping: 25 }}
         >
-          <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-5 md:p-6 w-full max-w-sm rounded-[7px] shadow-2xl pointer-events-auto flex flex-col gap-4">
+          <div
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="cookie-banner-title"
+            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-5 md:p-6 w-full max-w-sm rounded-[7px] shadow-2xl pointer-events-auto flex flex-col gap-4">
             <div className="flex gap-4 items-start">
               <div className="w-10 h-10 bg-teal-50 dark:bg-teal-900/20 rounded-[7px] flex items-center justify-center flex-shrink-0 border border-teal-100 dark:border-teal-900/30">
                 <Cookie size={20} className="text-teal-600" />
               </div>
               <div>
-                <h4 className="font-heading font-bold text-zinc-900 dark:text-white text-base mb-1">Privacidade</h4>
+                <h2 id="cookie-banner-title" className="font-heading font-bold text-zinc-900 dark:text-white text-base mb-1">Privacidade</h2>
                 <p className="font-body text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">
                   Utilizamos cookies para melhorar a sua experiência e analisar o tráfego. Consulte a nossa{' '}
                   <button 
                     onClick={() => window.dispatchEvent(new Event('openCookiesModal'))}
-                    className="text-teal-600 font-medium hover:underline"
+                    className="text-teal-600 font-medium hover:underline inline-block py-1 -my-1"
                   >
                     Política de Cookies
                   </button>.

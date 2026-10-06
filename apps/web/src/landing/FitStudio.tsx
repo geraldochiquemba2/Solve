@@ -58,7 +58,7 @@ export default function FitStudio() {
             >
               <div className="inline-flex items-center gap-3 mb-8">
                 <div className="w-8 h-px bg-zinc-300 hidden sm:block" />
-                <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-zinc-500 dark:text-zinc-400">Ginásio Boutique Privado</span>
+                <span className="text-xs font-medium uppercase tracking-[0.25em] text-zinc-500 dark:text-zinc-400">Ginásio Boutique Privado</span>
               </div>
               
               <h1 className="font-heading font-normal text-5xl md:text-6xl lg:text-[5rem] text-zinc-900 dark:text-white mb-6 tracking-tight leading-[1.05]">
@@ -97,7 +97,7 @@ export default function FitStudio() {
                   <Building2 size={20} className="text-zinc-300" />
                   <div>
                     <p className="font-heading font-medium text-zinc-900 dark:text-white text-sm tracking-wide uppercase">Technogym</p>
-                    <p className="font-body text-[10px] uppercase tracking-widest text-zinc-400">Equipamento Oficial</p>
+                    <p className="font-body text-xs uppercase tracking-widest text-zinc-400">Equipamento Oficial</p>
                   </div>
                 </div>
               </div>
@@ -205,7 +205,7 @@ export default function FitStudio() {
 
             {/* Premium PT */}
             <div className="bg-[#042251] text-white p-10 border border-[#042251] flex flex-col relative shadow-[0_20px_50px_rgba(4,34,81,0.25)] transform md:-translate-y-4">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white text-xs font-bold uppercase tracking-widest px-4 py-1.5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
                 Mais Popular
               </div>
               <h3 className="font-heading font-bold text-2xl mb-2 mt-2">Premium PT</h3>
@@ -284,8 +284,8 @@ export default function FitStudio() {
               <div className="absolute bottom-0 left-0 p-8 w-full transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
                 <h3 className="font-heading font-bold text-2xl text-white mb-1">{pt.name}</h3>
                 <p className="text-[#042251] font-bold text-sm tracking-widest uppercase mb-4">{pt.role}</p>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity delay-100">
-                  <a href="#" className="w-10 h-10 bg-zinc-900/10 flex items-center justify-center text-white hover:bg-[#042251] transition-colors"><Instagram size={18} /></a>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity delay-100 [@media(hover:none)]:opacity-100">
+                  <a href="#" aria-label={`Instagram de ${pt.name}`} className="w-10 h-10 bg-zinc-900/10 flex items-center justify-center text-white hover:bg-[#042251] transition-colors"><Instagram size={18} /></a>
                 </div>
               </div>
             </div>
@@ -303,7 +303,7 @@ export default function FitStudio() {
                 <MapPin size={28} />
               </div>
               <div>
-                <h4 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white mb-2">Morada</h4>
+                <h3 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white mb-2">Morada</h3>
                 <p className="font-body text-zinc-500 dark:text-zinc-400 mb-1 text-lg">Avenida da Liberdade, 100</p>
                 <p className="font-body text-zinc-500 dark:text-zinc-400 mb-6 text-lg">Lisboa, Portugal</p>
                 <button onClick={openForm} className="text-sm font-bold text-[#042251] hover:text-[#021838] transition-colors border-b border-[#042251]/30 hover:border-[#042251] pb-1">
@@ -318,7 +318,7 @@ export default function FitStudio() {
                 <Clock size={28} />
               </div>
               <div className="w-full">
-                <h4 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white mb-6">Horário</h4>
+                <h3 className="font-heading font-bold text-3xl text-zinc-900 dark:text-white mb-6">Horário</h3>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-base border-b border-zinc-100 pb-3">
                     <span className="text-zinc-500 dark:text-zinc-400 font-medium">Seg a Sex</span>
