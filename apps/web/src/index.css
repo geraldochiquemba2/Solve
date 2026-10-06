@@ -461,7 +461,7 @@
   --secondary-foreground: 0 0% 7%;
   --muted: 240 6% 93%;
   --muted-foreground: 240 5% 41%;
-  --accent: 217 91% 17%;
+  --accent: 38 60% 35%;
   --accent-foreground: 0 0% 100%;
   --destructive: 357 80% 47%;
   --destructive-foreground: 0 0% 100%;
@@ -508,8 +508,8 @@
   --secondary-foreground: 0 0% 95%;
   --muted: 0 0% 14%;
   --muted-foreground: 0 0% 60%;
-  --accent: 217 88% 60%;
-  --accent-foreground: 221 71% 9%;
+  --accent: 38 90% 58%;
+  --accent-foreground: 38 70% 10%;
   --input: 0 0% 16%;
   --ring: 217 88% 60%;
   --destructive: 357 88% 60%;
@@ -588,6 +588,7 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .metric-value { font-family:'Space Grotesk', sans-serif; font-size:1.45rem; font-weight:600; letter-spacing:-.05em; margin-top:.35rem; }
 .metric-note { color:hsl(var(--muted-foreground)); font-size:.7rem; margin-top:.32rem; }
 .metric-compact .metric { padding:.55rem .7rem; min-height:0; }
+.metric-compact .metric::after { display:none; }
 .metric-compact .metric-value { font-size:1.15rem; margin-top:.15rem; }
 .metric-compact .metric-note { margin-top:.15rem; }
 /* Seta do select: `appearance:none` impedia o UA de a desenhar, mas o padding
@@ -728,10 +729,12 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
    Títulos 700 · Botões/menus importantes 600 · Labels/informações 500 · Texto normal 400.
    A landing pública mantém Space Grotesk (regras base intactas). */
 .shell, .portal { font-family:'Inter', sans-serif; font-weight:400; }
+.kbd-hint { font-size:.62rem; font-weight:600; color:hsl(var(--muted-foreground)); border:1px solid hsl(var(--border)); border-radius:4px; padding:.06rem .3rem; }
 .shell h1, .shell h2, .shell h3, .shell h4, .shell h5, .shell h6,
 .portal h1, .portal h2, .portal h3, .portal h4, .portal h5, .portal h6,
-.shell .page-title, .shell .section-title, .shell .metric-value { font-family:'Inter', sans-serif; font-weight:700; letter-spacing:0; }
-.shell .page-title { letter-spacing:-.01em; }
+.shell .page-title, .shell .section-title, .shell .metric-value { font-family:'Inter', sans-serif; font-weight:700; }
+.shell .page-title, .shell .metric-value { letter-spacing:-.05em; }
+.shell .section-title { letter-spacing:0; }
 .shell .btn-primary, .portal .btn-primary,
 .shell .btn-secondary, .portal .btn-secondary,
 .shell .btn-quiet, .portal .btn-quiet,
@@ -812,9 +815,9 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
    LANDING PAGE — BRUNO SAMORA
    ============================================ */
 @theme inline {
-  --color-brand-red: #042251;
-  --color-brand-red-light: #0A3A75;
-  --color-brand-red-dark: #021838;
+  --color-brand-navy: #042251;
+--color-brand-navy-light: #0A3A75;
+  --color-brand-navy-dark: #021838;
   --color-brand-black: #050505;
   --color-brand-carbon: #111111;
   --color-brand-gray-dark: #2A2A2A;
@@ -882,7 +885,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   white-space: nowrap;
 }
 .landing-btn-primary {
-  background: linear-gradient(90deg, var(--color-brand-red), var(--color-brand-red-light));
+  background: linear-gradient(90deg, var(--color-brand-navy), var(--color-brand-navy-light));
   color: #fff;
   box-shadow: var(--shadow-btn);
 }
@@ -893,10 +896,10 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 .landing-btn-secondary {
   background: transparent;
   color: var(--color-brand-carbon);
-  border: 1.5px solid var(--color-brand-red);
+  border: 1.5px solid var(--color-brand-navy);
 }
 .landing-btn-secondary:hover {
-  background: var(--color-brand-red);
+  background: var(--color-brand-navy);
   transform: translateY(-3px);
   box-shadow: var(--shadow-btn);
 }
@@ -941,7 +944,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   background-clip: text;
 }
 .landing-text-red-gradient {
-  background: linear-gradient(90deg, var(--color-brand-red), var(--color-brand-red-light));
+  background: linear-gradient(90deg, var(--color-brand-navy), var(--color-brand-navy-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -969,7 +972,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   top: 0;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(180deg, var(--color-brand-red) 0%, transparent 100%);
+  background: linear-gradient(180deg, var(--color-brand-navy) 0%, transparent 100%);
   transform: translateX(-50%);
 }
 
@@ -999,7 +1002,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   width: 52px;
   height: 52px;
   border-radius: 0;
-  border: 2px solid var(--color-brand-red);
+  border: 2px solid var(--color-brand-navy);
   background: rgba(4, 34, 81, 0.1);
   display: flex;
   align-items: center;
@@ -1007,12 +1010,12 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
   font-family: var(--font-heading);
   font-weight: 800;
   font-size: 1.1rem;
-  color: var(--color-brand-red);
+  color: var(--color-brand-navy);
   flex-shrink: 0;
   transition: background 0.3s ease, transform 0.3s ease;
 }
 .landing-step-number.active {
-  background: var(--color-brand-red);
+  background: var(--color-brand-navy);
   color: white;
   box-shadow: var(--shadow-btn);
 }
@@ -1042,7 +1045,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 }
 .landing-pricing-card.featured {
   background: linear-gradient(145deg, #fffafa 0%, #ffffff 100%);
-  border-color: var(--color-brand-red);
+  border-color: var(--color-brand-navy);
   box-shadow: 0 0 60px rgba(4, 34, 81, 0.2);
   transform: scale(1.03);
 }
@@ -1105,7 +1108,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 }
 .landing-input-field:focus {
   outline: none;
-  border-color: var(--color-brand-red);
+  border-color: var(--color-brand-navy);
   box-shadow: 0 0 0 3px rgba(4, 34, 81, 0.15);
 }
 .landing-textarea-field {
@@ -1128,7 +1131,7 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 }
 .landing-textarea-field:focus {
   outline: none;
-  border-color: var(--color-brand-red);
+  border-color: var(--color-brand-navy);
   box-shadow: 0 0 0 3px rgba(4, 34, 81, 0.15);
 }
 
@@ -1171,30 +1174,30 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 /* ============================================
    LANDING PAGE — ORIGINAL CLASS ALIASES
    ============================================ */
-.btn { position:relative; display:inline-flex; align-items:center; justify-content:center; gap:10px; font-family:var(--font-body); font-weight:600; font-size:0.9rem; letter-spacing:0.06em; text-transform:uppercase; padding:16px 32px; border-radius:0; border:none; cursor:pointer; overflow:hidden; transition:transform 0.25s ease, box-shadow 0.25s ease; text-decoration:none; white-space:nowrap; }
-.btn-primary { background:linear-gradient(90deg, var(--color-brand-red), var(--color-brand-red-light)); color:#fff; box-shadow:var(--shadow-btn); }
-.btn-primary:hover { box-shadow:var(--shadow-btn-hover); }
-.btn-secondary { background:transparent; color:var(--color-brand-carbon); border:1.5px solid var(--color-brand-red); }
-.btn-secondary:hover { background:var(--color-brand-red); box-shadow:var(--shadow-btn); }
+.landing .btn { position:relative; display:inline-flex; align-items:center; justify-content:center; gap:10px; font-family:var(--font-body); font-weight:600; font-size:0.9rem; letter-spacing:0.06em; text-transform:uppercase; padding:16px 32px; border-radius:0; border:none; cursor:pointer; overflow:hidden; transition:transform 0.25s ease, box-shadow 0.25s ease; text-decoration:none; white-space:nowrap; }
+.landing .btn-primary { background:linear-gradient(90deg, var(--color-brand-navy), var(--color-brand-navy-light)); color:#fff; box-shadow:var(--shadow-btn); }
+.landing .btn-primary:hover { box-shadow:var(--shadow-btn-hover); }
+.landing .btn-secondary { background:transparent; color:var(--color-brand-carbon); border:1.5px solid var(--color-brand-navy); }
+.landing .btn-secondary:hover { background:var(--color-brand-navy); box-shadow:var(--shadow-btn); }
 .landing .card { background:#fff; border:1px solid #e4e4e7; border-radius:0; padding:2rem; transition:transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease; display:flex; flex-direction:column; height:100%; word-wrap:break-word; overflow-wrap:break-word; }
 .dark .landing .card { background:#18181b; border-color:#27272a; }
 .landing .card:hover { border-color:rgba(4, 34, 81, 0.3); }
 .card-glass { background:rgba(255,255,255,0.8); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid rgba(0,0,0,0.08); border-radius:0; }
 .text-gradient { background:linear-gradient(135deg, #fff 0%, #042251 80%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.text-red-gradient { background:linear-gradient(90deg, var(--color-brand-red), var(--color-brand-red-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.text-red-gradient { background:linear-gradient(90deg, var(--color-brand-navy), var(--color-brand-navy-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
 .marquee-track { display:flex; width:max-content; gap:4rem; animation:marquee-scroll 40s linear infinite; }
 .marquee-track:hover { animation-play-state:paused; }
-.timeline-line { position:absolute; left:50%; top:0; bottom:0; width:2px; background:linear-gradient(180deg, var(--color-brand-red) 0%, transparent 100%); transform:translateX(-50%); }
+.timeline-line { position:absolute; left:50%; top:0; bottom:0; width:2px; background:linear-gradient(180deg, var(--color-brand-navy) 0%, transparent 100%); transform:translateX(-50%); }
 .glow-red { box-shadow:0 0 40px rgba(4,34,81,0.25), 0 0 80px rgba(4,34,81,0.1); }
 .glow-red-text { text-shadow:0 0 40px rgba(4,34,81,0.4); }
 .stat-badge { display:inline-flex; align-items:center; gap:10px; background:rgba(255,255,255,0.95); backdrop-filter:blur(20px); border:1px solid rgba(4,34,81,0.3); border-radius:0; padding:12px 18px; white-space:nowrap; }
-.step-number { width:52px; height:52px; border-radius:0; border:2px solid var(--color-brand-red); background:rgba(4,34,81,0.1); display:flex; align-items:center; justify-content:center; font-family:var(--font-heading); font-weight:800; font-size:1.1rem; color:var(--color-brand-red); flex-shrink:0; transition:background 0.3s ease, transform 0.3s ease; }
-.step-number.active { background:var(--color-brand-red); color:white; box-shadow:var(--shadow-btn); }
+.step-number { width:52px; height:52px; border-radius:0; border:2px solid var(--color-brand-navy); background:rgba(4,34,81,0.1); display:flex; align-items:center; justify-content:center; font-family:var(--font-heading); font-weight:800; font-size:1.1rem; color:var(--color-brand-navy); flex-shrink:0; transition:background 0.3s ease, transform 0.3s ease; }
+.step-number.active { background:var(--color-brand-navy); color:white; box-shadow:var(--shadow-btn); }
 .accordion-item { border:1px solid #3f3f46; border-radius:0; overflow:hidden; transition:border-color 0.3s ease; }
 .accordion-item.open { border-color:rgba(4,34,81,0.4); }
 .pricing-card { background:#fff; border:1px solid #e4e4e7; border-radius:0; padding:2.5rem 2rem; transition:transform 0.3s ease, box-shadow 0.3s ease; }
 .dark .pricing-card { background:#18181b; border-color:#27272a; }
-.pricing-card.featured { background:linear-gradient(145deg, #fffafa 0%, #ffffff 100%); border-color:var(--color-brand-red); box-shadow:0 0 60px rgba(4,34,81,0.2); transform:scale(1.03); }
+.pricing-card.featured { background:linear-gradient(145deg, #fffafa 0%, #ffffff 100%); border-color:var(--color-brand-navy); box-shadow:0 0 60px rgba(4,34,81,0.2); transform:scale(1.03); }
 .dark .pricing-card.featured { background:linear-gradient(145deg, #1a0505 0%, #18181b 100%); }
 .pricing-card.featured:hover { }
 .pricing-card:not(.featured):hover { }
@@ -1204,10 +1207,10 @@ a.lead-contacto-num:hover { color:hsl(var(--accent)); border-bottom-color:hsl(va
 .input-field { width:100%; height:56px; padding:0 20px; background:rgba(255,255,255,0.8); border:1.5px solid #e4e4e7; color:#18181b; border-radius:0; font-family:var(--font-body); font-size:0.95rem; transition:border-color 0.3s ease, box-shadow 0.3s ease; }
 .dark .input-field { background:rgba(24,24,27,0.8); border-color:#27272a; color:#fafafa; }
 .input-field::placeholder { color:#555; }
-.input-field:focus { outline:none; border-color:var(--color-brand-red); box-shadow:0 0 0 3px rgba(4,34,81,0.15); }
+.input-field:focus { outline:none; border-color:var(--color-brand-navy); box-shadow:0 0 0 3px rgba(4,34,81,0.15); }
 .textarea-field { width:100%; padding:16px 20px; min-height:140px; background:rgba(255,255,255,0.8); border:1.5px solid #e4e4e7; color:#18181b; border-radius:0; font-family:var(--font-body); font-size:0.95rem; resize:vertical; transition:border-color 0.3s ease, box-shadow 0.3s ease; }
 .dark .textarea-field { background:rgba(24,24,27,0.8); border-color:#27272a; color:#fafafa; }
-.textarea-field:focus { outline:none; border-color:var(--color-brand-red); box-shadow:0 0 0 3px rgba(4,34,81,0.15); }
+.textarea-field:focus { outline:none; border-color:var(--color-brand-navy); box-shadow:0 0 0 3px rgba(4,34,81,0.15); }
 .divider { height:1px; background:linear-gradient(90deg, transparent, #3f3f46, transparent); }
 @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
 @keyframes float-alt { 0%,100%{transform:translateY(-8px)} 50%{transform:translateY(4px)} }
