@@ -590,6 +590,41 @@ pool.query(`CREATE TABLE IF NOT EXISTS settings (
   value TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 )`).catch(() => {});
+// Códigos promocionais
+pool.query(`CREATE TABLE IF NOT EXISTS promo_codes (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  type TEXT NOT NULL DEFAULT 'percent',
+  value NUMERIC NOT NULL,
+  min_amount NUMERIC,
+  max_discount NUMERIC,
+  applies_to TEXT NOT NULL DEFAULT 'all',
+  plan_ids JSONB,
+  usage_limit INT,
+  used_count INT NOT NULL DEFAULT 0,
+  per_user BOOLEAN NOT NULL DEFAULT true,
+  active BOOLEAN NOT NULL DEFAULT true,
+  starts_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_by INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`).catch(() => {});
+pool.query(`CREATE TABLE IF NOT EXISTS promo_usages (
+  id SERIAL PRIMARY KEY,
+  promo_id INT,
+  user_key TEXT,
+  customer_id TEXT,
+  email TEXT,
+  phone TEXT,
+  payment_code TEXT,
+  amount_before NUMERIC,
+  amount_after NUMERIC,
+  discount_applied NUMERIC,
+  used_at TIMESTAMPTZ DEFAULT NOW()
+)`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS idx_promo_usages_promo_id ON promo_usages(promo_id)`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS idx_promo_usages_user_key ON promo_usages(user_key)`).catch(() => {});
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -1981,6 +2016,106 @@ function normPhone(p) {
   return d;
 }
 
+// ─── Códigos promocionais ───────────────────────────────────────────────────
+// Chave de identidade do utilizador (email > telefone normalizado).
+function promoUserKey({ email, phone } = {}) {
+  const e = String(email || "").trim().toLowerCase();
+  if (e) return e;
+  const p = normPhone(phone);
+  if (p) return p;
+  return null;
+}
+
+// Calcula desconto/valor final. type: "percent" | "fixed".
+function computePromoDiscount({ base, promo } = {}) {
+  const amount = Number(base);
+  const out = { discount: 0, final: amount };
+  if (!promo || !Number.isFinite(amount) || amount <= 0) return out;
+  const value = Number(promo.value);
+  if (!Number.isFinite(value) || value < 0) return out;
+  let discount = String(promo.type).toLowerCase() === "fixed"
+    ? value
+    : Math.floor((amount * value) / 100);
+  if (discount > amount) discount = amount;
+  if (discount < 0) discount = 0;
+  out.discount = discount;
+  out.final = amount - discount;
+  return out;
+}
+
+// Valida um código promocional para um contexto de compra.
+// Devolve { valid, reason?, promo?, discount?, original?, final? }.
+async function validatePromo({ code, base, email, phone, cademiProduto, planIds } = {}) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return { valid: false, reason: "Código em branco" };
+  try {
+    const found = await pool.query("SELECT * FROM promo_codes WHERE UPPER(code) = $1", [normalized]);
+    const promo = found.rows[0];
+    if (!promo) return { valid: false, reason: "Código inexistente" };
+    if (!promo.active) return { valid: false, reason: "Código inativo" };
+    const now = Date.now();
+    if (promo.starts_at && now < new Date(promo.starts_at).getTime()) {
+      return { valid: false, reason: "Código ainda não é válido" };
+    }
+    if (promo.expires_at && now > new Date(promo.expires_at).getTime()) {
+      return { valid: false, reason: "Código expirado" };
+    }
+    const amount = Number(base);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { valid: false, reason: "Valor inválido" };
+    }
+    if (promo.min_amount != null && amount < Number(promo.min_amount)) {
+      return { valid: false, reason: `Compra mínima de ${promo.min_amount} Kz` };
+    }
+    // Âmbito
+    const appliesTo = String(promo.applies_to || "all").toLowerCase();
+    if (appliesTo !== "all") {
+      let list = promo.plan_ids;
+      if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+      const allowed = Array.isArray(list) ? list.map(String) : [];
+      const ctx = [cademiProduto, ...(Array.isArray(planIds) ? planIds : planIds ? [planIds] : [])]
+        .filter(Boolean).map(String);
+      if (!ctx.some((c) => allowed.includes(c))) {
+        return { valid: false, reason: "Código não aplicável a este item" };
+      }
+    }
+    const key = promoUserKey({ email, phone });
+    // Uso único por utilizador (conta apenas pagamentos não falhados)
+    if (promo.per_user && key) {
+      const used = await pool.query(
+        `SELECT 1 FROM promo_usages u
+           JOIN payments p ON p.code = u.payment_code
+          WHERE u.promo_id = $1 AND u.user_key = $2
+            AND p.status NOT IN ('rejeitado','expirado','cancelado')
+          LIMIT 1`,
+        [promo.id, key]
+      );
+      if (used.rows.length) return { valid: false, reason: "Já utilizou este código" };
+    }
+    // Limite global
+    if (promo.usage_limit != null) {
+      const cnt = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM promo_usages u
+           JOIN payments p ON p.code = u.payment_code
+          WHERE u.promo_id = $1
+            AND p.status NOT IN ('rejeitado','expirado','cancelado')`,
+        [promo.id]
+      );
+      if ((cnt.rows[0]?.n || 0) >= Number(promo.usage_limit)) {
+        return { valid: false, reason: "Código esgotado" };
+      }
+    }
+    const { discount, final } = computePromoDiscount({ base: amount, promo });
+    if (promo.max_discount != null && discount > Number(promo.max_discount)) {
+      const capped = Number(promo.max_discount);
+      return { valid: true, promo, discount: capped, original: amount, final: amount - capped };
+    }
+    return { valid: true, promo, discount, original: amount, final };
+  } catch (e) {
+    return { valid: false, reason: "Erro ao validar código" };
+  }
+}
+
 // Grava o erro É-kwanza nos metadados (visível para diagnóstico, sem bloquear).
 async function saveEkwanzaError(code, msg) {
   try {
@@ -2150,9 +2285,11 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
 app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
   try {
     const { amount, method, customer_id, customer_phone: raw_phone, customer_email, customer_name, cademi_produto, description, reference_code, return_url } = req.body || {};
-    const amt = parseFloat(amount);
+    const promo_code = req.body?.promo_code || req.body?.promoCode || null;
+    let amt = parseFloat(amount);
     if (!amt || amt <= 0) return res.status(400).json({ error: "Montante inválido" });
     // Preço oficial do conteúdo (se configurado): bloqueia underpay via widget adulterado.
+    let officialPreco = null;
     if (cademi_produto) {
       try {
         const srow = await pool.query("SELECT value FROM settings WHERE key = 'cademi_entregas'").catch(() => null);
@@ -2160,10 +2297,21 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
         if (typeof manual === "string") { try { manual = JSON.parse(manual); } catch { manual = []; } }
         const found = (Array.isArray(manual) ? manual : []).find(o => String(o?.id || "").toLowerCase() === String(cademi_produto).toLowerCase());
         const preco = found?.preco != null && found.preco !== "" ? Number(found.preco) : null;
-        if (preco != null && Number.isFinite(preco) && preco > 0 && amt < preco) {
-          return res.status(400).json({ error: `Montante abaixo do preço (${preco} Kz)` });
-        }
+        if (preco != null && Number.isFinite(preco) && preco > 0) officialPreco = preco;
       } catch {}
+    }
+    // Código promocional (opcional) — o servidor é autoritativo no valor final.
+    let promoApplied = null;
+    let autoConfirm = false;
+    if (promo_code) {
+      const base = officialPreco != null ? officialPreco : amt;
+      const v = await validatePromo({ code: promo_code, base, email: customer_email, phone: raw_phone, cademiProduto: cademi_produto });
+      if (!v.valid) return res.status(400).json({ error: v.reason || "Código promocional inválido", promo_invalid: true });
+      promoApplied = { code: String(promo_code).trim().toUpperCase(), code_id: v.promo.id, original: v.original, discount: v.discount, final: v.final, type: v.promo.type, value: Number(v.promo.value) };
+      amt = v.final;
+      if (amt <= 0) { amt = 0; autoConfirm = true; }
+    } else if (officialPreco != null && amt < officialPreco) {
+      return res.status(400).json({ error: `Montante abaixo do preço (${officialPreco} Kz)` });
     }
     const m = method || "mcx_express";
     const customer_phone = normPhone(raw_phone) || null;
@@ -2233,16 +2381,41 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
         }
       } catch (e2) { console.error("[PAYMENTS] trava pago-sem-acesso:", e2.message); }
     }
+    const metaObj = { phone: customer_phone || null, email: customer_email || null, name: customer_name || null, cademi_produto: cademi_produto || null, description: description || null };
+    if (promoApplied) metaObj.promo = promoApplied;
+    const initialStatus = autoConfirm ? "confirmado" : "pendente";
     const r = await pool.query(
-      `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, expires_at)
-       VALUES ($1, $2, $3, $4, 'pendente', $5, $6, NOW() + INTERVAL '24 hours') RETURNING *`,
-      [code, linkedId, amt, m, reference_code || code,
-       JSON.stringify({ phone: customer_phone || null, email: customer_email || null, name: customer_name || null, cademi_produto: cademi_produto || null, description: description || null })]
+      `INSERT INTO payments (code, customer_id, amount, method, status, reference_code, metadata, paid_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, ${autoConfirm ? "NOW()" : "NULL"}, NOW() + INTERVAL '24 hours') RETURNING *`,
+      [code, linkedId, amt, m, initialStatus, reference_code || code, JSON.stringify(metaObj)]
     );
     const payment = r.rows[0];
+    // Registo de utilização do código (serializado por linha do código).
+    if (promoApplied) {
+      try {
+        const userKey = promoUserKey({ email: customer_email, phone: customer_phone });
+        await pool.query(
+          `INSERT INTO promo_usages (promo_id, user_key, customer_id, email, phone, payment_code, amount_before, amount_after, discount_applied)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [promoApplied.code_id, userKey, linkedId, customer_email || null, customer_phone || null, code, promoApplied.original, promoApplied.final, promoApplied.discount]
+        );
+        await pool.query("UPDATE promo_codes SET used_count = used_count + 1, updated_at = NOW() WHERE id = $1", [promoApplied.code_id]);
+      } catch (e) { console.error("[PROMO] registo de uso:", e.message); }
+    }
     // Resposta imediata — o frontend fecha o modal aqui.
-    broadcastPaymentUpdate({ type: "payment_created", code, status: "pendente" });
+    broadcastPaymentUpdate({ type: "payment_created", code, status: initialStatus });
     res.status(201).json({ data: payment });
+
+    // Promo que cobre a totalidade: confirma sem gateway e entrega já o conteúdo.
+    if (autoConfirm) {
+      setImmediate(async () => {
+        try {
+          const dr = await sendCademiDelivery(code);
+          if (!dr.ok) console.log(`[CADEMI] ${code}: ${dr.skipped || ""}`);
+        } catch (e) { console.error("[PAYMENTS] bg auto-confirm:", e.message); }
+      });
+      return;
+    }
 
     // Background: dispara cobrança/referência sem bloquear a resposta.
     // - mcx_express + telefone → WiPay (página hospedada) se configurado,
@@ -2264,6 +2437,92 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     }
   } catch (err) {
     if (!res.headersSent) console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+// ─── Códigos promocionais (CRUD + validação) ─────────────────────────────────
+app.get("/api/v1/promos", requireAuth, requireManager, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM promo_codes ORDER BY created_at DESC");
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err) {
+    console.error("[PROMOS LIST]", err.message);
+    res.status(500).json({ error: "Erro a listar códigos." });
+  }
+});
+
+app.post("/api/v1/promos", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const code = String(b.code || "").trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: "Código obrigatório" });
+    const type = String(b.type || "percent").toLowerCase() === "fixed" ? "fixed" : "percent";
+    const value = Number(b.value);
+    if (!Number.isFinite(value) || value < 0) return res.status(400).json({ error: "Valor inválido" });
+    if (type === "percent" && value > 100) return res.status(400).json({ error: "Percentagem máxima é 100" });
+    const appliesTo = String(b.applies_to || "all").toLowerCase() === "plans" ? "plans" : "all";
+    const planIds = b.plan_ids != null ? (Array.isArray(b.plan_ids) ? b.plan_ids : String(b.plan_ids).split(",").map(s => s.trim()).filter(Boolean)) : null;
+    const r = await pool.query(
+      `INSERT INTO promo_codes (code, type, value, min_amount, max_discount, applies_to, plan_ids, usage_limit, per_user, active, starts_at, expires_at, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [code, type, value,
+       b.min_amount != null && b.min_amount !== "" ? Number(b.min_amount) : null,
+       b.max_discount != null && b.max_discount !== "" ? Number(b.max_discount) : null,
+       appliesTo, JSON.stringify(planIds),
+       b.usage_limit != null && b.usage_limit !== "" ? Number(b.usage_limit) : null,
+       b.per_user === undefined ? true : !!b.per_user,
+       b.active === undefined ? true : !!b.active,
+       b.starts_at || null, b.expires_at || null, req.user?.id || null]
+    );
+    res.status(201).json({ data: result_row(r) });
+  } catch (err) {
+    if (String(err.message || "").includes("duplicate key")) {
+      return res.status(409).json({ error: "Já existe um código com esse nome." });
+    }
+    console.error("[PROMOS CREATE]", err.message);
+    res.status(500).json({ error: "Erro a criar código." });
+  }
+});
+
+app.patch("/api/v1/promos/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const fields = [];
+    const vals = [];
+    const push = (col, val) => { vals.push(val); fields.push(`${col} = $${vals.length}`); };
+    if (b.code !== undefined) push("code", String(b.code).trim().toUpperCase());
+    if (b.type !== undefined) push("type", String(b.type).toLowerCase() === "fixed" ? "fixed" : "percent");
+    if (b.value !== undefined) push("value", Number(b.value));
+    if (b.min_amount !== undefined) push("min_amount", b.min_amount === null ? null : Number(b.min_amount));
+    if (b.max_discount !== undefined) push("max_discount", b.max_discount === null ? null : Number(b.max_discount));
+    if (b.applies_to !== undefined) push("applies_to", String(b.applies_to).toLowerCase());
+    if (b.plan_ids !== undefined) push("plan_ids", JSON.stringify(b.plan_ids || []));
+    if (b.usage_limit !== undefined) push("usage_limit", b.usage_limit === null ? null : Number(b.usage_limit));
+    if (b.per_user !== undefined) push("per_user", !!b.per_user);
+    if (b.active !== undefined) push("active", !!b.active);
+    if (b.starts_at !== undefined) push("starts_at", b.starts_at || null);
+    if (b.expires_at !== undefined) push("expires_at", b.expires_at || null);
+    if (!fields.length) return res.status(400).json({ error: "Nada para atualizar" });
+    fields.push("updated_at = NOW()");
+    vals.push(req.params.id);
+    const r = await pool.query(`UPDATE promo_codes SET ${fields.join(", ")} WHERE id = $${vals.length} RETURNING *`, vals);
+    if (!r.rows[0]) return res.status(404).json({ error: "Código não encontrado" });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    console.error("[PROMOS UPDATE]", err.message);
+    res.status(500).json({ error: "Erro a atualizar código." });
+  }
+});
+
+app.post("/api/v1/promos/validate", rateLimit(60), async (req, res) => {
+  try {
+    const { code, amount, email, phone, cademi_produto, plan_ids } = req.body || {};
+    const v = await validatePromo({ code, base: Number(amount), email, phone, cademiProduto: cademi_produto, planIds: plan_ids });
+    if (!v.valid) return res.json({ valid: false, reason: v.reason });
+    res.json({ valid: true, discount: v.discount, original: v.original, final: v.final, type: v.promo.type, value: Number(v.promo.value) });
+  } catch (err) {
+    console.error("[PROMOS VALIDATE]", err.message);
+    res.status(500).json({ valid: false, reason: "Erro ao validar código" });
   }
 });
 

@@ -9,6 +9,7 @@ export const integrationStatusEnum = pgEnum("integration_status", ["operacional"
 export const planPeriodicityEnum = pgEnum("plan_periodicity", ["mensal", "trimestral", "semestral", "anual"]);
 export const webhookStatusEnum = pgEnum("webhook_status", ["pendente", "entregue", "falha", "reprocessado"]);
 export const automationStatusEnum = pgEnum("automation_status", ["activo", "inactivo"]);
+export const promoTypeEnum = pgEnum("promo_type", ["percent", "fixed"]);
 
 export const usersTable = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -308,3 +309,38 @@ export const leadCampaignsRelations = relations(leadCampaignsTable, ({ one }) =>
     references: [leadsTable.id],
   }),
 }));
+
+
+export const promoCodesTable = pgTable("promo_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  type: promoTypeEnum("type").notNull().default("percent"),
+  value: integer("value").notNull(),
+  minAmount: integer("min_amount"),
+  maxDiscount: integer("max_discount"),
+  appliesTo: varchar("applies_to", { length: 20 }).notNull().default("all"),
+  planIds: jsonb("plan_ids").$type<string[]>(),
+  usageLimit: integer("usage_limit"),
+  usedCount: integer("used_count").notNull().default(0),
+  perUser: boolean("per_user").notNull().default(true),
+  active: boolean("active").notNull().default(true),
+  startsAt: timestamp("starts_at"),
+  expiresAt: timestamp("expires_at"),
+  createdBy: uuid("created_by").references(() => usersTable.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const promoUsagesTable = pgTable("promo_usages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  promoId: uuid("promo_id").notNull().references(() => promoCodesTable.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => usersTable.id),
+  customerId: uuid("customer_id").references(() => customersTable.id),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  paymentCode: varchar("payment_code", { length: 50 }),
+  amountBefore: integer("amount_before"),
+  amountAfter: integer("amount_after"),
+  discountApplied: integer("discount_applied"),
+  usedAt: timestamp("used_at").notNull().defaultNow(),
+});
