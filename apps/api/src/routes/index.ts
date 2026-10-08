@@ -54,9 +54,11 @@ router.use(accessRouter);
 router.use(checkinsRouter);
 router.use('/solve-access', solveAccessRouter);
 router.use(portalRouter);
+router.use("/promos", require("./promos").default);
 
 // Error handling
 router.use(notFoundHandler);
 router.use(errorHandler);
 
 export default router;
+
