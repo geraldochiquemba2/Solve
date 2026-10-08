@@ -593,13 +593,13 @@ pool.query(`CREATE TABLE IF NOT EXISTS settings (
 // Códigos promocionais — mesmos tipos do schema drizzle (packages/db). As duas
 // fontes têm de criar tabelas idênticas: se divergirem, o `drizzle-kit push` e o
 // standalone brigam pela forma das colunas e os inserts falham.
-const PROMO_DDL = [
-  `DO $$
+const PROMO_TYPE_DDL = `DO $$
    BEGIN
      CREATE TYPE promo_type AS ENUM('percent','fixed');
    EXCEPTION WHEN duplicate_object THEN NULL;
-   END $$`,
-  `CREATE TABLE IF NOT EXISTS promo_codes (
+   END $$`;
+
+const PROMO_CODES_DDL = `CREATE TABLE IF NOT EXISTS promo_codes (
      id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
      code varchar(50) NOT NULL UNIQUE,
      type promo_type NOT NULL DEFAULT 'percent',
@@ -617,8 +617,9 @@ const PROMO_DDL = [
      created_by uuid REFERENCES users(id),
      created_at timestamp NOT NULL DEFAULT now(),
      updated_at timestamp NOT NULL DEFAULT now()
-   )`,
-  `CREATE TABLE IF NOT EXISTS promo_usages (
+   )`;
+
+const PROMO_USAGES_DDL = `CREATE TABLE IF NOT EXISTS promo_usages (
      id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
      promo_id uuid NOT NULL REFERENCES promo_codes(id) ON DELETE cascade,
      user_id uuid REFERENCES users(id),
@@ -631,7 +632,12 @@ const PROMO_DDL = [
      amount_after integer,
      discount_applied integer,
      used_at timestamp NOT NULL DEFAULT now()
-   )`,
+   )`;
+
+const PROMO_DDL = [
+  PROMO_TYPE_DDL,
+  PROMO_CODES_DDL,
+  PROMO_USAGES_DDL,
   // Tabelas criadas pela migração 0004 (sem user_key) — a coluna é obrigatória
   // para o limite de "um uso por utilizador".
   `ALTER TABLE promo_usages ADD COLUMN IF NOT EXISTS user_key varchar(255)`,
@@ -640,89 +646,129 @@ const PROMO_DDL = [
   `CREATE INDEX IF NOT EXISTS idx_promo_usages_user_key ON promo_usages(promo_id, user_key)`,
 ];
 
-// Forma antiga (primeiro deploy): ids SERIAL/INT, customer_id TEXT, created_by
-// INT. Nessa forma o INSERT falhava (created_by leva o uuid do utilizador), por
-// isso a criação de códigos nunca chegou a funcionar — converte-se para uuid
-// com md5 determinístico, preservando os registos já existentes.
+// Forma antiga (primeiro deploy): ids SERIAL/INT, created_by INT,
+// customer_id TEXT e promo_usages sem user_id. Nessa forma a criação de códigos
+// nunca chegou a funcionar — converte-se para uuid com md5 determinístico (o
+// mesmo md5 dos dois lados mantém promo_usages.promo_id ligado a
+// promo_codes.id). As colunas da forma antiga são lidas do information_schema:
+// o que não existir vira NULL e só se guardam referências a users/customers que
+// existem de facto, para nunca violar FKs.
 async function repairLegacyPromoSchema() {
-  const cols = await pool.query(
+  const info = await pool.query(
     `SELECT table_name, column_name, data_type
        FROM information_schema.columns
-      WHERE table_name IN ('promo_codes', 'promo_usages')
-        AND column_name IN ('id', 'promo_id', 'created_by', 'customer_id')
-        AND data_type <> 'uuid'`
+      WHERE table_name IN ('promo_codes', 'promo_usages')`
   );
-  if (!cols.rows.length) return;
-  console.log("[PROMOS] a converter colunas legadas para uuid:", cols.rows.map(r => `${r.table_name}.${r.column_name}:${r.data_type}`).join(", "));
+  if (!info.rows.length) return; // tabelas ainda não existem
+  const dtype = (table, column) =>
+    info.rows.find((r) => r.table_name === table && r.column_name === column)?.data_type;
+  const isText = (t) => t === "text" || t === "character varying";
+  const codesId = dtype("promo_codes", "id");
+  const usagesId = dtype("promo_usages", "id");
+  const codesLegacy = Boolean(codesId) && codesId !== "uuid";
+  const usagesLegacy = Boolean(usagesId) && usagesId !== "uuid";
+  if (!codesLegacy && !usagesLegacy) return;
+
+  const UUID_RE = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+  const idToUuid = (table, column) =>
+    dtype(table, column) === "uuid" ? `l."${column}"` : `md5(l."${column}"::text)::uuid`;
+  // users(id)/customers(id): só uuid que exista na tabela. Ids inteiros da
+  // forma antiga não têm equivalente -> NULL (um md5 inventado violava a FK).
+  const fkRef = (table, column, target) => {
+    const t = dtype(table, column);
+    if (t === "uuid") {
+      return `CASE WHEN EXISTS (SELECT 1 FROM ${target} x WHERE x.id = l."${column}") THEN l."${column}" ELSE NULL END`;
+    }
+    if (isText(t)) {
+      return `CASE WHEN l."${column}" ~* '${UUID_RE}' AND EXISTS (SELECT 1 FROM ${target} x WHERE x.id = l."${column}"::uuid) THEN l."${column}"::uuid ELSE NULL END`;
+    }
+    return `NULL::uuid`; // ausente, integer ou serial
+  };
+  const num = (table, column, fallback) =>
+    dtype(table, column) ? `l."${column}"::integer` : fallback;
+  const txt = (table, column, len, fallback) =>
+    dtype(table, column) ? `LEFT(l."${column}"::text, ${len})` : fallback;
+  const bool = (table, column, fallback) =>
+    dtype(table, column) ? `l."${column}"::boolean` : fallback;
+  const stamp = (table, column) =>
+    dtype(table, column) ? `COALESCE(l."${column}", now())` : `now()`;
+
+  const codesCols = [
+    ["id", idToUuid("promo_codes", "id")],
+    ["code", txt("promo_codes", "code", 50, "NULL")],
+    ["type", (() => {
+      const t = dtype("promo_codes", "type");
+      if (isText(t)) return `CASE WHEN lower(l.type) IN ('percent','fixed') THEN lower(l.type)::promo_type ELSE 'percent'::promo_type END`;
+      if (t) return `l.type::promo_type`; // já é o enum
+      return `'percent'::promo_type`;
+    })()],
+    ["value", num("promo_codes", "value", "0")],
+    ["min_amount", num("promo_codes", "min_amount", "NULL")],
+    ["max_discount", num("promo_codes", "max_discount", "NULL")],
+    ["applies_to", txt("promo_codes", "applies_to", 20, "'all'")],
+    ["plan_ids", (() => {
+      const t = dtype("promo_codes", "plan_ids");
+      if (t === "jsonb") return `l.plan_ids`;
+      if (isText(t)) return `CASE WHEN l.plan_ids ~ '^\\s*[\\[{]' THEN l.plan_ids::jsonb ELSE NULL END`;
+      return `NULL`;
+    })()],
+    ["usage_limit", num("promo_codes", "usage_limit", "NULL")],
+    ["used_count", num("promo_codes", "used_count", "0")],
+    ["per_user", bool("promo_codes", "per_user", "true")],
+    ["active", bool("promo_codes", "active", "true")],
+    ["starts_at", dtype("promo_codes", "starts_at") ? `l.starts_at` : `NULL`],
+    ["expires_at", dtype("promo_codes", "expires_at") ? `l.expires_at` : `NULL`],
+    ["created_by", fkRef("promo_codes", "created_by", "users")],
+    ["created_at", stamp("promo_codes", "created_at")],
+    ["updated_at", stamp("promo_codes", "updated_at")],
+  ];
+
+  const usagesCols = [
+    ["id", idToUuid("promo_usages", "id")],
+    ["promo_id", idToUuid("promo_usages", "promo_id")],
+    ["user_id", fkRef("promo_usages", "user_id", "users")],
+    ["customer_id", fkRef("promo_usages", "customer_id", "customers")],
+    ["user_key", txt("promo_usages", "user_key", 255, "NULL")],
+    ["email", txt("promo_usages", "email", 255, "NULL")],
+    ["phone", txt("promo_usages", "phone", 50, "NULL")],
+    ["payment_code", txt("promo_usages", "payment_code", 50, "NULL")],
+    ["amount_before", num("promo_usages", "amount_before", "NULL")],
+    ["amount_after", num("promo_usages", "amount_after", "NULL")],
+    ["discount_applied", num("promo_usages", "discount_applied", "NULL")],
+    ["used_at", stamp("promo_usages", "used_at")],
+  ];
+
+  const insertFrom = (table, pairs, where) =>
+    `INSERT INTO ${table} (${pairs.map(([c]) => `"${c}"`).join(", ")})
+     SELECT ${pairs.map(([c, e]) => `${e} AS "${c}"`).join(", ")}
+       FROM ${table}_legacy l${where ? `\n      WHERE ${where}` : ""}`;
+
+  // Só usos de códigos que sobreviveram à conversão (IDs hórfãos ficam de fora).
+  const promoRef = idToUuid("promo_usages", "promo_id");
+  const usagesWhere = `l.promo_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM promo_codes c WHERE c.id = ${promoRef})`;
+
+  console.log(
+    "[PROMOS] a converter forma antiga para uuid:",
+    [codesLegacy ? `promo_codes.id:${codesId}` : null, usagesLegacy ? `promo_usages.id:${usagesId}` : null]
+      .filter(Boolean).join(", ")
+  );
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const anyCodesLegacy = cols.rows.some(r => r.table_name === "promo_codes");
-    if (anyCodesLegacy) {
+    if (codesLegacy) {
       await client.query(`ALTER TABLE promo_codes RENAME TO promo_codes_legacy`);
-      await client.query(`CREATE TABLE promo_codes (
-         id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-         code varchar(50) NOT NULL UNIQUE,
-         type promo_type NOT NULL DEFAULT 'percent',
-         value integer NOT NULL,
-         min_amount integer,
-         max_discount integer,
-         applies_to varchar(20) NOT NULL DEFAULT 'all',
-         plan_ids jsonb,
-         usage_limit integer,
-         used_count integer NOT NULL DEFAULT 0,
-         per_user boolean NOT NULL DEFAULT true,
-         active boolean NOT NULL DEFAULT true,
-         starts_at timestamp,
-         expires_at timestamp,
-         created_by uuid REFERENCES users(id),
-         created_at timestamp NOT NULL DEFAULT now(),
-         updated_at timestamp NOT NULL DEFAULT now()
-       )`);
-      await client.query(`INSERT INTO promo_codes
-         (id, code, type, value, min_amount, max_discount, applies_to, plan_ids,
-          usage_limit, used_count, per_user, active, starts_at, expires_at,
-          created_by, created_at, updated_at)
-       SELECT md5(id::text)::uuid, code, type::promo_type, value::integer,
-              min_amount::integer, max_discount::integer, applies_to, plan_ids,
-              usage_limit, used_count, per_user, active, starts_at, expires_at,
-              CASE WHEN created_by IS NULL THEN NULL ELSE md5(created_by::text)::uuid END,
-              created_at, updated_at
-         FROM promo_codes_legacy`);
-      await client.query(`DROP TABLE promo_codes_legacy`);
+      await client.query(PROMO_CODES_DDL);
+      await client.query(insertFrom("promo_codes", codesCols));
     }
-    const anyUsagesLegacy = cols.rows.some(r => r.table_name === "promo_usages");
-    if (anyUsagesLegacy) {
+    if (usagesLegacy) {
       await client.query(`ALTER TABLE promo_usages RENAME TO promo_usages_legacy`);
-      await client.query(`CREATE TABLE promo_usages (
-         id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-         promo_id uuid NOT NULL REFERENCES promo_codes(id) ON DELETE cascade,
-         user_id uuid REFERENCES users(id),
-         customer_id uuid REFERENCES customers(id),
-         user_key varchar(255),
-         email varchar(255),
-         phone varchar(50),
-         payment_code varchar(50),
-         amount_before integer,
-         amount_after integer,
-         discount_applied integer,
-         used_at timestamp NOT NULL DEFAULT now()
-       )`);
-      await client.query(`INSERT INTO promo_usages
-         (id, promo_id, user_id, customer_id, user_key, email, phone, payment_code,
-          amount_before, amount_after, discount_applied, used_at)
-       SELECT md5(l.id::text)::uuid,
-              md5(l.promo_id::text)::uuid,
-              l.user_id,
-              CASE WHEN l.customer_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                   THEN l.customer_id::uuid ELSE NULL END,
-              l.user_key, l.email, l.phone, l.payment_code,
-              l.amount_before::integer, l.amount_after::integer, l.discount_applied::integer, l.used_at
-         FROM promo_usages_legacy l
-        WHERE l.promo_id IS NOT NULL`);
-      await client.query(`DROP TABLE promo_usages_legacy`);
+      await client.query(PROMO_USAGES_DDL);
+      await client.query(insertFrom("promo_usages", usagesCols, usagesWhere));
     }
+    if (usagesLegacy) await client.query(`DROP TABLE IF EXISTS promo_usages_legacy`);
+    if (codesLegacy) await client.query(`DROP TABLE IF EXISTS promo_codes_legacy`);
     await client.query("COMMIT");
     console.log("[PROMOS] conversão para uuid concluída");
   } catch (err) {
@@ -737,8 +783,11 @@ let promoSchemaReady = null;
 function ensurePromoSchema() {
   if (!promoSchemaReady) {
     promoSchemaReady = (async () => {
-      for (const stmt of PROMO_DDL) await pool.query(stmt);
+      // O enum primeiro (a conversão e as tabelas usam-no) e a conversão antes
+      // dos CREATE INDEX: os índices têm de nascer nas tabelas já novas.
+      await pool.query(PROMO_TYPE_DDL);
       await repairLegacyPromoSchema();
+      for (const stmt of PROMO_DDL.slice(1)) await pool.query(stmt);
     })().catch((err) => {
       console.error("[PROMOS] schema:", err.message);
       promoSchemaReady = null;
@@ -2606,7 +2655,10 @@ app.get("/api/v1/promos", requireAuth, requireManager, async (req, res) => {
     res.json({ data, total: data.length });
   } catch (err) {
     console.error("[PROMOS LIST]", err.message);
-    res.status(500).json({ error: "Erro a listar códigos." });
+    // Só para administradores: o motivo da falha (BD/esquema) fica visível no
+    // CRM em vez de obrigar a abrir os logs do Render.
+    const details = req.user?.role === "administrador" ? { details: err.message } : {};
+    res.status(500).json({ error: "Erro a listar códigos.", ...details });
   }
 });
 
