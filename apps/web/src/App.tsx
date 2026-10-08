@@ -1508,7 +1508,7 @@ function PlansPage() {
     <textarea className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição do plano" rows={2} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="form-label">Preço (Kz)</label>
-      <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
+      <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div><div><label>Código promocional</label></div>
       <div style={{ flex: 1 }}><label className="form-label">Periodicidade</label>
       <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="avulso">Avulso</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="3_semanas">3 semanas</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
     </div>
