@@ -3,6 +3,7 @@ import request from "supertest";
 import bcrypt from "bcryptjs";
 import app from "../app";
 import { db } from "@workspace/db";
+import { __clearRateLimits } from "../middlewares/rate-limit";
 
 const mockDb = vi.mocked(db);
 
@@ -11,6 +12,9 @@ const validPasswordHash = bcrypt.hashSync("password123", 10);
 describe("Auth API", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // O rate-limit de auth é 10/min por IP: sem limpar, o próprio ficheiro
+    // de testes atinge 429 a meio da suite.
+    __clearRateLimits();
   });
 
   describe("POST /api/v1/auth/register", () => {

@@ -11,8 +11,8 @@ import {
   FileClock, FileKey2, FileSpreadsheet, FileText, Filter, HeartPulse, History, KeyRound, LayoutDashboard,
   LifeBuoy, Link2, ListFilter, LockKeyhole, LogOut, Menu, MessageCircle, MoreHorizontal,
   Package, Pause, PhoneCall, Play, Plus, RefreshCw, Search, Settings, ShieldCheck,
-  SlidersHorizontal, Smartphone, Sparkles, Target, ToggleLeft, ToggleRight, Trash2,
-  TrendingUp, Upload, UserRound, Users, WalletCards, Webhook, X, Zap
+  SlidersHorizontal, Smartphone, Sparkles, Target, Ticket, ToggleLeft, ToggleRight,
+  Trash2, TrendingUp, Upload, UserRound, Users, WalletCards, Webhook, X, Zap
 } from 'lucide-react';
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
@@ -30,7 +30,7 @@ import MinhaConta from '@/portal/MinhaConta';
 import PortalPagamentos from '@/portal/Pagamentos';
 import PortalRecibo from '@/portal/Recibo';
 import PortalShell from '@/portal/PortalShell';
-import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGClientsRefresh, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, useImportCustomerDates, usePaymentStream } from '@/hooks/use-api';
+import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGClientsRefresh, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, useImportCustomerDates, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, type PromoCode, type PromoValidation } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -254,10 +254,10 @@ function mapApiCustomer(c: any): Customer {
   };
 }
 
-const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: string; label: string; icon: any }> }> = [
+const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: string; label: string; icon: any; roles?: string[] }> }> = [
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/meu-progresso', label: 'Meu Progresso', icon: TrendingUp }, { href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
-  { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }] },
+  { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }, { href: '/admin/promocodes', label: 'Promoções', icon: Ticket, roles: ['administrador', 'gestor'] }] },
    { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
   { label: 'Governação', roles: ['administrador', 'gestor'], items: [{ href: '/admin/equipa', label: 'Equipa', icon: Users }, { href: '/admin/utilizadores', label: 'Utilizadores', icon: ShieldCheck }] },
 ];
@@ -345,7 +345,11 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
   const COMERCIAL_HREFS = ['/admin/meu-progresso', '/admin/leads', '/admin/pipeline', '/admin/clientes'];
   const visibleGroups = navGroups
     .filter((g) => !g.roles || (userRole ? g.roles.includes(userRole) : true))
-    .map((g) => ({ ...g, items: userRole === 'comercial' ? g.items.filter((i) => COMERCIAL_HREFS.includes(i.href)) : g.items }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => (i.roles ? (userRole ? i.roles.includes(userRole) : true) : true))
+        .filter((i) => (userRole === 'comercial' ? COMERCIAL_HREFS.includes(i.href) : true)),
+    }))
     .filter((g) => g.items.length > 0);
   // Modo Solve escondido: SamoraFit Workout e Integrações ficam ocultos.
   const shownGroups = isSolve
@@ -1497,7 +1501,7 @@ function PlansPage() {
     } catch (e: any) { alert('Erro: ' + e.message); }
   };
 
-  return <><PageHeader eyebrow="Receita · Catálogo" title="Planos" subtitle="Catálogo comercial e estado das subscrições." action={<button className="btn-primary" onClick={openNew}><Plus size={14} /> Novo plano</button>} />
+  return <><PageHeader eyebrow="Receita · Catálogo" title="Planos" subtitle="Catálogo comercial e estado das subscrições." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><Link href="/admin/promocodes" className="btn-secondary"><Ticket size={14} /> Promoções</Link><button className="btn-primary" onClick={openNew}><Plus size={14} /> Novo plano</button></div>} />
   {loading ? <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>A carregar…</div> :
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '.8rem' }}>{plans.length === 0 && <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Nenhum plano configurado</div>}{(plans).map((p, i) => <div className="card" key={p.id} style={{ padding: '1.1rem', borderTop: i === 0 ? '3px solid hsl(var(--accent))' : undefined }}><div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}><div><div className="eyebrow">{i === 0 ? 'Mais subscrito' : `Plano 0${i + 1}`}</div><h2 style={{ fontSize: '1.05rem', marginTop: '.35rem' }}>{p.name}</h2></div><Status tone={p.active ? 'good' : 'warn'}>{p.active ? 'Activo' : 'Inactivo'}</Status></div><p className="section-note" style={{ minHeight: 33 }}>{p.description || 'Plano disponível'}</p><div className="mono" style={{ fontSize: '1.2rem', margin: '1rem 0' }}>{p.price ? money(p.price) : 'Gratuito'}<span style={{ fontFamily: 'var(--app-font-sans)', color: 'hsl(var(--muted-foreground))', fontSize: '.67rem' }}> / {p.periodicity || 'mês'}</span></div><div style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={() => openEdit(p)} style={{ flex: 1 }}>Editar</button><button className="btn-secondary" onClick={() => del(p)} style={{ color: 'hsl(0 70% 50%)' }}><Trash2 size={14} /></button></div></div>)}</div>}
   {showModal && <div className="modal-backdrop" onClick={() => setShowModal(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
@@ -1508,7 +1512,7 @@ function PlansPage() {
     <textarea className="input" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição do plano" rows={2} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="form-label">Preço (Kz)</label>
-      <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div><div><label>Código promocional</label></div>
+      <input className="input" type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="25000" /></div>
       <div style={{ flex: 1 }}><label className="form-label">Periodicidade</label>
       <select className="select" value={form.periodicity} onChange={e => setForm({ ...form, periodicity: e.target.value })}><option value="avulso">Avulso</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="3_semanas">3 semanas</option><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option></select></div>
     </div>
@@ -1518,6 +1522,271 @@ function PlansPage() {
       <button className="btn-primary" onClick={save} style={{ flex: 1 }}><Check size={14} /> Guardar</button>
     </div>
   </div></div>}
+  </>;
+}
+
+type PromoForm = {
+  code: string; type: 'percent' | 'fixed'; value: string; minAmount: string;
+  maxDiscount: string; usageLimit: string; perUser: boolean; active: boolean;
+  startsAt: string; expiresAt: string; appliesTo: 'all' | 'plans'; planIds: string[];
+};
+
+const promoFormVazio = (): PromoForm => ({
+  code: '', type: 'percent', value: '', minAmount: '', maxDiscount: '',
+  usageLimit: '', perUser: true, active: true, startsAt: '', expiresAt: '',
+  appliesTo: 'all', planIds: [],
+});
+
+// datetime-local pede "YYYY-MM-DDTHH:mm" local; a API devolve ISO.
+const paraInputLocal = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+const fmtCurta = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: '2-digit' });
+};
+
+const promosEstado = (p: PromoCode): { label: string; tone: 'good' | 'warn' | 'danger' | 'pending' } => {
+  const agora = Date.now();
+  if (p.startsAt && new Date(p.startsAt).getTime() > agora) return { label: 'Agendado', tone: 'pending' };
+  if (p.expiresAt && new Date(p.expiresAt).getTime() < agora) return { label: 'Expirado', tone: 'danger' };
+  return p.active ? { label: 'Activo', tone: 'good' } : { label: 'Inactivo', tone: 'warn' };
+};
+
+function PromoUsagesModal({ promo, onClose }: { promo: PromoCode; onClose: () => void }) {
+  const { data, isLoading, isError } = usePromoUsages(promo.id);
+  const rows = data?.data ?? [];
+  return <Modal title={`Usos de ${promo.code}`} subtitle={`${rows.length} registo(s) · limite ${promo.usageLimit ?? 'sem limite'}`} onClose={onClose}>
+    {isLoading ? <div className="section-note">A carregar…</div> :
+      isError ? <div className="section-note">Não foi possível carregar os usos.</div> :
+      rows.length === 0 ? <div className="section-note">Ninguém usou este código ainda.</div> :
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>Quem</th><th>Pagamento</th><th>Desconto</th><th>Data</th></tr></thead><tbody>
+      {rows.map((u: any) => <tr key={u.id}>
+        <td><div style={{ fontWeight: 700 }}>{u.customer_name || u.email || u.phone || '—'}</div>{u.customer_name && (u.email || u.phone) ? <div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{u.email || u.phone}</div> : null}</td>
+        <td className="mono" style={{ fontSize: '.67rem' }}>{u.payment_code || '—'}{u.payment_status ? <div style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))' }}>{u.payment_status}</div> : null}</td>
+        <td className="mono" style={{ fontSize: '.68rem' }}>{u.discount_applied != null ? money(Number(u.discount_applied)) : '—'}</td>
+        <td style={{ whiteSpace: 'nowrap', color: 'hsl(var(--muted-foreground))' }}>{fmtCurta(u.used_at)}</td>
+      </tr>)}
+      </tbody></table></div>}
+  </Modal>;
+}
+
+function PromoCodesPage() {
+  const apiBase = import.meta.env.VITE_API_URL || '';
+  const query = useListPromos();
+  const promos = query.data?.data ?? [];
+  const createMut = useCreatePromo();
+  const updateMut = useUpdatePromo();
+  const toggleMut = useTogglePromo();
+  const deleteMut = useDeletePromo();
+
+  const [modal, setModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<PromoForm>(promoFormVazio);
+  const [erro, setErro] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [usos, setUsos] = useState<PromoCode | null>(null);
+  const [opcoes, setOpcoes] = useState<Array<{ id: string; nome: string; grupo: string }>>([]);
+
+  // Âmbito do código: planos do Solve + conteúdos de duração da SamoraFit Workout.
+  useEffect(() => {
+    if (!modal) return;
+    let vivo = true;
+    const carregar = async () => {
+      const [rPlanos, rEntregas] = await Promise.all([
+        fetch(`${apiBase}/api/v1/plans`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${apiBase}/api/v1/cademi/entregas`, { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+      ]);
+      if (!vivo) return;
+      const lista: Array<{ id: string; nome: string; grupo: string }> = [];
+      (Array.isArray(rPlanos?.data) ? rPlanos.data : []).forEach((p: any) =>
+        lista.push({ id: String(p.id), nome: String(p.name || p.id), grupo: 'Planos' }));
+      catalogoWorkout(Array.isArray(rEntregas?.data) ? rEntregas.data : []).forEach((o: any) =>
+        lista.push({ id: String(o.id), nome: String(o.nome || o.id), grupo: 'Conteúdo SamoraFit Workout' }));
+      const vistos = new Set<string>();
+      setOpcoes(lista.filter(o => (vistos.has(o.id) ? false : (vistos.add(o.id), true))));
+    };
+    carregar();
+    return () => { vivo = false; };
+  }, [modal]);
+
+  const abrirNovo = () => { setEditingId(null); setForm(promoFormVazio()); setErro(''); setModal(true); };
+  const abrirEditar = (p: PromoCode) => {
+    setEditingId(p.id);
+    setForm({
+      code: p.code, type: p.type, value: String(p.value ?? ''),
+      minAmount: p.minAmount == null ? '' : String(p.minAmount),
+      maxDiscount: p.maxDiscount == null ? '' : String(p.maxDiscount),
+      usageLimit: p.usageLimit == null ? '' : String(p.usageLimit),
+      perUser: p.perUser, active: p.active,
+      startsAt: paraInputLocal(p.startsAt), expiresAt: paraInputLocal(p.expiresAt),
+      appliesTo: p.appliesTo, planIds: p.planIds,
+    });
+    setErro(''); setModal(true);
+  };
+
+  const guardar = async () => {
+    const code = form.code.trim().toUpperCase();
+    if (editingId && !code) { setErro('O código é obrigatório.'); return; }
+    const value = parseFloat(form.value);
+    if (!Number.isFinite(value) || value < 0) { setErro('Indica o valor do desconto.'); return; }
+    if (form.type === 'percent' && value > 100) { setErro('Percentagem máxima é 100.'); return; }
+    if (form.startsAt && form.expiresAt && new Date(form.expiresAt).getTime() <= new Date(form.startsAt).getTime()) {
+      setErro('A expiração tem de ser posterior ao início.'); return;
+    }
+    const num = (v: string) => (v.trim() ? Math.round(parseFloat(v)) : null);
+    const payload: Record<string, unknown> = {
+      type: form.type, value,
+      min_amount: num(form.minAmount), max_discount: num(form.maxDiscount),
+      applies_to: form.appliesTo,
+      plan_ids: form.appliesTo === 'plans' ? form.planIds : [],
+      usage_limit: num(form.usageLimit),
+      per_user: form.perUser, active: form.active,
+      starts_at: form.startsAt || null, expires_at: form.expiresAt || null,
+    };
+    if (code) payload.code = code;
+    else if (!editingId) payload.generate = true;
+
+    setGuardando(true); setErro('');
+    try {
+      if (editingId) await updateMut.mutateAsync({ id: editingId, ...payload });
+      else await createMut.mutateAsync(payload);
+      setModal(false);
+      query.refetch();
+    } catch (e: any) {
+      setErro(e?.message || 'Erro ao guardar o código.');
+    } finally { setGuardando(false); }
+  };
+
+  const alternar = async (p: PromoCode) => {
+    try { await toggleMut.mutateAsync(p.id); } catch (e: any) { alert('Erro: ' + (e?.message || 'ao alternar')); }
+  };
+  const apagar = async (p: PromoCode) => {
+    if (!confirm(`Apagar o código "${p.code}"? O histórico de pagamentos mantém-se.`)) return;
+    try { await deleteMut.mutateAsync(p.id); } catch (e: any) { alert('Erro: ' + (e?.message || 'ao apagar')); }
+  };
+
+  const estadoDeGuardado = createMut.isPending || updateMut.isPending;
+
+  if (query.isError) {
+    return <><PageHeader eyebrow="Receita · Promoções" title="Códigos promocionais" subtitle="Descontos por código, com validade e limite de usos." />
+      <EmptyState title="Não foi possível carregar os códigos" text="Sem permissão para ver promoções ou a API não respondeu." action={<button className="btn-secondary" onClick={() => query.refetch()}>Tentar de novo</button>} /></>;
+  }
+
+  return <>
+    <PageHeader
+      eyebrow="Receita · Promoções"
+      title="Códigos promocionais"
+      subtitle="Descontos por código, com validade, limite de usos e uso único por aluno."
+      action={<button className="btn-primary" onClick={abrirNovo} data-testid="button-novo-codigo-promo"><Plus size={14} /> Novo código</button>}
+    />
+    <Section title="Códigos" note={query.isLoading ? 'A carregar…' : `${promos.length} código(s)`}>
+      {query.isLoading ? <div className="section-note">A carregar códigos…</div> :
+      promos.length === 0 ? <EmptyState title="Sem códigos promocionais" text="Cria o primeiro código para dar descontos na cobrança manual, no checkout e no portal." action={<button className="btn-primary" onClick={abrirNovo}><Plus size={14} /> Novo código</button>} /> :
+      <div className="table-wrap"><table className="data-table"><thead><tr>
+        <th>Código</th><th>Desconto</th><th>Âmbito</th><th>Validade</th><th>Usos</th><th>Estado</th><th />
+      </tr></thead><tbody>
+      {promos.map(p => {
+        const est = promosEstado(p);
+        const usosTxt = `${p.usageCount}${p.usageLimit != null ? ` / ${p.usageLimit}` : ''}`;
+        return <tr key={p.id}>
+          <td className="mono" style={{ fontSize: '.72rem', fontWeight: 700 }}>{p.code}</td>
+          <td style={{ whiteSpace: 'nowrap' }}>{p.type === 'percent' ? `${p.value}%` : money(p.value)}</td>
+          <td>{p.appliesTo === 'plans' ? `${p.planIds.length} item(ns)` : 'Todos'}</td>
+          <td style={{ whiteSpace: 'nowrap', fontSize: '.7rem', color: 'hsl(var(--muted-foreground))' }}>
+            {!p.startsAt && !p.expiresAt ? 'Sem limite' : `${p.startsAt ? fmtCurta(p.startsAt) : 'hoje'} — ${p.expiresAt ? fmtCurta(p.expiresAt) : 'sem fim'}`}
+          </td>
+          <td className="mono" style={{ fontSize: '.7rem' }} title={p.perUser ? 'Uso único por aluno' : 'Sem limite por aluno'}>{usosTxt}</td>
+          <td><Status tone={est.tone}>{est.label}</Status></td>
+          <td><div style={{ display: 'flex', gap: '.15rem', justifyContent: 'flex-end' }}>
+            <IconButton label="ver usos" onClick={() => setUsos(p)}><Eye size={14} /></IconButton>
+            <IconButton label="editar código" onClick={() => abrirEditar(p)}><Edit3 size={14} /></IconButton>
+            <IconButton label={p.active ? 'desactivar código' : 'activar código'} onClick={() => alternar(p)}>{p.active ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}</IconButton>
+            <IconButton label="apagar código" onClick={() => apagar(p)}><Trash2 size={14} /></IconButton>
+          </div></td>
+        </tr>;
+      })}
+      </tbody></table></div>}
+    </Section>
+
+    {usos && <PromoUsagesModal promo={usos} onClose={() => setUsos(null)} />}
+
+    {modal && <div className="modal-backdrop" onMouseDown={() => setModal(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '1.2rem' }}>
+      <h3 style={{ marginBottom: '.2rem' }}>{editingId ? 'Editar código' : 'Novo código promocional'}</h3>
+      <div className="section-note" style={{ marginBottom: '1rem' }}>O código é validado no servidor antes de qualquer desconto.</div>
+
+      <label className="form-label">Código {editingId ? '*' : '(deixe vazio para gerar)'}</label>
+      <div style={{ display: 'flex', gap: '.4rem' }}>
+        <input className="input mono" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="FIT-XXXXXXXX" maxLength={50} style={{ flex: 1, textTransform: 'uppercase' }} />
+        {!editingId && <button className="btn-secondary" onClick={() => setForm({ ...form, code: '' })}>Gerar</button>}
+      </div>
+
+      <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
+        <div style={{ flex: 1 }}><label className="form-label">Tipo de desconto</label>
+          <select className="select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value as PromoForm['type'] })}>
+            <option value="percent">Percentagem (%)</option>
+            <option value="fixed">Valor fixo (Kz)</option>
+          </select></div>
+        <div style={{ flex: 1 }}><label className="form-label">Valor *</label>
+          <input className="input" type="number" min="0" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} placeholder={form.type === 'percent' ? '20' : '5000'} /></div>
+      </div>
+
+      <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
+        <div style={{ flex: 1 }}><label className="form-label">Compra mínima (Kz)</label>
+          <input className="input" type="number" min="0" value={form.minAmount} onChange={e => setForm({ ...form, minAmount: e.target.value })} placeholder="Opcional" /></div>
+        <div style={{ flex: 1 }}><label className="form-label">Desconto máx. (Kz)</label>
+          <input className="input" type="number" min="0" value={form.maxDiscount} onChange={e => setForm({ ...form, maxDiscount: e.target.value })} placeholder="Só em %" /></div>
+      </div>
+
+      <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
+        <div style={{ flex: 1 }}><label className="form-label">Início</label>
+          <input className="input" type="datetime-local" value={form.startsAt} onChange={e => setForm({ ...form, startsAt: e.target.value })} /></div>
+        <div style={{ flex: 1 }}><label className="form-label">Expira em</label>
+          <input className="input" type="datetime-local" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} /></div>
+      </div>
+
+      <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
+        <div style={{ flex: 1 }}><label className="form-label">Limite total de usos</label>
+          <input className="input" type="number" min="1" value={form.usageLimit} onChange={e => setForm({ ...form, usageLimit: e.target.value })} placeholder="Sem limite" /></div>
+        <div style={{ flex: 1 }}><label className="form-label">Aplicar a</label>
+          <select className="select" value={form.appliesTo} onChange={e => setForm({ ...form, appliesTo: e.target.value as PromoForm['appliesTo'] })}>
+            <option value="all">Todas as compras</option>
+            <option value="plans">Itens seleccionados</option>
+          </select></div>
+      </div>
+
+      {form.appliesTo === 'plans' && <div style={{ marginTop: '.6rem' }}>
+        <label className="form-label">Itens elegíveis</label>
+        <select className="select" multiple size={Math.min(6, Math.max(3, opcoes.length))} value={form.planIds}
+          onChange={e => setForm({ ...form, planIds: Array.from(e.target.selectedOptions).map(o => o.value) })}
+          style={{ height: 'auto' }}>
+          {opcoes.length === 0 && <option disabled>A carregar itens…</option>}
+          {opcoes.map(o => <option key={o.id} value={o.id}>{o.grupo}: {o.nome}</option>)}
+        </select>
+        <div className="section-note" style={{ marginTop: '.3rem' }}>{form.planIds.length} seleccionado(s) · Ctrl/Cmd para escolher vários</div>
+      </div>}
+
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '.8rem', fontSize: '.78rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}><input type="checkbox" checked={form.perUser} onChange={e => setForm({ ...form, perUser: e.target.checked })} /> Uso único por aluno</label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> Activo</label>
+      </div>
+
+      {erro && <div style={{ fontSize: '.75rem', color: 'hsl(0 70% 50%)', marginTop: '.6rem' }}>{erro}</div>}
+
+      <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
+        <button className="btn-secondary" onClick={() => setModal(false)} style={{ flex: 1 }}>Cancelar</button>
+        <button className="btn-primary" onClick={guardar} disabled={guardando || estadoDeGuardado} style={{ flex: 1 }}>
+          <Check size={14} /> {guardando ? 'A guardar…' : 'Guardar'}
+        </button>
+      </div>
+    </div></div>}
   </>;
 }
 
@@ -1733,8 +2002,28 @@ function PaymentsPage() {
   };
   const [cDesc, setCDesc] = useState('');
   const [cMsg, setCMsg] = useState('');
+  const [cPromo, setCPromo] = useState('');
+  const [cPromoRes, setCPromoRes] = useState<PromoValidation | null>(null);
+  const [cPromoCheck, setCPromoCheck] = useState(false);
   const [cLink, setCLink] = useState<string | null>(null);
   const [charging, setCharging] = useState(false);
+
+  // Valida o código contra o montante actual (o servidor continua a decidir).
+  const validarPromo = async () => {
+    const code = cPromo.trim().toUpperCase();
+    if (!code) { setCPromoRes(null); return; }
+    const amt = parseFloat(cAmount);
+    if (!amt || amt <= 0) { setCPromoRes({ valid: false, reason: 'Indique primeiro o montante' }); return; }
+    setCPromoCheck(true);
+    const r = await validatePromoCode({
+      code, amount: amt,
+      email: cEmail.trim() || undefined,
+      phone: cPhone.trim() || undefined,
+      cademi_produto: cProduto || undefined,
+    });
+    setCPromoCheck(false);
+    setCPromoRes(r);
+  };
   // Entregas reais (slugs da Cademi) para o seletor de conteúdo,
   // + lista de alunos para o seletor (preenche nome/email/telefone).
   useEffect(() => {
@@ -1762,10 +2051,15 @@ function PaymentsPage() {
     const amt = parseFloat(cAmount);
     if (!amt || amt <= 0) { setCMsg('Indica um montante válido'); return; }
     if (!cPhone.trim()) { setCMsg('Indica o número de telefone'); return; }
+    const promoCode = cPromo.trim().toUpperCase();
+    if (promoCode && cPromoRes && cPromoRes.valid === false) {
+      setCMsg('Código promocional inválido: ' + (cPromoRes.reason || 'verifique o código'));
+      return;
+    }
     // Snapshot dos campos. O modal fica aberto a mostrar o link WiPay
     // (igual ao widget): o método escolhe-se na página hospedada.
-    const payload = { amount: amt, method: 'mcx_express', customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined };
-    const snap = { amount: cAmount, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc };
+    const payload = { amount: amt, method: 'mcx_express', customer_phone: cPhone.trim() || undefined, customer_email: cEmail.trim() || undefined, customer_name: cName.trim() || undefined, cademi_produto: cProduto || undefined, description: cDesc.trim() || undefined, promo_code: promoCode || undefined };
+    const snap = { amount: cAmount, phone: cPhone, email: cEmail, name: cName, produto: cProduto, desc: cDesc, promo: cPromo, promoRes: cPromoRes };
     setCharging(true);
     setCLink(null);
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -1785,7 +2079,8 @@ function PaymentsPage() {
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || res.statusText);
       const code = json?.data?.code || json?.code || '';
-      setCMsg(`Cobrança ${code} criada. A gerar link…`);
+      setCMsg(`Cobrança ${code} criada${cPromoRes?.valid && cPromoRes.discount ? ` · desconto ${money(cPromoRes.discount)}` : ''}. A gerar link…`);
+      setCPromo(''); setCPromoRes(null);
       // Poll do link hospedado (gerado em background em segundos).
       for (let i = 0; i < 12; i++) {
         await sleep(5000);
@@ -1804,6 +2099,7 @@ function PaymentsPage() {
     } catch (e: any) {
       // Falhou: reabre o modal com os valores e o erro.
       setCAmount(snap.amount); setCPhone(snap.phone); setCEmail(snap.email); setCName(snap.name); setCProduto(snap.produto); setCDesc(snap.desc);
+      setCPromo(snap.promo); setCPromoRes(snap.promoRes);
       setCMsg(e?.name === 'AbortError' ? 'Erro: tempo excedido. Verifica a lista — o pagamento pode ter sido criado.' : 'Erro: ' + e.message);
       setChargeOpen(true);
       setCharging(false);
@@ -1876,7 +2172,7 @@ function PaymentsPage() {
     if (formato === 'excel') exportarExcel('relatorio-pagamentos', [{ nome: 'Pagamentos', cabecalho: cab, linhas, larguras: [28, 26, 18, 16, 14, 16, 14] }]);
     else exportarPDF({ titulo: 'Relatório de Pagamentos — SamoraFit', subtitulo: subt, ficheiro: 'relatorio-pagamentos', seccoes: [{ cabecalho: cab, linhas }] });
   };
-  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('pdf')}><FileText size={14} /> PDF</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
+  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('pdf')}><FileText size={14} /> PDF</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setCPromo(''); setCPromoRes(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
   <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', flexWrap: 'wrap' }}>
     <input className="input" placeholder="Pesquisar cliente ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
     <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '140px' }} />
@@ -1889,10 +2185,18 @@ function PaymentsPage() {
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente e gera o link de pagamento (o método escolhe-se na página).</div>
     <div className="fila-dupla">
       <div style={{ flex: 1 }}><label className="form-label">Montante (Kz) *</label>
-      <input className="input" type="number" min="1" value={cAmount} onChange={e => setCAmount(e.target.value)} placeholder="100" /></div>
+      <input className="input" type="number" min="1" value={cAmount} onChange={e => { setCAmount(e.target.value); if (cPromoRes) setCPromoRes(null); }} placeholder="100" /></div>
       <div style={{ flex: 1 }}><label className="form-label">Pagamento</label>
       <div style={{ fontSize: '.78rem', fontWeight: 600, padding: '.55rem 0' }}>Multicaixa na página</div></div>
     </div>
+    <div style={{ marginTop: '.6rem' }}><label className="form-label">Código promocional</label>
+    <div style={{ display: 'flex', gap: '.4rem' }}>
+      <input className="input mono" value={cPromo} onChange={e => { setCPromo(e.target.value.toUpperCase()); setCPromoRes(null); }} onBlur={validarPromo} onKeyDown={e => { if (e.key === 'Enter') validarPromo(); }} placeholder="FIT-XXXXXXXX" maxLength={50} style={{ flex: 1, textTransform: 'uppercase' }} data-testid="input-promo-charge" />
+      <button className="btn-secondary" onClick={validarPromo} disabled={cPromoCheck || !cPromo.trim()}>{cPromoCheck ? '…' : 'Aplicar'}</button>
+    </div>
+    {cPromoRes && <div style={{ fontSize: '.72rem', marginTop: '.3rem', color: cPromoRes.valid ? 'hsl(142 60% 40%)' : 'hsl(0 70% 50%)' }}>
+      {cPromoRes.valid ? `Desconto ${money(cPromoRes.discount ?? 0)} · total a cobrar ${money(cPromoRes.final ?? 0)}` : cPromoRes.reason}
+    </div>}</div>
     <div style={{ marginTop: '.6rem' }}><label className="form-label">Telefone *</label>
     <input className="input" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="9XXXXXXXX" style={{ width: '100%' }} /></div>
     <div style={{ marginTop: '.6rem' }}><label className="form-label">Aluno (preenche nome, email e telefone)</label>
@@ -2711,7 +3015,7 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin"><Dashboard leads={leads} customers={customers} userName={userName} /></Route><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso"><MeuProgressoPage leads={leads} userName={userName} /></Route><Route path="/admin/fit90-leads"><Fit90LeadsPage leads={leads} onChanged={reloadLeads} /></Route><Route path="/admin/pipeline"><PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} /></Route><Route path="/admin/clientes/:id"><CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} /></Route><Route path="/admin/clientes"><CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} /></Route><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa"><EquipaPage leads={leads} /></Route><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route><EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} /></Route></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin"><Dashboard leads={leads} customers={customers} userName={userName} /></Route><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso"><MeuProgressoPage leads={leads} userName={userName} /></Route><Route path="/admin/fit90-leads"><Fit90LeadsPage leads={leads} onChanged={reloadLeads} /></Route><Route path="/admin/pipeline"><PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} /></Route><Route path="/admin/clientes/:id"><CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} /></Route><Route path="/admin/clientes"><CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} /></Route><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/promocodes" component={PromoCodesPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa"><EquipaPage leads={leads} /></Route><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route><EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} /></Route></Switch></AppShell>;
 }
 function LandingLoginPage() {
   return (

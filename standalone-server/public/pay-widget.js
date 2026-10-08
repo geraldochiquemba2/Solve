@@ -80,6 +80,7 @@
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Pagamento</label><div style='font-size:.78rem;font-weight:600;padding:.55rem 0'>Multicaixa na página seguinte</div></div></div>" +
       "<div id='spw-tempo' style='font-size:.72rem;color:#666;margin-top:.35rem'></div>" +
+      "<div style='margin-top:.45rem'><label class='spw-label'>Código promocional</label><div class='spw-row'><input id='spw-promo' class='spw-input' maxlength='50' placeholder='FIT-XXXXXXXX' style='flex:1;text-transform:uppercase'><button id='spw-promogo' style='flex:0 0 auto;border:1px solid #d4d4d8;background:#fff;border-radius:8px;padding:0 .8rem;font-size:.78rem;font-weight:600;cursor:pointer;color:#111'>Aplicar</button></div><div id='spw-promores' style='font-size:.72rem;margin-top:.25rem'></div></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Nome</label><input id='spw-name' class='spw-input' placeholder='Nome do aluno' readonly style='background:#f4f4f5'></div>" +
       "<div><label class='spw-label'>Email</label><input id='spw-email' class='spw-input' type='email' placeholder='aluno@email.com' readonly style='background:#f4f4f5'></div></div>" +
       "<div id='spw-msg' class='spw-msg'></div><div id='spw-ref'></div>" +
@@ -109,6 +110,26 @@
     }
     sel.addEventListener("change", syncAmt);
     syncAmt();
+
+    // Código promocional: valida contra o montante e o conteúdo escolhidos;
+    // o resultado fica em m._promo e é revalidado no clique em "Pagar".
+    m._promo = null;
+    var promoEl = m.querySelector("#spw-promo");
+    var promoRes = m.querySelector("#spw-promores");
+    function limpaPromo() {
+      m._promo = null;
+      if (promoRes) { promoRes.textContent = ""; promoRes.style.color = ""; }
+    }
+    promoEl.addEventListener("input", function () {
+      promoEl.value = promoEl.value.toUpperCase();
+      limpaPromo();
+    });
+    promoEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); validarPromo(m); }
+    });
+    m.querySelector("#spw-promogo").addEventListener("click", function () { validarPromo(m); });
+    sel.addEventListener("change", limpaPromo);
+    m.querySelector("#spw-email").addEventListener("change", limpaPromo);
 
     var method = "express"; // único fluxo: link WiPay (o método escolhe-se na página)
     var tempoEl = m.querySelector("#spw-tempo");
@@ -602,6 +623,49 @@
     d.style.color = err ? "#b91c1c" : "#15803d";
   }
 
+  // Valida o código contra o montante actual. Devolve m._promo (ou null) e
+  // escreve o resultado em #spw-promores. O servidor é quem aplica o desconto.
+  async function validarPromo(m) {
+    var codeEl = m.querySelector("#spw-promo");
+    var resEl = m.querySelector("#spw-promores");
+    var code = ((codeEl && codeEl.value) || "").trim().toUpperCase();
+    if (!code) { m._promo = null; if (resEl) resEl.textContent = ""; return null; }
+    var amt = parseFloat(String((m.querySelector("#spw-amt") || {}).value || "").replace(/\s/g, ""));
+    var prod = (m.querySelector("#spw-prod") || {}).value || "";
+    var email = ((m.querySelector("#spw-email") || {}).value || "").trim();
+    var phoneEl = m.querySelector("#spw-phone");
+    var phone = phoneEl ? String(phoneEl.value || "").trim() : "";
+    if (!amt || amt <= 0) {
+      m._promo = null;
+      if (resEl) { resEl.textContent = "Escolhe primeiro o conteúdo."; resEl.style.color = "#b91c1c"; }
+      return null;
+    }
+    if (resEl) { resEl.textContent = "A verificar…"; resEl.style.color = "#666"; }
+    try {
+      var r = await h(API + "/api/v1/promos/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code, amount: amt, email: email || undefined, phone: phone || undefined, cademi_produto: prod || undefined })
+      });
+      var j = await r.json().catch(function () { return null; });
+      if (!j || !j.valid) {
+        m._promo = null;
+        if (resEl) { resEl.textContent = (j && j.reason) || "Código inválido."; resEl.style.color = "#b91c1c"; }
+        return null;
+      }
+      m._promo = { code: code, discount: Number(j.discount) || 0, final: Number(j.final) || 0 };
+      if (resEl) {
+        resEl.textContent = "Desconto de " + fmtKz(j.discount) + " Kz · total " + fmtKz(j.final) + " Kz";
+        resEl.style.color = "#15803d";
+      }
+      return m._promo;
+    } catch (e) {
+      m._promo = null;
+      if (resEl) { resEl.textContent = "Não foi possível validar agora."; resEl.style.color = "#b91c1c"; }
+      return null;
+    }
+  }
+
   async function pagar(m, method, entregas) {
     var prod = m.querySelector("#spw-prod").value;
     if (!prod) { msg(m, "Escolhe o conteúdo.", true); return; }
@@ -615,6 +679,17 @@
     var email = m.querySelector("#spw-email").value.trim();
     var btn = m.querySelector("#spw-go");
     if (!amt || amt <= 0) { msg(m, "Indica um montante válido.", true); return; }
+    // Código promocional: revalida no clique (montante/conteúdo podem ter mudado).
+    var promoCodigo = ((m.querySelector("#spw-promo") || {}).value || "").trim().toUpperCase();
+    if (promoCodigo) {
+      var pv = await validarPromo(m);
+      if (!pv) {
+        var re = m.querySelector("#spw-promores");
+        msg(m, (re && re.textContent) || "Código promocional inválido.", true);
+        return;
+      }
+      promoCodigo = pv.code;
+    }
     // O método (incl. número, se preciso) escolhe-se na página seguinte.
     btn.disabled = true;
     btn.textContent = "A verificar...";
@@ -675,18 +750,26 @@
       var r = await h(API + "/api/v1/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone || undefined, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, description: "Pagamento via site Cademi", return_url: String((window.location && window.location.href) || "").slice(0, 300) })
+        body: JSON.stringify({ amount: amt, method: "mcx_express", customer_phone: phone || undefined, customer_email: email || undefined, customer_name: name || undefined, cademi_produto: prod || undefined, promo_code: promoCodigo || undefined, description: "Pagamento via site Cademi", return_url: String((window.location && window.location.href) || "").slice(0, 300) })
       });
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || r.statusText);
       var code = (j.data && j.data.code) || "";
+      var promoAplicado = m._promo;
+      if (promoAplicado) {
+        var promoInput = m.querySelector("#spw-promo");
+        if (promoInput) promoInput.value = "";
+        m._promo = null;
+        var promoRes2 = m.querySelector("#spw-promores");
+        if (promoRes2) { promoRes2.textContent = ""; promoRes2.style.color = ""; }
+      }
       try { localStorage.setItem("spw_profile", JSON.stringify({ name: name, email: email, phone: phone })); } catch (e9) {}
       // Pagamento criado: o botão volta ao normal de imediato; a verificação
       // corre em fundo só a atualizar a mensagem (evita botão preso em "A gerar...").
       btn.disabled = false;
       btn.textContent = "Pagar";
       // Fluxo único: link WiPay (o método escolhe-se na página hospedada).
-      msg(m, "A gerar link de pagamento (" + code + ")...");
+      msg(m, "A gerar link de pagamento (" + code + ")" + (promoAplicado ? " · desconto de " + fmtKz(promoAplicado.discount) + " Kz" : "") + "...");
       var payUrl = null;
       for (var w = 0; w < 12; w++) {
         await sleep(5000);
@@ -712,7 +795,7 @@
         linhaValor.setAttribute("style", "margin-bottom:.4rem");
         linhaValor.appendChild(document.createTextNode("Valor: "));
         var valorKz = document.createElement("b");
-        valorKz.textContent = fmtKz(amt) + " Kz";
+        valorKz.textContent = fmtKz(promoAplicado ? promoAplicado.final : amt) + " Kz";
         linhaValor.appendChild(valorKz);
         wrap.appendChild(linhaValor);
 

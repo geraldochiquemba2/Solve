@@ -7,6 +7,8 @@ import { authenticatePortal } from "../middlewares/portal-auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
 import { ekwanzaClient, EkwanzaError } from "../lib/ekwanza";
+import { validatePromo, registerPromoUsage } from "../lib/promo";
+import { deliverInBackground } from "../lib/cademi-delivery";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -23,6 +25,8 @@ const pagarSchema = z.object({
   // Express pode ser pago a partir de QUALQUER número (ex: familiar paga pelo
   // cliente). Se omitido, usa o número da conta.
   phoneNumber: phoneNumberSchema.optional(),
+  // Código promocional opcional — o desconto é recalculado no servidor.
+  promoCode: z.string().trim().min(1).max(50).optional(),
 });
 
 const pagamentosQuerySchema = z.object({
@@ -96,11 +100,13 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
           id: customer.id,
           name: customer.name,
           phone: customer.phone,
+          email: customer.email,
           state: customer.state,
         },
         subscription: sub
           ? {
               id: sub.id,
+              planId: plan?.id ?? null,
               planName: plan?.name ?? null,
               price: plan?.price ?? null,
               periodicity: plan?.periodicity ?? null,
@@ -128,10 +134,11 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
 router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (req, res, next) => {
   try {
     const customerId = requireCustomerId(req);
-    const { method, subscriptionId, phoneNumber } = req.body as {
+    const { method, subscriptionId, phoneNumber, promoCode } = req.body as {
       method: "express" | "referencia";
       subscriptionId?: string;
       phoneNumber?: string;
+      promoCode?: string;
     };
 
     const customer = await db.query.customersTable.findFirst({
@@ -168,7 +175,44 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
     if (!plan) {
       throw new AppError(404, "Plano não encontrado");
     }
-    const amount = plan.price;
+    const originalAmount = plan.price;
+    let amount = originalAmount;
+    let promoApplied: {
+      code: string;
+      codeId: string;
+      original: number;
+      discount: number;
+      final: number;
+      type: "percent" | "fixed";
+      value: number;
+    } | null = null;
+    // Código que cobre a totalidade: confirma sem gateway e entrega já o acesso.
+    let autoConfirm = false;
+
+    if (promoCode) {
+      const result = await validatePromo({
+        code: promoCode,
+        base: originalAmount,
+        email: customer.email,
+        phone: customer.phone,
+        planIds: [plan.id],
+      });
+      if (!result.valid) throw new AppError(400, result.reason);
+      promoApplied = {
+        code: String(promoCode).trim().toUpperCase(),
+        codeId: result.promo.id,
+        original: result.original,
+        discount: result.discount,
+        final: result.final,
+        type: result.promo.type,
+        value: Number(result.promo.value),
+      };
+      amount = result.final;
+      if (amount <= 0) {
+        amount = 0;
+        autoConfirm = true;
+      }
+    }
 
     // Mesmo padrão de código do staff (payments-ekwanza.ts)
     const count = await db.$count(paymentsTable);
@@ -183,16 +227,35 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
         subscriptionId: sub.id,
         amount,
         method: method === "express" ? "mcx_express" : "referencia",
-        status: "pendente",
+        status: autoConfirm ? "confirmado" : "pendente",
+        paidAt: autoConfirm ? new Date() : null,
         referenceCode: code,
         expiresAt,
+        ...(promoApplied ? { metadata: { promo: promoApplied } } : {}),
       })
       .returning();
+
+    // Registo de uso do código (ligado a este pagamento; conta para o limite).
+    if (promoApplied) {
+      await registerPromoUsage({
+        promo: { id: promoApplied.codeId },
+        original: promoApplied.original,
+        discount: promoApplied.discount,
+        final: promoApplied.final,
+        email: customer.email,
+        phone: customer.phone,
+        customerId,
+        paymentCode: code,
+      });
+    }
 
     let express: { initiated: boolean } | null = null;
     let referencia: { entity: string | null; reference: string; expiresAt: Date } | null = null;
 
-    if (method === "express") {
+    if (autoConfirm) {
+      // Promo 100%: sem cobrança — entrega o acesso na Cademi em background.
+      deliverInBackground(code);
+    } else if (method === "express") {
       // Qualquer número pode pagar via Express (ex: familiar). Valida formato AO:
       // 9XXXXXXXX local — normaliza removendo +244/244/espaços para o GPO.
       const rawPhone = (phoneNumber?.trim() ? phoneNumber : customer.phone || customer.whatsappPhone) || "";
@@ -258,6 +321,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
           payment = { ...payment, status: "confirmado" };
           const { broadcastPaymentUpdate } = await import("../app");
           broadcastPaymentUpdate({ type: "payment_updated", code, status: "confirmado" });
+          deliverInBackground(code);
         } else if (gpoStatus === "Failed" || gpoStatus === "Cancelled" || gpoStatus === "Expired") {
           await db
             .update(paymentsTable)
@@ -290,6 +354,9 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
         payment: { id: payment.id, code: payment.code, status: payment.status, amount: payment.amount },
         express,
         referencia,
+        promo: promoApplied
+          ? { code: promoApplied.code, original: promoApplied.original, discount: promoApplied.discount, final: promoApplied.final }
+          : null,
       },
     });
   } catch (err) {

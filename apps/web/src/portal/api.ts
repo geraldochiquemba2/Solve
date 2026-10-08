@@ -147,9 +147,10 @@ export interface PortalPayment {
 
 // GET /api/v1/portal/minha-conta → { customer, subscription, aulas, proximaMensalidade }
 export interface MinhaContaResponse {
-  customer: { id: string; name: string; phone?: string | null; state?: string };
+  customer: { id: string; name: string; phone?: string | null; email?: string | null; state?: string };
   subscription: {
     id: string;
+    planId?: string | null;
     planName?: string | null;
     price?: number | null;
     periodicity?: string | null;
@@ -175,12 +176,18 @@ export interface PagarResult {
   payment: { id: string; code: string; status: string; amount: number };
   express: { initiated: boolean } | null;
   referencia: { entity: string | null; reference: string; expiresAt: string } | null;
+  promo: { code: string; original: number; discount: number; final: number } | null;
 }
 
-export function pagar(method: 'express' | 'referencia', subscriptionId?: string, phoneNumber?: string): Promise<PagarResult> {
+export function pagar(method: 'express' | 'referencia', subscriptionId?: string, phoneNumber?: string, promoCode?: string): Promise<PagarResult> {
   return fetchPortal<PagarResult>('/api/v1/portal/pagar', {
     method: 'POST',
-    body: JSON.stringify({ method, ...(subscriptionId ? { subscriptionId } : {}), ...(phoneNumber?.trim() ? { phoneNumber: phoneNumber.trim() } : {}) }),
+    body: JSON.stringify({
+      method,
+      ...(subscriptionId ? { subscriptionId } : {}),
+      ...(phoneNumber?.trim() ? { phoneNumber: phoneNumber.trim() } : {}),
+      ...(promoCode?.trim() ? { promoCode: promoCode.trim().toUpperCase() } : {}),
+    }),
   });
 }
 

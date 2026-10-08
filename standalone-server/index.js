@@ -590,41 +590,164 @@ pool.query(`CREATE TABLE IF NOT EXISTS settings (
   value TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 )`).catch(() => {});
-// Códigos promocionais
-pool.query(`CREATE TABLE IF NOT EXISTS promo_codes (
-  id SERIAL PRIMARY KEY,
-  code TEXT UNIQUE NOT NULL,
-  type TEXT NOT NULL DEFAULT 'percent',
-  value NUMERIC NOT NULL,
-  min_amount NUMERIC,
-  max_discount NUMERIC,
-  applies_to TEXT NOT NULL DEFAULT 'all',
-  plan_ids JSONB,
-  usage_limit INT,
-  used_count INT NOT NULL DEFAULT 0,
-  per_user BOOLEAN NOT NULL DEFAULT true,
-  active BOOLEAN NOT NULL DEFAULT true,
-  starts_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ,
-  created_by INT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)`).catch(() => {});
-pool.query(`CREATE TABLE IF NOT EXISTS promo_usages (
-  id SERIAL PRIMARY KEY,
-  promo_id INT,
-  user_key TEXT,
-  customer_id TEXT,
-  email TEXT,
-  phone TEXT,
-  payment_code TEXT,
-  amount_before NUMERIC,
-  amount_after NUMERIC,
-  discount_applied NUMERIC,
-  used_at TIMESTAMPTZ DEFAULT NOW()
-)`).catch(() => {});
-pool.query(`CREATE INDEX IF NOT EXISTS idx_promo_usages_promo_id ON promo_usages(promo_id)`).catch(() => {});
-pool.query(`CREATE INDEX IF NOT EXISTS idx_promo_usages_user_key ON promo_usages(user_key)`).catch(() => {});
+// Códigos promocionais — mesmos tipos do schema drizzle (packages/db). As duas
+// fontes têm de criar tabelas idênticas: se divergirem, o `drizzle-kit push` e o
+// standalone brigam pela forma das colunas e os inserts falham.
+const PROMO_DDL = [
+  `DO $$
+   BEGIN
+     CREATE TYPE promo_type AS ENUM('percent','fixed');
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
+  `CREATE TABLE IF NOT EXISTS promo_codes (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+     code varchar(50) NOT NULL UNIQUE,
+     type promo_type NOT NULL DEFAULT 'percent',
+     value integer NOT NULL,
+     min_amount integer,
+     max_discount integer,
+     applies_to varchar(20) NOT NULL DEFAULT 'all',
+     plan_ids jsonb,
+     usage_limit integer,
+     used_count integer NOT NULL DEFAULT 0,
+     per_user boolean NOT NULL DEFAULT true,
+     active boolean NOT NULL DEFAULT true,
+     starts_at timestamp,
+     expires_at timestamp,
+     created_by uuid REFERENCES users(id),
+     created_at timestamp NOT NULL DEFAULT now(),
+     updated_at timestamp NOT NULL DEFAULT now()
+   )`,
+  `CREATE TABLE IF NOT EXISTS promo_usages (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+     promo_id uuid NOT NULL REFERENCES promo_codes(id) ON DELETE cascade,
+     user_id uuid REFERENCES users(id),
+     customer_id uuid REFERENCES customers(id),
+     user_key varchar(255),
+     email varchar(255),
+     phone varchar(50),
+     payment_code varchar(50),
+     amount_before integer,
+     amount_after integer,
+     discount_applied integer,
+     used_at timestamp NOT NULL DEFAULT now()
+   )`,
+  // Tabelas criadas pela migração 0004 (sem user_key) — a coluna é obrigatória
+  // para o limite de "um uso por utilizador".
+  `ALTER TABLE promo_usages ADD COLUMN IF NOT EXISTS user_key varchar(255)`,
+  `CREATE INDEX IF NOT EXISTS idx_promo_usages_promo_id ON promo_usages(promo_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_promo_usages_email_phone ON promo_usages(email, phone)`,
+  `CREATE INDEX IF NOT EXISTS idx_promo_usages_user_key ON promo_usages(promo_id, user_key)`,
+];
+
+// Forma antiga (primeiro deploy): ids SERIAL/INT, customer_id TEXT, created_by
+// INT. Nessa forma o INSERT falhava (created_by leva o uuid do utilizador), por
+// isso a criação de códigos nunca chegou a funcionar — converte-se para uuid
+// com md5 determinístico, preservando os registos já existentes.
+async function repairLegacyPromoSchema() {
+  const cols = await pool.query(
+    `SELECT table_name, column_name, data_type
+       FROM information_schema.columns
+      WHERE table_name IN ('promo_codes', 'promo_usages')
+        AND column_name IN ('id', 'promo_id', 'created_by', 'customer_id')
+        AND data_type <> 'uuid'`
+  );
+  if (!cols.rows.length) return;
+  console.log("[PROMOS] a converter colunas legadas para uuid:", cols.rows.map(r => `${r.table_name}.${r.column_name}:${r.data_type}`).join(", "));
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const anyCodesLegacy = cols.rows.some(r => r.table_name === "promo_codes");
+    if (anyCodesLegacy) {
+      await client.query(`ALTER TABLE promo_codes RENAME TO promo_codes_legacy`);
+      await client.query(`CREATE TABLE promo_codes (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+         code varchar(50) NOT NULL UNIQUE,
+         type promo_type NOT NULL DEFAULT 'percent',
+         value integer NOT NULL,
+         min_amount integer,
+         max_discount integer,
+         applies_to varchar(20) NOT NULL DEFAULT 'all',
+         plan_ids jsonb,
+         usage_limit integer,
+         used_count integer NOT NULL DEFAULT 0,
+         per_user boolean NOT NULL DEFAULT true,
+         active boolean NOT NULL DEFAULT true,
+         starts_at timestamp,
+         expires_at timestamp,
+         created_by uuid REFERENCES users(id),
+         created_at timestamp NOT NULL DEFAULT now(),
+         updated_at timestamp NOT NULL DEFAULT now()
+       )`);
+      await client.query(`INSERT INTO promo_codes
+         (id, code, type, value, min_amount, max_discount, applies_to, plan_ids,
+          usage_limit, used_count, per_user, active, starts_at, expires_at,
+          created_by, created_at, updated_at)
+       SELECT md5(id::text)::uuid, code, type::promo_type, value::integer,
+              min_amount::integer, max_discount::integer, applies_to, plan_ids,
+              usage_limit, used_count, per_user, active, starts_at, expires_at,
+              CASE WHEN created_by IS NULL THEN NULL ELSE md5(created_by::text)::uuid END,
+              created_at, updated_at
+         FROM promo_codes_legacy`);
+      await client.query(`DROP TABLE promo_codes_legacy`);
+    }
+    const anyUsagesLegacy = cols.rows.some(r => r.table_name === "promo_usages");
+    if (anyUsagesLegacy) {
+      await client.query(`ALTER TABLE promo_usages RENAME TO promo_usages_legacy`);
+      await client.query(`CREATE TABLE promo_usages (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+         promo_id uuid NOT NULL REFERENCES promo_codes(id) ON DELETE cascade,
+         user_id uuid REFERENCES users(id),
+         customer_id uuid REFERENCES customers(id),
+         user_key varchar(255),
+         email varchar(255),
+         phone varchar(50),
+         payment_code varchar(50),
+         amount_before integer,
+         amount_after integer,
+         discount_applied integer,
+         used_at timestamp NOT NULL DEFAULT now()
+       )`);
+      await client.query(`INSERT INTO promo_usages
+         (id, promo_id, user_id, customer_id, user_key, email, phone, payment_code,
+          amount_before, amount_after, discount_applied, used_at)
+       SELECT md5(l.id::text)::uuid,
+              md5(l.promo_id::text)::uuid,
+              l.user_id,
+              CASE WHEN l.customer_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                   THEN l.customer_id::uuid ELSE NULL END,
+              l.user_key, l.email, l.phone, l.payment_code,
+              l.amount_before::integer, l.amount_after::integer, l.discount_applied::integer, l.used_at
+         FROM promo_usages_legacy l
+        WHERE l.promo_id IS NOT NULL`);
+      await client.query(`DROP TABLE promo_usages_legacy`);
+    }
+    await client.query("COMMIT");
+    console.log("[PROMOS] conversão para uuid concluída");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+let promoSchemaReady = null;
+function ensurePromoSchema() {
+  if (!promoSchemaReady) {
+    promoSchemaReady = (async () => {
+      for (const stmt of PROMO_DDL) await pool.query(stmt);
+      await repairLegacyPromoSchema();
+    })().catch((err) => {
+      console.error("[PROMOS] schema:", err.message);
+      promoSchemaReady = null;
+      throw err;
+    });
+  }
+  return promoSchemaReady;
+}
+ensurePromoSchema().catch(() => {});
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -2304,6 +2427,7 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     let promoApplied = null;
     let autoConfirm = false;
     if (promo_code) {
+      await ensurePromoSchema();
       const base = officialPreco != null ? officialPreco : amt;
       const v = await validatePromo({ code: promo_code, base, email: customer_email, phone: raw_phone, cademiProduto: cademi_produto });
       if (!v.valid) return res.status(400).json({ error: v.reason || "Código promocional inválido", promo_invalid: true });
@@ -2441,67 +2565,175 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
 });
 
 // ─── Códigos promocionais (CRUD + validação) ─────────────────────────────────
+// Alfabeto sem 0/O/1/I: o código tem de poder ser ditado ao telefone.
+const PROMO_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generatePromoCode(prefix = "FIT") {
+  let out = "";
+  for (let i = 0; i < 8; i++) out += PROMO_CODE_ALPHABET[crypto.randomInt(PROMO_CODE_ALPHABET.length)];
+  return `${prefix}-${out}`;
+}
+
+// Usos que contam (só pagamentos não falhados/cancelados): é o número que o
+// admin vê na lista e o que trava o limite global do código.
+const PROMO_ACTIVE_USAGE_SQL = `
+  SELECT u.promo_id, COUNT(*)::int AS n
+    FROM promo_usages u
+    JOIN payments p ON p.code = u.payment_code
+   WHERE p.status NOT IN ('rejeitado', 'expirado', 'cancelado')
+   GROUP BY u.promo_id`;
+
+// Aceita "2026-10-08T12:00" (datetime-local) ou ISO completo. Devolve null em
+// branco; lança erro em data inválida (o chamador responde 400).
+function promoDate(value, field) {
+  if (value === undefined || value === null || value === "") return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) throw new Error(`DATA_INVALIDA:${field}`);
+  return d.toISOString();
+}
+
+function promoBool(value, fallback) {
+  if (value === undefined) return fallback;
+  return !!value;
+}
+
 app.get("/api/v1/promos", requireAuth, requireManager, async (req, res) => {
   try {
+    await ensurePromoSchema();
     const result = await pool.query("SELECT * FROM promo_codes ORDER BY created_at DESC");
-    res.json({ data: result.rows, total: result.rows.length });
+    const counts = await pool.query(PROMO_ACTIVE_USAGE_SQL);
+    const byId = new Map(counts.rows.map((r) => [String(r.promo_id), Number(r.n)]));
+    const data = result.rows.map((row) => ({ ...row, usage_count: byId.get(String(row.id)) ?? 0 }));
+    res.json({ data, total: data.length });
   } catch (err) {
     console.error("[PROMOS LIST]", err.message);
     res.status(500).json({ error: "Erro a listar códigos." });
   }
 });
 
+app.get("/api/v1/promos/:id/usages", requireAuth, requireManager, async (req, res) => {
+  try {
+    await ensurePromoSchema();
+    const promo = await pool.query("SELECT id FROM promo_codes WHERE id = $1", [req.params.id]);
+    if (!promo.rows[0]) return res.status(404).json({ error: "Código não encontrado" });
+    const r = await pool.query(
+      `SELECT u.id, u.user_key, u.email, u.phone, u.payment_code, u.discount_applied,
+              u.amount_before, u.amount_after, u.used_at,
+              p.status AS payment_status, p.amount AS payment_amount, c.name AS customer_name
+         FROM promo_usages u
+         LEFT JOIN payments p ON p.code = u.payment_code
+         LEFT JOIN customers c ON c.id = u.customer_id
+        WHERE u.promo_id = $1
+        ORDER BY u.used_at DESC
+        LIMIT 200`,
+      [req.params.id]
+    );
+    res.json({ data: r.rows, total: r.rows.length });
+  } catch (err) {
+    console.error("[PROMOS USAGES]", err.message);
+    res.status(500).json({ error: "Erro a ler usos do código." });
+  }
+});
+
 app.post("/api/v1/promos", requireAuth, requireAdmin, async (req, res) => {
   try {
+    await ensurePromoSchema();
     const b = req.body || {};
-    const code = String(b.code || "").trim().toUpperCase();
-    if (!code) return res.status(400).json({ error: "Código obrigatório" });
     const type = String(b.type || "percent").toLowerCase() === "fixed" ? "fixed" : "percent";
     const value = Number(b.value);
     if (!Number.isFinite(value) || value < 0) return res.status(400).json({ error: "Valor inválido" });
     if (type === "percent" && value > 100) return res.status(400).json({ error: "Percentagem máxima é 100" });
     const appliesTo = String(b.applies_to || "all").toLowerCase() === "plans" ? "plans" : "all";
     const planIds = b.plan_ids != null ? (Array.isArray(b.plan_ids) ? b.plan_ids : String(b.plan_ids).split(",").map(s => s.trim()).filter(Boolean)) : null;
-    const r = await pool.query(
-      `INSERT INTO promo_codes (code, type, value, min_amount, max_discount, applies_to, plan_ids, usage_limit, per_user, active, starts_at, expires_at, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [code, type, value,
-       b.min_amount != null && b.min_amount !== "" ? Number(b.min_amount) : null,
-       b.max_discount != null && b.max_discount !== "" ? Number(b.max_discount) : null,
-       appliesTo, JSON.stringify(planIds),
-       b.usage_limit != null && b.usage_limit !== "" ? Number(b.usage_limit) : null,
-       b.per_user === undefined ? true : !!b.per_user,
-       b.active === undefined ? true : !!b.active,
-       b.starts_at || null, b.expires_at || null, req.user?.id || null]
-    );
-    res.status(201).json({ data: result_row(r) });
+    const startsAt = promoDate(b.starts_at, "starts_at");
+    const expiresAt = promoDate(b.expires_at, "expires_at");
+    if (startsAt && expiresAt && new Date(expiresAt).getTime() <= new Date(startsAt).getTime()) {
+      return res.status(400).json({ error: "A expiração tem de ser posterior ao início" });
+    }
+
+    // Sem código (ou `generate`) → o servidor gera um aleatório único.
+    const explicit = String(b.code || "").trim().toUpperCase();
+    const wantsGenerated = !explicit || b.generate === true;
+    const attempts = wantsGenerated ? 5 : 1;
+    let duplicate = false;
+
+    for (let i = 0; i < attempts; i++) {
+      const code = wantsGenerated ? generatePromoCode() : explicit;
+      try {
+        const r = await pool.query(
+          `INSERT INTO promo_codes (code, type, value, min_amount, max_discount, applies_to, plan_ids, usage_limit, per_user, active, starts_at, expires_at, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+          [code, type, Math.round(value),
+           b.min_amount != null && b.min_amount !== "" ? Math.round(Number(b.min_amount)) : null,
+           b.max_discount != null && b.max_discount !== "" ? Math.round(Number(b.max_discount)) : null,
+           appliesTo, JSON.stringify(planIds),
+           b.usage_limit != null && b.usage_limit !== "" ? Math.round(Number(b.usage_limit)) : null,
+           promoBool(b.per_user, true), promoBool(b.active, true),
+           startsAt, expiresAt, req.user?.id || null]
+        );
+        return res.status(201).json({ data: r.rows[0] });
+      } catch (err) {
+        if (!String(err.message || "").includes("duplicate key")) throw err;
+        duplicate = true;
+      }
+    }
+    if (duplicate) return res.status(409).json({ error: "Já existe um código com esse nome." });
+    res.status(500).json({ error: "Erro a criar código." });
   } catch (err) {
-    if (String(err.message || "").includes("duplicate key")) {
-      return res.status(409).json({ error: "Já existe um código com esse nome." });
+    if (String(err.message || "").startsWith("DATA_INVALIDA:")) {
+      return res.status(400).json({ error: "Data inválida" });
     }
     console.error("[PROMOS CREATE]", err.message);
     res.status(500).json({ error: "Erro a criar código." });
   }
 });
 
+app.patch("/api/v1/promos/:id/toggle", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await ensurePromoSchema();
+    const r = await pool.query(
+      "UPDATE promo_codes SET active = NOT active, updated_at = NOW() WHERE id = $1 RETURNING *",
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: "Código não encontrado" });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    console.error("[PROMOS TOGGLE]", err.message);
+    res.status(500).json({ error: "Erro a alternar código." });
+  }
+});
+
+app.delete("/api/v1/promos/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await ensurePromoSchema();
+    // promo_usages apaga em cascade; o histórico de pagamentos mantém metadata.promo.
+    const r = await pool.query("DELETE FROM promo_codes WHERE id = $1 RETURNING id", [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: "Código não encontrado" });
+    res.status(204).end();
+  } catch (err) {
+    console.error("[PROMOS DELETE]", err.message);
+    res.status(500).json({ error: "Erro a apagar código." });
+  }
+});
+
 app.patch("/api/v1/promos/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
+    await ensurePromoSchema();
     const b = req.body || {};
     const fields = [];
     const vals = [];
     const push = (col, val) => { vals.push(val); fields.push(`${col} = $${vals.length}`); };
     if (b.code !== undefined) push("code", String(b.code).trim().toUpperCase());
     if (b.type !== undefined) push("type", String(b.type).toLowerCase() === "fixed" ? "fixed" : "percent");
-    if (b.value !== undefined) push("value", Number(b.value));
-    if (b.min_amount !== undefined) push("min_amount", b.min_amount === null ? null : Number(b.min_amount));
-    if (b.max_discount !== undefined) push("max_discount", b.max_discount === null ? null : Number(b.max_discount));
-    if (b.applies_to !== undefined) push("applies_to", String(b.applies_to).toLowerCase());
+    if (b.value !== undefined) push("value", Math.round(Number(b.value)));
+    if (b.min_amount !== undefined) push("min_amount", b.min_amount === null ? null : Math.round(Number(b.min_amount)));
+    if (b.max_discount !== undefined) push("max_discount", b.max_discount === null ? null : Math.round(Number(b.max_discount)));
+    if (b.applies_to !== undefined) push("applies_to", String(b.applies_to).toLowerCase() === "plans" ? "plans" : "all");
     if (b.plan_ids !== undefined) push("plan_ids", JSON.stringify(b.plan_ids || []));
-    if (b.usage_limit !== undefined) push("usage_limit", b.usage_limit === null ? null : Number(b.usage_limit));
+    if (b.usage_limit !== undefined) push("usage_limit", b.usage_limit === null ? null : Math.round(Number(b.usage_limit)));
     if (b.per_user !== undefined) push("per_user", !!b.per_user);
     if (b.active !== undefined) push("active", !!b.active);
-    if (b.starts_at !== undefined) push("starts_at", b.starts_at || null);
-    if (b.expires_at !== undefined) push("expires_at", b.expires_at || null);
+    if (b.starts_at !== undefined) push("starts_at", promoDate(b.starts_at, "starts_at"));
+    if (b.expires_at !== undefined) push("expires_at", promoDate(b.expires_at, "expires_at"));
     if (!fields.length) return res.status(400).json({ error: "Nada para atualizar" });
     fields.push("updated_at = NOW()");
     vals.push(req.params.id);
@@ -2509,6 +2741,12 @@ app.patch("/api/v1/promos/:id", requireAuth, requireAdmin, async (req, res) => {
     if (!r.rows[0]) return res.status(404).json({ error: "Código não encontrado" });
     res.json({ data: r.rows[0] });
   } catch (err) {
+    if (String(err.message || "").startsWith("DATA_INVALIDA:")) {
+      return res.status(400).json({ error: "Data inválida" });
+    }
+    if (String(err.message || "").includes("duplicate key")) {
+      return res.status(409).json({ error: "Já existe um código com esse nome." });
+    }
     console.error("[PROMOS UPDATE]", err.message);
     res.status(500).json({ error: "Erro a atualizar código." });
   }
@@ -2516,6 +2754,7 @@ app.patch("/api/v1/promos/:id", requireAuth, requireAdmin, async (req, res) => {
 
 app.post("/api/v1/promos/validate", rateLimit(60), async (req, res) => {
   try {
+    await ensurePromoSchema();
     const { code, amount, email, phone, cademi_produto, plan_ids } = req.body || {};
     const v = await validatePromo({ code, base: Number(amount), email, phone, cademiProduto: cademi_produto, planIds: plan_ids });
     if (!v.valid) return res.json({ valid: false, reason: v.reason });

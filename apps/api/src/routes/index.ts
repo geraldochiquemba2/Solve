@@ -22,6 +22,7 @@ import accessRouter from "./access";
 import checkinsRouter from "./checkins";
 import solveAccessRouter from "./solve-access";
 import portalRouter from "./portal";
+import promosRouter from "./promos";
 import { errorHandler, notFoundHandler } from "../middlewares/error";
 
 const router: IRouter = Router();
@@ -54,7 +55,8 @@ router.use(accessRouter);
 router.use(checkinsRouter);
 router.use('/solve-access', solveAccessRouter);
 router.use(portalRouter);
-router.use("/promos", require("./promos").default);
+// O promosRouter já declara os caminhos completos (/promos, /promos/validate, …).
+router.use(promosRouter);
 
 // Error handling
 router.use(notFoundHandler);

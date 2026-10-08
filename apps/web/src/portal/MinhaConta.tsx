@@ -9,6 +9,7 @@ import {
   type PortalPayment,
 } from './api';
 import { randomId } from '@/lib/random';
+import { validatePromoCode, type PromoValidation } from '@/hooks/use-api';
 
 const money = (n: number) =>
   new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n || 0);
@@ -61,6 +62,9 @@ export default function MinhaConta() {
   const [paying, setPaying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [lastRef, setLastRef] = useState<{ entity: string | null; reference: string } | null>(null);
+  const [promo, setPromo] = useState('');
+  const [promoRes, setPromoRes] = useState<PromoValidation | null>(null);
+  const [promoCheck, setPromoCheck] = useState(false);
 
 
   const load = async () => {
@@ -93,23 +97,30 @@ export default function MinhaConta() {
   const nextDue = conta?.proximaMensalidade?.dueDate || null;
 
   const doPagar = async (method: 'express' | 'referencia') => {
+    const codigo = promo.trim().toUpperCase();
+    if (codigo && promoRes?.valid === false) {
+      setPayMsg('Código promocional inválido: ' + (promoRes.reason || 'verifica o código'));
+      return;
+    }
     setPaying(true);
     setPayMsg('');
     try {
       // O número usa-se o da conta (servidor); o método escolhe-se a seguir.
-      const r = await pagar(method, undefined, undefined);
+      const r = await pagar(method, undefined, undefined, codigo || undefined);
+      const desconto = r.promo ? ` · desconto ${money(r.promo.discount)} em ${r.promo.code}` : '';
+      if (r.promo) { setPromo(''); setPromoRes(null); }
       if (method === 'express') {
         setPayMsg(
           r.payment.status === 'confirmado'
-            ? `Pagamento confirmado (${r.payment.code}).`
-            : `Pedido Express enviado para o teu número (${r.payment.code}). Confirma no telemóvel — o estado actualiza ao recarregar.`,
+            ? `Pagamento confirmado (${r.payment.code})${desconto}.`
+            : `Pedido Express enviado para o teu número (${r.payment.code}). Confirma no telemóvel — o estado actualiza ao recarregar.${desconto}`,
         );
       } else {
         setLastRef(r.referencia ? { entity: r.referencia.entity, reference: r.referencia.reference } : null);
         setPayMsg(
           r.referencia
-            ? `Referência ${r.referencia.reference}${r.referencia.entity ? ` · Entidade ${r.referencia.entity}` : ''} · expira ${fmtDate(r.referencia.expiresAt)}`
-            : `Referência criada (${r.payment.code}).`,
+            ? `Referência ${r.referencia.reference}${r.referencia.entity ? ` · Entidade ${r.referencia.entity}` : ''} · expira ${fmtDate(r.referencia.expiresAt)}${desconto}`
+            : `Referência criada (${r.payment.code}).${desconto}`,
         );
       }
       const pays = await listPagamentos(5).catch(() => []);
@@ -118,6 +129,23 @@ export default function MinhaConta() {
       setPayMsg('Erro: ' + (e.message || 'falha ao criar pagamento'));
     }
     setPaying(false);
+  };
+
+  // Pré-visualização do desconto (o servidor volta a validar em `pagar`).
+  const validarPromo = async () => {
+    const codigo = promo.trim().toUpperCase();
+    if (!codigo) { setPromoRes(null); return; }
+    if (!nextAmount) { setPromoRes({ valid: false, reason: 'Sem mensalidade pendente' }); return; }
+    setPromoCheck(true);
+    const r = await validatePromoCode({
+      code: codigo,
+      amount: nextAmount,
+      email: conta?.customer?.email || undefined,
+      phone: conta?.customer?.phone || undefined,
+      plan_ids: conta?.subscription?.planId ? [conta.subscription.planId] : [],
+    });
+    setPromoCheck(false);
+    setPromoRes(r);
   };
 
   const copyRef = (text: string) => {
@@ -189,6 +217,18 @@ export default function MinhaConta() {
               <button className="btn-quiet" onClick={() => copyRef(lastRef.reference)} aria-label="Copiar referência">
                 {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copiado' : 'Copiar'}
               </button>
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="eyebrow">Código promocional</div>
+          <div style={{ display: 'flex', gap: '.4rem', marginTop: '.3rem' }}>
+            <input className="input mono" value={promo} onChange={e => { setPromo(e.target.value.toUpperCase()); setPromoRes(null); }} onBlur={validarPromo} onKeyDown={e => { if (e.key === 'Enter') validarPromo(); }} placeholder="FIT-XXXXXXXX" maxLength={50} style={{ flex: 1, textTransform: 'uppercase' }} data-testid="input-promo-portal" />
+            <button className="btn-secondary" onClick={validarPromo} disabled={promoCheck || !promo.trim()}>{promoCheck ? '…' : 'Aplicar'}</button>
+          </div>
+          {promoRes && (
+            <div style={{ fontSize: '.72rem', marginTop: '.3rem', color: promoRes.valid ? 'hsl(142 60% 40%)' : 'hsl(0 70% 50%)' }}>
+              {promoRes.valid ? `Desconto ${money(promoRes.discount ?? 0)} · total ${money(promoRes.final ?? 0)}` : promoRes.reason}
             </div>
           )}
         </div>

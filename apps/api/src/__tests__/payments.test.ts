@@ -56,7 +56,20 @@ describe("Payments API", () => {
         },
       ];
 
-      mockDb.query.paymentsTable.findMany.mockResolvedValue(mockPayments as any);
+      // O GET lê com select+leftJoin (nome/telefone/email do cliente), não findMany.
+      const rows = mockPayments.map((p) => ({
+        ...p,
+        customerName: p.code === "TRX-81001" ? "Cliente Um" : "Cliente Dois",
+        customerPhone: "912345678",
+        customerEmail: "cliente@example.com",
+      }));
+      const selectChain = {
+        from: vi.fn().mockReturnThis(),
+        leftJoin: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        then: (resolve: (v: unknown[]) => unknown) => resolve(rows),
+      };
+      mockDb.select.mockReturnValue(selectChain as any);
 
       const res = await request(app)
         .get("/api/v1/payments")
@@ -121,6 +134,121 @@ describe("Payments API", () => {
           status: "pendente",
         }),
       );
+    });
+
+    it("should apply a promo code and store the discount server-side", async () => {
+      const customerId = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
+      const promo = {
+        id: "promo-1",
+        code: "FIT-TEST01",
+        type: "percent",
+        value: 20,
+        minAmount: null,
+        maxDiscount: null,
+        appliesTo: "all",
+        planIds: null,
+        usageLimit: null,
+        usedCount: 0,
+        perUser: true,
+        active: true,
+        startsAt: null,
+        expiresAt: null,
+        createdBy: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockDb.query.customersTable.findFirst.mockResolvedValue({
+        id: customerId,
+        email: "ana@example.com",
+        phone: "912345678",
+      } as any);
+      // findPromoByCode -> select().from().where().limit()
+      mockDb.select.mockReturnValue(
+        {
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          then: (resolve: (v: unknown[]) => unknown) => resolve([promo]),
+        } as any,
+      );
+      mockDb.execute.mockResolvedValue({ rows: [] } as any); // sem uso anterior
+      mockDb.$count.mockResolvedValue(0);
+
+      const insertChain = {
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([
+            { id: "pay-new", code: "TRX-81001", customerId, amount: 8000, status: "pendente" },
+          ]),
+        }),
+      };
+      mockDb.insert.mockReturnValue(insertChain as any);
+
+      const res = await request(app)
+        .post("/api/v1/payments")
+        .set("Authorization", `Bearer ${financeiroToken}`)
+        .send({ customerId, amount: 10000, method: "transferencia", promo_code: "fit-test01" });
+
+      expect(res.status).toBe(201);
+
+      // O desconto é calculado e gravado no servidor — não confiamos no cliente.
+      const paymentRow = insertChain.values.mock.calls[0][0];
+      expect(paymentRow.amount).toBe(8000);
+      expect(paymentRow.metadata.promo).toEqual(
+        expect.objectContaining({ code: "FIT-TEST01", original: 10000, discount: 2000, final: 8000 }),
+      );
+      // Uso registado (promo_usages) — segunda chamada a insert().
+      expect(insertChain.values).toHaveBeenCalledTimes(2);
+      expect(insertChain.values.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ promoId: "promo-1", userKey: "ana@example.com", amountAfter: 8000 }),
+      );
+    });
+
+    it("should reject a payment when the user already used the code", async () => {
+      const customerId = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
+      const promo = {
+        id: "promo-1",
+        code: "FIT-TEST01",
+        type: "percent",
+        value: 20,
+        minAmount: null,
+        maxDiscount: null,
+        appliesTo: "all",
+        planIds: null,
+        usageLimit: null,
+        usedCount: 1,
+        perUser: true,
+        active: true,
+        startsAt: null,
+        expiresAt: null,
+        createdBy: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockDb.query.customersTable.findFirst.mockResolvedValue({
+        id: customerId,
+        email: "ana@example.com",
+        phone: "912345678",
+      } as any);
+      mockDb.select.mockReturnValue(
+        {
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          then: (resolve: (v: unknown[]) => unknown) => resolve([promo]),
+        } as any,
+      );
+      mockDb.execute.mockResolvedValue({ rows: [{ one: 1 }] } as any); // já usado
+
+      const res = await request(app)
+        .post("/api/v1/payments")
+        .set("Authorization", `Bearer ${financeiroToken}`)
+        .send({ customerId, amount: 10000, method: "transferencia", promo_code: "FIT-TEST01" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Já utilizou este código");
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
     it("should return 400 with invalid data", async () => {

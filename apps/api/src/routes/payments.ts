@@ -6,6 +6,8 @@ import { eq, desc, sql } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
+import { validatePromo, registerPromoUsage } from "../lib/promo";
+import { deliverInBackground } from "../lib/cademi-delivery";
 
 const router = Router();
 
@@ -15,6 +17,10 @@ const paymentSchema = z.object({
   amount: z.number().int().min(0),
   method: z.string().optional(),
   referenceCode: z.string().optional(),
+  // Código promocional opcional — o servidor calcula o desconto (nunca o cliente).
+  // `promoCode` é o formato interno; `promo_code` é o que enviam admin e widget.
+  promoCode: z.string().trim().min(1).optional(),
+  promo_code: z.string().trim().min(1).optional(),
 });
 
 // List all payments
@@ -71,16 +77,60 @@ router.get("/payments/:id", authenticate, async (req, res, next) => {
 // Create payment (manual entry)
 router.post("/payments", authenticate, authorize("administrador", "gestor", "financeiro"), validate(paymentSchema), async (req, res, next) => {
   try {
+    const { promoCode, promo_code, ...rest } = req.body as z.infer<typeof paymentSchema>;
+    const promoInput = promoCode ?? promo_code;
+
+    let amount = rest.amount;
+    let promoApplied: { code: string; codeId: string; original: number; discount: number; final: number } | null = null;
+    let promoIdentity: { email?: string | null; phone?: string | null } = {};
+
+    if (promoInput) {
+      const customer = await db.query.customersTable.findFirst({
+        where: eq(customersTable.id, rest.customerId),
+      });
+      promoIdentity = { email: customer?.email, phone: customer?.phone };
+      const result = await validatePromo({
+        code: promoInput,
+        base: amount,
+        email: customer?.email,
+        phone: customer?.phone,
+      });
+      if (!result.valid) throw new AppError(400, result.reason);
+      promoApplied = {
+        code: String(promoInput).trim().toUpperCase(),
+        codeId: result.promo.id,
+        original: result.original,
+        discount: result.discount,
+        final: result.final,
+      };
+      amount = result.final;
+    }
+
     const count = await db.$count(paymentsTable);
     const code = `TRX-${String(81000 + count + 1).padStart(5, "0")}`;
 
     const [payment] = await db
       .insert(paymentsTable)
       .values({
-        ...req.body,
+        ...rest,
+        amount,
         code,
+        ...(promoApplied ? { metadata: { promo: promoApplied } } : {}),
       })
       .returning();
+
+    if (promoApplied) {
+      await registerPromoUsage({
+        promo: { id: promoApplied.codeId },
+        original: promoApplied.original,
+        discount: promoApplied.discount,
+        final: promoApplied.final,
+        email: promoIdentity.email ?? null,
+        phone: promoIdentity.phone ?? null,
+        customerId: payment.customerId,
+        paymentCode: payment.code,
+      });
+    }
 
     res.status(201).json({ data: payment });
   } catch (err) {
@@ -108,6 +158,9 @@ router.patch("/payments/:id/reconcile", authenticate, authorize("administrador",
       })
       .where(eq(paymentsTable.id, req.params.id as string))
       .returning();
+
+    // Confirmação no CRM → entrega do acesso na Cademi (fundo, idempotente).
+    deliverInBackground(payment!.code);
 
     res.json({ data: payment });
   } catch (err) {

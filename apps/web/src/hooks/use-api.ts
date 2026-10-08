@@ -640,3 +640,159 @@ export function useImportCustomerDates() {
     },
   });
 }
+
+// ─── Códigos promocionais ───────────────────────────────────────────────────
+// `apps/api` (drizzle) devolve camelCase (`minAmount`, `startsAt`, `usageCount`);
+// o `standalone-server` (produção) devolve as colunas em snake_case
+// (`min_amount`, `starts_at`, `usage_count`). `normalizePromo` aceita as duas
+// formas para o resto do UI só ver um formato.
+export interface PromoCode {
+  id: string;
+  code: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  minAmount: number | null;
+  maxDiscount: number | null;
+  appliesTo: 'all' | 'plans';
+  planIds: string[];
+  usageLimit: number | null;
+  usedCount: number;
+  usageCount: number;
+  perUser: boolean;
+  active: boolean;
+  startsAt: string | null;
+  expiresAt: string | null;
+  createdAt: string | null;
+}
+
+export interface PromoUsage {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  payment_code: string | null;
+  discount_applied: number | null;
+  amount_before: number | null;
+  amount_after: number | null;
+  used_at: string | null;
+  payment_status: string | null;
+  payment_amount: number | null;
+  customer_name: string | null;
+}
+
+const pick = (o: Record<string, any>, a: string, b: string) => {
+  const v = o?.[a] ?? o?.[b];
+  return v === undefined ? null : v;
+};
+
+export function normalizePromo(raw: any): PromoCode {
+  const o = (raw ?? {}) as Record<string, any>;
+  const usage = Number(pick(o, 'usageCount', 'usage_count') ?? 0);
+  return {
+    id: String(o.id ?? ''),
+    code: String(o.code ?? ''),
+    type: o.type === 'fixed' ? 'fixed' : 'percent',
+    value: Number(o.value ?? 0),
+    minAmount: numOrNull(pick(o, 'minAmount', 'min_amount')),
+    maxDiscount: numOrNull(pick(o, 'maxDiscount', 'max_discount')),
+    appliesTo: pick(o, 'appliesTo', 'applies_to') === 'plans' ? 'plans' : 'all',
+    planIds: Array.isArray(pick(o, 'planIds', 'plan_ids')) ? (pick(o, 'planIds', 'plan_ids') as string[]) : [],
+    usageLimit: numOrNull(pick(o, 'usageLimit', 'usage_limit')),
+    usedCount: Number(pick(o, 'usedCount', 'used_count') ?? 0),
+    usageCount: Number.isFinite(usage) ? usage : 0,
+    perUser: pick(o, 'perUser', 'per_user') !== false,
+    active: o.active !== false,
+    startsAt: strOrNull(pick(o, 'startsAt', 'starts_at')),
+    expiresAt: strOrNull(pick(o, 'expiresAt', 'expires_at')),
+    createdAt: strOrNull(pick(o, 'createdAt', 'created_at')),
+  };
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function strOrNull(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  return String(v);
+}
+
+export function useListPromos(options?: OpcoesQuery) {
+  return useQuery({
+    queryKey: ['promos'],
+    queryFn: async () => {
+      const json = await apiGet<{ data: any[]; total: number }>('/api/v1/promos');
+      return { data: (json.data ?? []).map(normalizePromo), total: json.total ?? (json.data ?? []).length };
+    },
+    ...options,
+  });
+}
+
+export function usePromoUsages(promoId: string | null, options?: OpcoesQuery) {
+  return useQuery({
+    queryKey: ['promos', promoId, 'usages'],
+    queryFn: () => apiGet<{ data: PromoUsage[]; total: number }>(`/api/v1/promos/${promoId}/usages`),
+    enabled: !!promoId && (options?.enabled ?? true),
+    ...options,
+  });
+}
+
+export function useCreatePromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      apiMutate<{ data: any }>('/api/v1/promos', 'POST', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promos'] }),
+  });
+}
+
+export function useUpdatePromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string } & Record<string, unknown>) =>
+      apiMutate<{ data: any }>(`/api/v1/promos/${id}`, 'PATCH', patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promos'] }),
+  });
+}
+
+export function useTogglePromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiMutate<{ data: any }>(`/api/v1/promos/${id}/toggle`, 'PATCH'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promos'] }),
+  });
+}
+
+export function useDeletePromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiMutate<void>(`/api/v1/promos/${id}`, 'DELETE'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promos'] }),
+  });
+}
+
+export interface PromoValidation {
+  valid: boolean;
+  reason?: string;
+  discount?: number;
+  original?: number;
+  final?: number;
+  type?: 'percent' | 'fixed';
+  value?: number;
+}
+
+/** Valida um código contra um montante (endpoint público; nunca lança). */
+export async function validatePromoCode(payload: {
+  code: string;
+  amount?: number;
+  email?: string | null;
+  phone?: string | null;
+  cademi_produto?: string | null;
+  plan_ids?: string[];
+}): Promise<PromoValidation> {
+  try {
+    return await apiPost<PromoValidation>('/api/v1/promos/validate', payload);
+  } catch (e: any) {
+    return { valid: false, reason: e?.message || 'Erro ao validar o código' };
+  }
+}

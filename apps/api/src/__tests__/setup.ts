@@ -11,6 +11,8 @@ vi.mock("@workspace/db", () => {
     paymentsTable: { findFirst: createMock(), findMany: createMock() },
     subscriptionsTable: { findFirst: createMock(), findMany: createMock() },
     settingsTable: { findFirst: createMock(), findMany: createMock() },
+    promoCodesTable: { findFirst: createMock(), findMany: createMock() },
+    promoUsagesTable: { findFirst: createMock(), findMany: createMock() },
     portalOtpsTable: { findFirst: createMock(), findMany: createMock() },
   };
 

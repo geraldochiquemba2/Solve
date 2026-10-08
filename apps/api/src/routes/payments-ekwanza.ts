@@ -8,6 +8,7 @@ import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
 import { ekwanzaClient, EkwanzaError } from "../lib/ekwanza";
 import { processEkwanzaCallback } from "../lib/ekwanza-callback";
+import { deliverInBackground } from "../lib/cademi-delivery";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -153,6 +154,8 @@ router.post(
         payment = { ...payment, status: "confirmado" };
         const { broadcastPaymentUpdate } = await import("../app");
         broadcastPaymentUpdate({ type: "payment_updated", code, status: "confirmado" });
+        // Pagamento confirmado → entrega do acesso na Cademi (fundo, idempotente).
+        deliverInBackground(code);
       } else if (gpoStatus === "Failed" || gpoStatus === "Cancelled" || gpoStatus === "Expired") {
         await db.update(paymentsTable).set({
           status: "rejeitado",
@@ -309,6 +312,7 @@ router.get(
         // Broadcast real-time update
         const { broadcastPaymentUpdate } = await import("../app");
         broadcastPaymentUpdate({ type: "payment_updated", code: payment.code, status: newStatus });
+        if (newStatus === "confirmado") deliverInBackground(payment.code);
       }
 
       res.json({
@@ -341,6 +345,7 @@ router.post(
       if (outcome.verified && outcome.code && outcome.status) {
         const { broadcastPaymentUpdate } = await import("../app");
         broadcastPaymentUpdate({ type: "payment_updated", code: outcome.code, status: outcome.status });
+        if (outcome.status === "confirmado") deliverInBackground(outcome.code);
       }
 
       res.json({ received: true });

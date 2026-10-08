@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
@@ -331,11 +331,15 @@ export const promoCodesTable = pgTable("promo_codes", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// `userKey` é a identidade estável do utilizador que usou o código
+// (email normalizado > telefone normalizado). É por aqui que se garante o uso
+// único por utilizador — `email`/`phone` ficam como evidência legível.
 export const promoUsagesTable = pgTable("promo_usages", {
   id: uuid("id").primaryKey().defaultRandom(),
   promoId: uuid("promo_id").notNull().references(() => promoCodesTable.id, { onDelete: "cascade" }),
   userId: uuid("user_id").references(() => usersTable.id),
   customerId: uuid("customer_id").references(() => customersTable.id),
+  userKey: varchar("user_key", { length: 255 }),
   email: varchar("email", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
   paymentCode: varchar("payment_code", { length: 50 }),
@@ -343,4 +347,8 @@ export const promoUsagesTable = pgTable("promo_usages", {
   amountAfter: integer("amount_after"),
   discountApplied: integer("discount_applied"),
   usedAt: timestamp("used_at").notNull().defaultNow(),
-});
+}, (t) => [
+  index("idx_promo_usages_promo_id").on(t.promoId),
+  index("idx_promo_usages_email_phone").on(t.email, t.phone),
+  index("idx_promo_usages_user_key").on(t.promoId, t.userKey),
+]);
