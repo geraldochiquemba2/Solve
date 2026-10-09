@@ -1719,7 +1719,7 @@ function PromoCodesPage() {
 
     {usos && <PromoUsagesModal promo={usos} onClose={() => setUsos(null)} />}
 
-    {modal && <div className="modal-backdrop" onMouseDown={() => setModal(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '1.2rem' }}>
+    {modal && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '1.2rem' }}>
       <h3 style={{ marginBottom: '.2rem' }}>{editingId ? 'Editar código' : 'Novo código promocional'}</h3>
       <div className="section-note" style={{ marginBottom: '1rem' }}>O código é validado no servidor antes de qualquer desconto.</div>
 
