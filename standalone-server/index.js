@@ -646,6 +646,28 @@ const PROMO_DDL = [
   `CREATE INDEX IF NOT EXISTS idx_promo_usages_user_key ON promo_usages(promo_id, user_key)`,
 ];
 
+// Em PostgreSQL, `ALTER TABLE ... RENAME TO` não renomeia os índices/constraints
+// associados: nomes auto-gerados (promo_codes_pkey, promo_codes_code_key,
+// promo_usages_pkey, idx_promo_usages_promo_id, …) ficam presos à tabela antiga.
+// Ao criar a tabela nova com o mesmo nome, o PK rebenta com "relation already
+// exists" e os CREATE INDEX IF NOT EXISTS ficam no-op (a nova tabela fica sem
+// índices). Liberta os nomes antes de criar a tabela nova.
+async function freeLegacyIndexNames(client, legacyTable) {
+  const { rows } = await client.query(
+    `SELECT i.relname AS indexname
+       FROM pg_index x
+       JOIN pg_class t ON t.oid = x.indrelid
+       JOIN pg_class i ON i.oid = x.indexrelid
+      WHERE t.oid = to_regclass($1)`,
+    [legacyTable]
+  );
+  for (const { indexname } of rows) {
+    const alvo = `${indexname}_lg`.slice(0, 63);
+    if (alvo === indexname) continue;
+    await client.query(`ALTER INDEX "${indexname}" RENAME TO "${alvo}"`);
+  }
+}
+
 // Forma antiga (primeiro deploy): ids SERIAL/INT, created_by INT,
 // customer_id TEXT e promo_usages sem user_id. Nessa forma a criação de códigos
 // nunca chegou a funcionar — converte-se para uuid com md5 determinístico (o
@@ -759,11 +781,13 @@ async function repairLegacyPromoSchema() {
     await client.query("BEGIN");
     if (codesLegacy) {
       await client.query(`ALTER TABLE promo_codes RENAME TO promo_codes_legacy`);
+      await freeLegacyIndexNames(client, "promo_codes_legacy");
       await client.query(PROMO_CODES_DDL);
       await client.query(insertFrom("promo_codes", codesCols));
     }
     if (usagesLegacy) {
       await client.query(`ALTER TABLE promo_usages RENAME TO promo_usages_legacy`);
+      await freeLegacyIndexNames(client, "promo_usages_legacy");
       await client.query(PROMO_USAGES_DDL);
       await client.query(insertFrom("promo_usages", usagesCols, usagesWhere));
     }

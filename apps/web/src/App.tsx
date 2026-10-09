@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -1676,8 +1676,9 @@ function PromoCodesPage() {
   const estadoDeGuardado = createMut.isPending || updateMut.isPending;
 
   if (query.isError) {
+    const detalhe = (query.error as any)?.message;
     return <><PageHeader eyebrow="Receita · Promoções" title="Códigos promocionais" subtitle="Descontos por código, com validade e limite de usos." />
-      <EmptyState title="Não foi possível carregar os códigos" text="Sem permissão para ver promoções ou a API não respondeu." action={<button className="btn-secondary" onClick={() => query.refetch()}>Tentar de novo</button>} /></>;
+      <EmptyState title="Não foi possível carregar os códigos" text={`Sem permissão para ver promoções ou a API não respondeu.${detalhe ? ` (${detalhe})` : ''}`} action={<button className="btn-secondary" onClick={() => query.refetch()}>Tentar de novo</button>} /></>;
   }
 
   return <>
@@ -2826,7 +2827,14 @@ function SettingsPage() {
 function Preference({ label, detail, on, setOn }: { label: string; detail: string; on: boolean; setOn: (v: boolean) => void }) { return <button className="btn-quiet" style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '.7rem .2rem' }} onClick={() => setOn(!on)}><div style={{ flex: 1 }}><div style={{ fontSize: '.76rem', fontWeight: 700, color: 'hsl(var(--foreground))' }}>{label}</div><div style={{ fontSize: '.66rem', color: 'hsl(var(--muted-foreground))', marginTop: '.18rem' }}>{detail}</div></div>{on ? <ToggleRight size={22} color="hsl(155 41% 43%)" /> : <ToggleLeft size={22} color="hsl(var(--muted-foreground))" />}</button>; }
 
 function AppShell({ children, userName, auditCount, userRole }: { children: ReactNode; userName?: string; auditCount?: number; userRole?: string }) {
-  const [menu, setMenu] = useState(false); return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} userRole={userRole} /><div className="main-area"><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
+  const [menu, setMenu] = useState(false);
+  const [location] = useLocation();
+  const mainAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    mainAreaRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location]);
+  return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} userRole={userRole} /><div className="main-area" ref={mainAreaRef}><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {

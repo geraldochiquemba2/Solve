@@ -68,7 +68,11 @@ async function handleUnauthorized() {
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
   if (res.status === 401) { handleUnauthorized(); throw new Error('Não autenticado'); }
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `API error: ${res.status}` }));
+    const msg = err.error || `API error: ${res.status}`;
+    throw new Error(err.details ? `${msg} (${err.details})` : msg);
+  }
   return res.json();
 }
 
