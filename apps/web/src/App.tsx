@@ -1537,6 +1537,16 @@ const promoFormVazio = (): PromoForm => ({
   appliesTo: 'all', planIds: [],
 });
 
+// Mesmo alfabeto do servidor (sem 0/O/1/I para poder ser ditado ao telefone).
+const PROMO_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const gerarCodigoPromo = (prefix = 'FIT') => {
+  const bytes = new Uint32Array(8);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < 8; i++) out += PROMO_CODE_ALPHABET[bytes[i] % PROMO_CODE_ALPHABET.length];
+  return `${prefix}-${out}`;
+};
+
 // datetime-local pede "YYYY-MM-DDTHH:mm" local; a API devolve ISO.
 const paraInputLocal = (iso: string | null) => {
   if (!iso) return '';
@@ -1726,7 +1736,7 @@ function PromoCodesPage() {
       <label className="form-label">Código {editingId ? '*' : '(deixe vazio para gerar)'}</label>
       <div style={{ display: 'flex', gap: '.4rem' }}>
         <input className="input mono" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="FIT-XXXXXXXX" maxLength={50} style={{ flex: 1, textTransform: 'uppercase' }} />
-        {!editingId && <button className="btn-secondary" onClick={() => setForm({ ...form, code: '' })}>Gerar</button>}
+        {!editingId && <button className="btn-secondary" onClick={() => setForm({ ...form, code: gerarCodigoPromo() })}>Gerar</button>}
       </div>
 
       <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
