@@ -32,7 +32,7 @@ const HARNESSES = [
   ["headers, CORS e cookies", "headers-cors.mjs", 21],
   ["leituras públicas do widget Cademi", "public-lookup.mjs", 23],
   ["painel /admin e RBAC de gestão", "admin-guard.mjs", 25],
-  ["conversão do esquema legado de promos", "promo-schema.mjs", 5],
+  ["conversão do esquema legado de promos", "promo-schema.mjs", 6],
 ];
 
 function correrHarness(ficheiro) {

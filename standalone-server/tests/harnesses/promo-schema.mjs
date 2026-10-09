@@ -86,6 +86,13 @@ await check("liberta o nome do PK antes do CREATE TABLE novo (promo_usages)", as
   ok(ordem.test(code), "promo_usages: index names não são libertados antes do CREATE TABLE");
 });
 
+await check("comparações de payment_status não dependem do enum (usam ::text)", async () => {
+  const diretas = code.match(/p\.status NOT IN/g) || [];
+  ok(diretas.length === 0, `há ${diretas.length} comparação(ões) direta(s) com o enum payment_status (rebentam se o valor não existir no enum)`);
+  const comCast = code.match(/p\.status::text NOT IN/g) || [];
+  ok(comCast.length >= 3, `esperadas >=3 comparações com ::text, encontradas ${comCast.length}`);
+});
+
 // ── resultado ───────────────────────────────────────────────────────────────
 let passou = 0;
 let falhou = 0;

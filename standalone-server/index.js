@@ -2282,7 +2282,7 @@ async function validatePromo({ code, base, email, phone, cademiProduto, planIds 
         `SELECT 1 FROM promo_usages u
            JOIN payments p ON p.code = u.payment_code
           WHERE u.promo_id = $1 AND u.user_key = $2
-            AND p.status NOT IN ('rejeitado','expirado','cancelado')
+            AND p.status::text NOT IN ('rejeitado','expirado','cancelado')
           LIMIT 1`,
         [promo.id, key]
       );
@@ -2294,7 +2294,7 @@ async function validatePromo({ code, base, email, phone, cademiProduto, planIds 
         `SELECT COUNT(*)::int AS n FROM promo_usages u
            JOIN payments p ON p.code = u.payment_code
           WHERE u.promo_id = $1
-            AND p.status NOT IN ('rejeitado','expirado','cancelado')`,
+            AND p.status::text NOT IN ('rejeitado','expirado','cancelado')`,
         [promo.id]
       );
       if ((cnt.rows[0]?.n || 0) >= Number(promo.usage_limit)) {
@@ -2652,7 +2652,7 @@ const PROMO_ACTIVE_USAGE_SQL = `
   SELECT u.promo_id, COUNT(*)::int AS n
     FROM promo_usages u
     JOIN payments p ON p.code = u.payment_code
-   WHERE p.status NOT IN ('rejeitado', 'expirado', 'cancelado')
+   WHERE p.status::text NOT IN ('rejeitado', 'expirado', 'cancelado')
    GROUP BY u.promo_id`;
 
 // Aceita "2026-10-08T12:00" (datetime-local) ou ISO completo. Devolve null em
