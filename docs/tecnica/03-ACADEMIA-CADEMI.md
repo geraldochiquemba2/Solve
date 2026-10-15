@@ -50,8 +50,10 @@ restante e bloqueia; sem preço = em breve), montante só leitura, Express
 (com telefone) / Referência (sem telefone), nome/email só leitura (auto:
 memória + login + busca oficial), **Os meus pagamentos (N)** em modal próprio
 (histórico com referências, copiar só número, cancelar), 1 pendente de cada vez,
-revalidação anti-race no clique. Após pagar: se a aula não aparecer, sair/entrar
-(sessão Cademi só carrega acessos ao entrar). Diagnóstico: `?spw_debug=1`.
+revalidação anti-race no clique). Após pagar confirmado, o widget espera que o
+acesso apareça (`/cademi/acesso`) e **recarrega a página automaticamente** para o
+desbloquear; se o acesso não aparecer dentro de ~36s (ou a quota do lookup
+esgotar), cai para logout (usa o link "sair" da página). Diagnóstico: `?spw_debug=1`.
 
 ## Criar novo produto para vender
 1. Cademi: produto + entrega Customizada (30 dias) + preço na vitrine.

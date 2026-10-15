@@ -74,7 +74,7 @@
     m.innerHTML =
       "<h3>Pagar mensalidade</h3>" +
       "<div class='spw-note'>SamoraFit · pagamento</div>" +
-      "<div style='font-size:.72rem;color:#666;background:#f4f4f5;border-radius:6px;padding:.45rem .6rem;margin-bottom:.2rem'>Após o pagamento, faz logout e entra de novo (login) para teres acesso às aulas.</div>" +
+      "<div style='font-size:.72rem;color:#666;background:#f4f4f5;border-radius:6px;padding:.45rem .6rem;margin-bottom:.2rem'>Após o pagamento o acesso às aulas é ativado automaticamente e a página recarrega. Se não aparecer, faz logout e entra de novo (login).</div>" +
       "<label class='spw-label'>Conteúdo</label><select id='spw-prod' class='spw-select'></select>" +
       "<div id='spw-acessos' style='font-size:.72rem;color:#666;margin-top:.3rem'></div>" +
       "<div class='spw-row'><div><label class='spw-label'>Montante (Kz) *</label><input id='spw-amt' class='spw-input' type='text' inputmode='numeric' readonly style='background:#f4f4f5'></div>" +
@@ -365,10 +365,11 @@
         for (var k = 0; k < list.length; k++) {
           var ac = list[k];
           var pn = String(ac.produto_nome || "").toLowerCase().trim();
-          // Igualdade estrita (slug ou nome): "teste" NÃO pode bloquear "teste2".
-          var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
           if (!pn) continue;
-          if (slug === op.value || pn === base.toLowerCase().trim()) {
+          // Tolerante ao preço colado no nome (mesmaEntrega, regra do servidor);
+          // mantém a igualdade exata por nome do catálogo manual. O prefixo exige
+          // hífen de fronteira, por isso "teste" não bloqueia "teste2".
+          if (mesmaEntrega(ac.produto_nome, op.value) || pn === base.toLowerCase().trim()) {
             matched[op.value] = true;
             var hasPrice = false;
             var priceTxt = "";
@@ -411,6 +412,86 @@
       if (paidNotes.length) parts.push("Pago · a ativar acesso: " + paidNotes.join(" · "));
       if (parts.length && accEl) accEl.textContent = parts.join(" | ");
     } catch (e) {}
+  }
+
+  // Slug do nome do produto Cademi (mesma regra usada em refreshAccess e no servidor).
+  function accessSlug(nome) {
+    return String(nome || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  // Compara o conteúdo comprado com o acesso devolvido pela Cademi. O nome na
+  // Cademi traz o preço colado ("SamoraFit Workout- 3 Meses - 12999kzs") e o CRM
+  // guarda o slug limpo ("samorafit-workout-3-meses"): normaliza os dois, remove
+  // o sufixo de preço e aceita igualdade exata ou prefixo no limite de palavra.
+  // Mesma regra do `mesmaEntrega` no servidor (standalone-server/index.js).
+  function mesmaEntrega(a, b) {
+    var limpa = function (s) { return accessSlug(s).replace(/-\d+kzs$/, ""); };
+    var x = limpa(a), y = limpa(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    return x.indexOf(y + "-") === 0 || y.indexOf(x + "-") === 0;
+  }
+
+  // Estado do acesso do aluno na Cademi: "active" (novo acesso ativo),
+  // "inactive" (ainda não), "limited" (429 — quota esgotada) ou "error".
+  // Um acesso expirado com a mesma entrega é ignorado (renovação): só conta o novo.
+  async function checkAccessState(email, prod) {
+    try {
+      var r = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(email));
+      if (r.status === 429) return "limited";
+      var j = await r.json().catch(function () { return {}; });
+      var list = (j && Array.isArray(j.data)) ? j.data : [];
+      for (var i = 0; i < list.length; i++) {
+        var ac = list[i];
+        if (ac.encerrado) continue;
+        if (mesmaEntrega(ac.produto_nome, prod)) return "active";
+      }
+    } catch (e) { return "error"; }
+    return "inactive";
+  }
+
+  // Fallback: termina a sessão Cademi (link "sair/logout") para forçar a
+  // releitura dos acessos no próximo login. Devolve true se navegou.
+  function logoutNow() {
+    try {
+      var a = document.querySelector('a[href*="logout" i], a[href*="sair" i], a[href*="sign-out" i]');
+      var href = a && a.getAttribute && a.getAttribute("href");
+      if (href) { window.location.href = href; return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  // Após pagamento confirmado: espera que a Cademi crie o acesso e recarrega a
+  // página (a sessão Cademi só relê os acessos ao carregar/entrar). Se o acesso
+  // não aparecer dentro do tempo, cai para logout (fallback).
+  //
+  // O endpoint /cademi/acesso é público e limitado (15/15min por conta), por isso
+  // usamos um orçamento curto e espaçado e paramos logo em 429 para não bloquear
+  // o checkout do próprio aluno.
+  async function unlockAfterPayment(m, prod, email) {
+    if (!email || email.indexOf("@") < 0) {
+      msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas.");
+      return;
+    }
+    msg(m, "Pagamento confirmado! A ativar o acesso… aguarda um momento.");
+    for (var i = 0; i < 6; i++) {
+      var st = await checkAccessState(email, prod);
+      if (st === "active") {
+        msg(m, "Acesso ativado! A recarregar a página…");
+        await sleep(1200);
+        try { window.location.reload(); } catch (e) {}
+        return;
+      }
+      if (st === "limited") break;
+      await sleep(6000);
+    }
+    // Acesso ainda não visível: cai para logout para forçar releitura no login.
+    if (logoutNow()) {
+      msg(m, "Acesso em ativação — a terminar a sessão. Volta a entrar (login) para veres as aulas.");
+      return;
+    }
+    msg(m, "Acesso em ativação. Faz logout e entra de novo (login) para veres as aulas.", true);
   }
 
   // Histórico do aluno (pendentes, pagos, cancelados, referências) + cancelar.
@@ -716,8 +797,7 @@
         for (var ai = 0; ai < alist.length; ai++) {
           var ac = alist[ai];
           var pn = String(ac.produto_nome || "").toLowerCase().trim();
-          var slug = pn.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-          var same = pn && (slug === prod || pn === String(chosen.nome || "").toLowerCase().trim());
+          var same = pn && (mesmaEntrega(ac.produto_nome, prod) || pn === String(chosen.nome || "").toLowerCase().trim());
           if (same) sameAny = true;
           if (same && !ac.encerrado) {
             msg(m, "Já tens acesso ativo a este conteúdo.", true);
@@ -834,7 +914,7 @@
           payUrl = st.hosted_url;
           msg(m, "Link pronto. Paga e volta aqui.");
         }
-        if (s === "confirmado") { msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas."); break; }
+        if (s === "confirmado") { await unlockAfterPayment(m, prod, email); break; }
         if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
       }
     } catch (e) {
