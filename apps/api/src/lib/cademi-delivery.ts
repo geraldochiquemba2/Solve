@@ -20,6 +20,21 @@ function slugify(s: unknown): string {
     .replace(/^-+|-+$/g, "");
 }
 
+// Compara o produto/entrega comprado com o acesso real devolvido pela Cademi.
+// Na Cademi o nome do produto leva o preço colado ("SamoraFit Workout- 3 Meses
+// - 12999kzs") e o id é numérico, enquanto o CRM guarda/envia o slug limpo
+// ("samorafit-workout-3-meses"). Normaliza os dois para slug, remove o sufixo
+// de preço ("-12999kzs") e aceita igualdade exata ou prefixo no limite de
+// palavra — o slug base "samorafit-workout" cobre os planos de duração.
+function mesmaEntrega(a: unknown, b: unknown): boolean {
+  const limpa = (s: unknown) => slugify(s).replace(/-\d+kzs$/, "");
+  const x = limpa(a);
+  const y = limpa(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return x.startsWith(y + "-") || y.startsWith(x + "-");
+}
+
 function parseMetadata(raw: unknown): Record<string, any> {
   if (typeof raw === "string") {
     try {
@@ -105,7 +120,7 @@ export async function sendCademiDelivery(paymentCode: string, force = false): Pr
         acessosCount = acessos.length;
         verified = acessos.some((ac) => {
           if (ac.encerrado) return false;
-          return slugify(ac.produto?.nome) === produtoId || String(ac.produto?.id ?? "") === produtoId;
+          return String(ac.produto?.id ?? "") === produtoId || mesmaEntrega(ac.produto?.nome, produtoId);
         });
       }
     } catch (err) {

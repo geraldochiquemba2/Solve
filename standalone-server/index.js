@@ -3241,8 +3241,7 @@ async function sendCademiDelivery(paymentCode, force = false) {
         acessosCount = acessos.length;
         verified = acessos.some(ac => {
           if (ac.encerrado) return false;
-          const slug = slugify(ac.produto?.nome);
-          return slug === produtoId || String(ac.produto?.id ?? "") === produtoId;
+          return String(ac.produto?.id ?? "") === produtoId || mesmaEntrega(ac.produto?.nome, produtoId);
         });
       }
     } catch (e) { console.error(`[CADEMI] ${payment.code}: falha a verificar acesso:`, e.message); }
@@ -3268,6 +3267,20 @@ async function sendCademiDelivery(paymentCode, force = false) {
 function slugify(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+// Compara o produto/entrega comprado com o acesso real devolvido pela Cademi.
+// Na Cademi o nome do produto leva o preço colado ("SamoraFit Workout- 3 Meses
+// - 12999kzs") e o id é numérico, enquanto o CRM guarda/envia o slug limpo
+// ("samorafit-workout-3-meses"). Normaliza os dois para slug, remove o sufixo
+// de preço ("-12999kzs") e aceita igualdade exata ou prefixo no limite de
+// palavra — o slug base "samorafit-workout" cobre os planos de duração.
+function mesmaEntrega(a, b) {
+  const limpa = (s) => slugify(s).replace(/-\d+kzs$/, "");
+  const x = limpa(a), y = limpa(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return x.startsWith(y + "-") || y.startsWith(x + "-");
 }
 
 // Catálogo SamoraFit Workout: só os planos de duração, por ordem crescente de meses
