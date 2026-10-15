@@ -10,6 +10,24 @@
   var API_KEY = "";
   var RED = "#D71920";
 
+  // ── Neutraliza o redirect forçado do Código personalizado da Cademi ─────────
+  // Existe lá um script inline no <body> que, em /auth/login SEM from=cadastrar
+  // nem modo=login, faz window.location.replace('/auth/cadastrar?redirect=...').
+  // Com sessão iniciada a Cademi tira o utilizador do cadastrar e volta ao login
+  // -> ERR_TOO_MANY_REDIRECTS. Este ficheiro carrega no <head>, por isso corre
+  // ANTES desse script: marca modo=login (a "saída" que ele respeita) via
+  // history.replaceState, sem nova navegação. A action do formulário não muda
+  // (continua /auth/login?redirect=...), logo o POST de login fica intacto.
+  (function neutralizaRedirectCademi() {
+    try {
+      if (!window.location || window.location.pathname !== "/auth/login") return;
+      var qs = new URLSearchParams(window.location.search);
+      if (qs.get("from") === "cadastrar" || qs.get("modo") === "login") return;
+      qs.set("modo", "login");
+      window.history.replaceState(null, "", "/auth/login?" + qs.toString());
+    } catch (e) {}
+  })();
+
   function h(url, opts) {
     opts = opts || {};
     opts.headers = Object.assign({ "X-API-Key": API_KEY }, opts.headers || {});

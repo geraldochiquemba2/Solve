@@ -55,6 +55,16 @@ acesso apareça (`/cademi/acesso`) e **recarrega a página automaticamente** par
 desbloquear; se o acesso não aparecer dentro de ~36s (ou a quota do lookup
 esgotar), cai para logout (usa o link "sair" da página). Diagnóstico: `?spw_debug=1`.
 
+### Neutralizar o redirect de login da Cademi
+Existe no Código personalizado da Cademi um script (snippet "Telefone Angola
+Padrao") que força `/auth/login` → `/auth/cadastrar` quando o URL não traz
+`from=cadastrar`/`modo=login`. Com sessão iniciada isso gera
+`ERR_TOO_MANY_REDIRECTS`. Como o `pay-widget.js` carrega no `<head>` (antes do
+script inline no `<body>`), marca `modo=login` via `history.replaceState` no
+`/auth/login` (`neutralizaRedirectCademi`), sem navegação e sem afetar o POST do
+formulário. Ideal é remover o bloco original no painel; até lá, o widget impede
+o loop.
+
 ## Criar novo produto para vender
 1. Cademi: produto + entrega Customizada (30 dias) + preço na vitrine.
 2. Nada a dar a ninguém: o slug entra sozinho na lista (derivado do nome).
