@@ -40,9 +40,22 @@
     } catch (e) {}
   })();
 
+  // Wrapper do fetch com timeout opcional (opts.timeoutMs). Sem isto, uma
+  // chamada a um servidor lento (Render a acordar de cold start) fica presa
+  // indefinidamente e prende a UI — era o que deixava o desbloqueio parado em
+  // "A ativar o acesso…" para sempre, obrigando a terminar a sessão à mão.
   function h(url, opts) {
     opts = opts || {};
     opts.headers = Object.assign({ "X-API-Key": API_KEY }, opts.headers || {});
+    var ms = opts.timeoutMs || 0;
+    delete opts.timeoutMs;
+    if (ms > 0 && typeof AbortController !== "undefined") {
+      var ctrl = new AbortController();
+      var to = setTimeout(function () { ctrl.abort(); }, ms);
+      opts.signal = ctrl.signal;
+      var pr = fetch(url, opts);
+      return pr.then(function (r) { clearTimeout(to); return r; }, function (e) { clearTimeout(to); throw e; });
+    }
     return fetch(url, opts);
   }
 
@@ -468,7 +481,7 @@
   // Um acesso expirado com a mesma entrega é ignorado (renovação): só conta o novo.
   async function checkAccessState(email, prod) {
     try {
-      var r = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(email));
+      var r = await h(API + "/api/v1/cademi/acesso?email=" + encodeURIComponent(email), { timeoutMs: 8000 });
       if (r.status === 429) return "limited";
       var j = await r.json().catch(function () { return {}; });
       var list = (j && Array.isArray(j.data)) ? j.data : [];
@@ -490,7 +503,8 @@
       var r = await h(API + "/api/v1/payments/" + encodeURIComponent(code) + "/cademi-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email })
+        body: JSON.stringify({ email: email }),
+        timeoutMs: 15000
       });
       return await r.json().catch(function () { return null; });
     } catch (e) { return null; }
@@ -521,8 +535,11 @@
     }
     msg(m, "Pagamento confirmado! A ativar o acesso… aguarda um momento.");
     // Gatilho imediato: força a entrega na Cademi já, sem esperar pelo webhook.
-    await sincronizarAcesso(code, email);
-    for (var i = 0; i < 6; i++) {
+    // Não se espera pela resposta (o servidor conclui mesmo que demore): se
+    // ficássemos presos aqui, a UI ficava em "A ativar o acesso…" para sempre
+    // quando o servidor está a acordar (Render cold start).
+    sincronizarAcesso(code, email);
+    for (var i = 0; i < 12; i++) {
       var st = await checkAccessState(email, prod);
       if (st === "active") {
         msg(m, "Acesso ativado! A recarregar a página…");
@@ -531,10 +548,10 @@
         return;
       }
       if (st === "limited") break;
-      await sleep(6000);
-      // Repete o gatilho a meio do orçamento: cobre uma confirmação que chegue
-      // ligeiramente depois ou uma entrega que falhou à primeira.
-      if (i === 2) await sincronizarAcesso(code, email);
+      await sleep(5000);
+      // Reforça a entrega de vez em quando: cobre uma confirmação/entrega que
+      // chegue mais tarde ou uma tentativa que falhou (servidor a acordar).
+      if (i % 2 === 1) sincronizarAcesso(code, email);
     }
     // Acesso ainda não visível: cai para logout para forçar releitura no login.
     if (logoutNow()) {
