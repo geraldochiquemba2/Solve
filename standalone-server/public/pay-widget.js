@@ -481,6 +481,21 @@
     return "inactive";
   }
 
+  // Gatilho do aluno: força a entrega do conteúdo na Cademi logo após o
+  // pagamento, sem depender do webhook. PÚBLICO mas o servidor só deixa atuar
+  // se o email corresponder ao do pagamento. Idempotente (mesmo `codigo`).
+  async function sincronizarAcesso(code, email) {
+    if (!code || !email || email.indexOf("@") < 0) return null;
+    try {
+      var r = await h(API + "/api/v1/payments/" + encodeURIComponent(code) + "/cademi-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email })
+      });
+      return await r.json().catch(function () { return null; });
+    } catch (e) { return null; }
+  }
+
   // Fallback: termina a sessão Cademi (link "sair/logout") para forçar a
   // releitura dos acessos no próximo login. Devolve true se navegou.
   function logoutNow() {
@@ -499,12 +514,14 @@
   // O endpoint /cademi/acesso é público e limitado (15/15min por conta), por isso
   // usamos um orçamento curto e espaçado e paramos logo em 429 para não bloquear
   // o checkout do próprio aluno.
-  async function unlockAfterPayment(m, prod, email) {
+  async function unlockAfterPayment(m, prod, email, code) {
     if (!email || email.indexOf("@") < 0) {
       msg(m, "Pagamento confirmado. Faz logout e entra de novo (login) para teres acesso às aulas.");
       return;
     }
     msg(m, "Pagamento confirmado! A ativar o acesso… aguarda um momento.");
+    // Gatilho imediato: força a entrega na Cademi já, sem esperar pelo webhook.
+    await sincronizarAcesso(code, email);
     for (var i = 0; i < 6; i++) {
       var st = await checkAccessState(email, prod);
       if (st === "active") {
@@ -515,6 +532,9 @@
       }
       if (st === "limited") break;
       await sleep(6000);
+      // Repete o gatilho a meio do orçamento: cobre uma confirmação que chegue
+      // ligeiramente depois ou uma entrega que falhou à primeira.
+      if (i === 2) await sincronizarAcesso(code, email);
     }
     // Acesso ainda não visível: cai para logout para forçar releitura no login.
     if (logoutNow()) {
@@ -944,7 +964,7 @@
           payUrl = st.hosted_url;
           msg(m, "Link pronto. Paga e volta aqui.");
         }
-        if (s === "confirmado") { await unlockAfterPayment(m, prod, email); break; }
+        if (s === "confirmado") { await unlockAfterPayment(m, prod, email, code); break; }
         if (s === "rejeitado") { msg(m, "Pagamento rejeitado/cancelado.", true); break; }
       }
     } catch (e) {

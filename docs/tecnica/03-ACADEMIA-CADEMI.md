@@ -16,6 +16,25 @@ cliente_nome, cliente_email}` → venda **Processado** → aluno com acesso.
 Sem email, não envia ("sem email"). Idempotente (`cademi_delivery=sent`).
  Conteúdo sem preço = "disponível em breve", não selecionável.
 
+### Entrega imediata após o pagamento
+Três mecanismos garantem o acesso logo após a confirmação (o webhook é só um
+deles e pode falhar/atrasar):
+
+1. **Gatilho do widget:** `pay-widget.js` chama `POST
+   /api/v1/payments/:code/cademi-sync` (público, com o email do pagamento como
+   prova de posse + rate-limit) assim que vê o pagamento confirmado, forçando a
+   entrega na Cademi sem esperar pelo webhook.
+2. **Webhook/auto-sync:** `applyWipayConfirm` / webhook É-kwanza / auto-sync
+   chamam `sendCademiDelivery` na transição para `confirmado`.
+3. **Reentrega periódica (`[CADEMI-RETRY]`, a cada 2 min):** pagamentos
+   confirmados com `metadata.cademi_delivery != 'sent'` são reenviados até 25
+   tentativas (`metadata.cademi_attempts`), dentro de 48h. Cobre erros
+   transitórios e `sent_unverified`.
+
+Uma entrega com **produto explícito** no pagamento (`metadata.cademi_produto`,
+escolhido no widget) entrega mesmo que `cademi_auto_delivery` não esteja a `1`;
+a flag da Academia só é exigida quando o pagamento não traz produto.
+
 ## Botão manual
 Detalhe do pagamento → **Enviar Cademi** (backfill/teste). Erros típicos:
 "por configurar", "sem email", mensagem da Cademi.
@@ -25,11 +44,15 @@ Reenvio forçado (pagamento já marcado): `POST
 ## Quando o pagamento está Pago mas o acesso não aparece
 A entrega só conta como feita se o acesso existir mesmo na Cademi
 (`metadata.cademi_verified=true`). Se ficar `sent_unverified`, a Cademi
-aceitou o `/entrega/enviar` (Carga processada) mas não criou acesso:
+aceitou o `/entrega/enviar` (Carga processada) mas não criou acesso. O
+`[CADEMI-RETRY]` reenvia sozinho até criar acesso; se persistir:
 1. Cademi → Vendas: procurar o `codigo` (ex. `SCMUOE7GZM`) — está Processado?
 2. Cademi → entrega `#268060`: regra ativa? produto certo? envio ligado?
 3. No CRM: detalhe do pagamento → **Enviar SamoraFit Workout** (reenvia e
    volta a verificar). A resposta crua fica em `metadata.cademi_resp`.
+Diagnóstico no CRM → detalhe do pagamento → Metadados: `cademi_delivery`
+(`sent`/`sent_unverified`/ausente), `cademi_verified`, `cademi_attempts` e
+`cademi_resp` dizem exatamente em que passo falhou.
 No widget, quem pagou sem acesso ativo vê: "Pagamento recebido, acesso
 ainda a ativar — faz logout e entra de novo; se não aparecer, fala
 connosco" (em vez de só voltar a oferecer Pagar).

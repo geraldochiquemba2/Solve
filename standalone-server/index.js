@@ -3192,9 +3192,21 @@ async function sendCademiDelivery(paymentCode, force = false) {
     let meta = {};
     try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
     if (meta.cademi_delivery === "sent" && !force) return { ok: false, skipped: "já enviado" };
+    // Contagem de tentativas: o job de reentrega usa-a como teto para não
+    // martelar a Cademi indefinidamente quando o acesso nunca é criado (conta
+    // também as tentativas bloqueadas por falta de config).
+    meta.cademi_attempts = (Number(meta.cademi_attempts) || 0) + 1;
+    meta.cademi_last_attempt_at = new Date().toISOString();
+    try { await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]); } catch {}
     // Entrega do pagamento (seletor) ou padrão da Academia.
-    const produtoId = String(meta.cademi_produto || defProduto).trim();
-    if (auto !== "1" || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto por configurar (Academia)" };
+    const explicitProduto = String(meta.cademi_produto || "").trim();
+    const produtoId = String(explicitProduto || defProduto).trim();
+    // Entrega explícita (o aluno escolheu o conteúdo no widget) entrega sempre;
+    // a config da Academia (cademi_auto_delivery=1) só é exigida quando não há
+    // produto explícito no pagamento. Sem isto, um pagamento com conteúdo
+    // escolhido nunca libertava acesso se a config da Academia não estivesse
+    // guardada.
+    if ((!explicitProduto && auto !== "1") || !produtoId) return { ok: false, skipped: "cademi_auto_delivery/produto por configurar (Academia)" };
     // Nome + email: a metadata (formulário desta compra) tem PRIORIDADE — o
     // customer_id vem do telefone (pode ser de outra pessoa, ex. familiar que
     // pagou no Express) e nunca pode substituir o aluno desta compra.
@@ -3404,6 +3416,39 @@ app.post("/api/v1/payments/:code/cademi-delivery", requireAuth, async (req, res)
   const r = await sendCademiDelivery(req.params.code, req.query.force === "1");
   if (r.ok) return res.json({ ok: true, email: r.email });
   res.status(400).json({ ok: false, error: r.skipped });
+});
+
+// Gatilho do widget: logo após a confirmação, o próprio aluno força a entrega
+// do conteúdo na Cademi sem depender do webhook/auto-sync. PÚBLICO (widget sem
+// JWT): a posse prova-se pelo email do pagamento + rate-limit. Só atua em
+// pagamentos confirmados; idempotente (mesmo `codigo` na Cademi).
+app.post("/api/v1/payments/:code/cademi-sync", rateLimit(30), async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim();
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    if (!code) return res.status(400).json({ error: "código obrigatório" });
+    const pr = await pool.query("SELECT * FROM payments WHERE code = $1", [code]);
+    if (pr.rows.length === 0) return res.status(404).json({ error: "Pagamento não encontrado" });
+    const payment = pr.rows[0];
+    let meta = {};
+    try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata || {}); } catch {}
+    const metaEmail = String(meta.email || "").toLowerCase().trim();
+    // Sem email correspondente não se toca na Cademi de outra pessoa.
+    if (!email || !metaEmail || email !== metaEmail) return res.status(403).json({ error: "sem permissão" });
+    if (payment.status !== "confirmado") {
+      return res.json({ ok: false, delivery: "pending", status: payment.status });
+    }
+    // Sem force: se já estiver entregue (`sent`) responde "já enviado" sem
+    // voltar a chamar a Cademi; se nunca foi entregue, tenta agora.
+    const r = await sendCademiDelivery(code, false);
+    res.json({
+      ok: !!r.ok,
+      delivery: r.ok ? "sent" : (meta.cademi_delivery === "sent" ? "sent" : "retry"),
+      skipped: r.ok ? undefined : r.skipped,
+    });
+  } catch (err) {
+    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
 });
 
 // Webhook recetor (configurar URL no painel Cademi: /api/v1/webhooks/cademi)
@@ -4630,6 +4675,42 @@ setInterval(async () => {
     _autoSyncRunning = false;
   }
 }, AUTOSYNC_INTERVAL_MS);
+
+// Reentrega Cademi (rede de segurança). Um pagamento confirmado que ainda não
+// tem acesso confirmado na Cademi (`cademi_delivery != 'sent'`) é reenviado com
+// force, até um teto de tentativas. Cobre: entrega que falhou por erro
+// transitório, `sent_unverified` (Cademi aceitou mas não criou acesso) e o caso
+// em que a entrega só dispara uma vez na transição pendente -> confirmado.
+// Só paga o custo da Cademi enquanto o acesso não estiver confirmado.
+const CADEMI_RETRY_INTERVAL_MS = Number(process.env.CADEMI_RETRY_INTERVAL_MS || 2 * 60 * 1000);
+const CADEMI_RETRY_MAX = Number(process.env.CADEMI_RETRY_MAX || 25);
+let _cademiRetryRunning = false;
+setInterval(async () => {
+  if (_cademiRetryRunning) return;
+  _cademiRetryRunning = true;
+  try {
+    const pend = await pool.query(
+      `SELECT code FROM payments
+        WHERE status = 'confirmado'
+          AND COALESCE(metadata->>'cademi_delivery','') <> 'sent'
+          AND COALESCE(metadata->>'email','') <> ''
+          AND COALESCE((metadata->>'cademi_attempts')::int, 0) < $1
+          AND created_at > NOW() - INTERVAL '48 hours'
+        ORDER BY created_at DESC LIMIT 8`, [CADEMI_RETRY_MAX]);
+    for (const { code } of pend.rows) {
+      try {
+        const r = await sendCademiDelivery(code, true);
+        if (r.ok) console.log(`[CADEMI-RETRY] ${code}: acesso confirmado`);
+        else console.log(`[CADEMI-RETRY] ${code}: ${r.skipped || "sem sucesso"}`);
+      } catch (e) { console.error(`[CADEMI-RETRY] ${code}:`, e.message); }
+      await new Promise(r => setTimeout(r, 300));
+    }
+  } catch (err) {
+    console.error("[CADEMI-RETRY] Error:", err.message);
+  } finally {
+    _cademiRetryRunning = false;
+  }
+}, CADEMI_RETRY_INTERVAL_MS);
 
 // Varrimento Fit90 (landing -> CRM): 5min — override via FIT90_SYNC_INTERVAL_MS.
 // A landing grava direto em fit90_leads (Supabase) contornando a Edge Function;
