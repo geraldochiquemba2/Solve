@@ -28,6 +28,18 @@
     } catch (e) {}
   })();
 
+  // ── Legibilidade do aviso de confirmação das telas de acesso da Cademi ──────
+  // Após o cadastro a Cademi mostra um aviso (classe .ta-aviso, ex. "verifique o
+  // seu email") em tom esbatido. Força o texto a preto (!important vence também
+  // estilos inline) para ser fácil de identificar. Só existe nas telas de acesso.
+  (function avisosCademiPreto() {
+    try {
+      var st = document.createElement("style");
+      st.textContent = ".ta-aviso:not(.ta-aviso-erro),.ta-aviso:not(.ta-aviso-erro) p,.ta-aviso:not(.ta-aviso-erro) span{color:#000 !important}";
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  })();
+
   function h(url, opts) {
     opts = opts || {};
     opts.headers = Object.assign({ "X-API-Key": API_KEY }, opts.headers || {});
