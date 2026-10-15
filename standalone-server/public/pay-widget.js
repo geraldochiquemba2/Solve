@@ -35,7 +35,7 @@
   (function avisosCademiPreto() {
     try {
       var st = document.createElement("style");
-      st.textContent = ".ta-aviso:not(.ta-aviso-erro),.ta-aviso:not(.ta-aviso-erro) p,.ta-aviso:not(.ta-aviso-erro) span{color:#000 !important}";
+      st.textContent = ".ta-aviso-sucesso,.ta-aviso-sucesso p,.ta-aviso-sucesso span{color:#000 !important;font-weight:600 !important}";
       (document.head || document.documentElement).appendChild(st);
     } catch (e) {}
   })();

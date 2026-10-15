@@ -65,9 +65,10 @@ script inline no `<body>`), marca `modo=login` via `history.replaceState` no
 formulário. Ideal é remover o bloco original no painel; até lá, o widget impede
 o loop.
 
-Além disso, o `pay-widget.js` injeta CSS que força o texto dos avisos de sucesso
-das telas de acesso (`.ta-aviso`, ex. "verifique o seu email" após o cadastro) a
-preto, para ficar legível — sem afetar os avisos de erro (`.ta-aviso-erro`).
+Além disso, o `pay-widget.js` injeta CSS que torna os avisos de sucesso das telas
+de acesso (`.ta-aviso-sucesso`, ex. "verifique o seu email" após o cadastro ou
+"senha enviada para o seu e-mail") mais nítidos: texto preto e em negrito —
+sem afetar os avisos de erro (`.ta-aviso-erro`).
 
 ## Criar novo produto para vender
 1. Cademi: produto + entrega Customizada (30 dias) + preço na vitrine.
