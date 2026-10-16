@@ -31,7 +31,7 @@ if (end < 0) throw new Error("fecho da rota não encontrado");
 const arrow = code.slice(start, end).replace(/^app\.post\([^,]+,[^,]+,\s*/, "").trim() + "}";
 
 const buildHandler = new Function(
-  "pool, cfg, getEkwanzaToken, fetch, broadcastPaymentUpdate, sendCademiDelivery, console, audit",
+  "pool, cfg, getEkwanzaToken, fetch, broadcastPaymentUpdate, sendCademiDelivery, kickCademiDelivery, console, audit",
   `return (${arrow});`
 );
 
@@ -77,15 +77,17 @@ async function run({ payment, body, official }) {
     fetchStub,
     (m) => broadcasted.push(m),
     (c) => delivered.push(c),
+    (c) => delivered.push(c),
     { log() {}, error() {} },
     () => {}
   );
 
   const res = makeRes();
   await handler({ body }, res);
-  // a entrega ao Cademi é disparada com setImmediate: esvaziar a fase de check
-  // antes de verificar os efeitos colaterais
+  // a entrega ao Cademi é disparada com kickCademiDelivery (arranque rápido):
+  // esvaziar microtarefas/timers pendentes antes de verificar os efeitos
   await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setTimeout(r, 0));
 
   const statusWrites = SQL.filter((s) => /UPDATE payments SET status/i.test(s.sql));
   const first = statusWrites[0];

@@ -1808,7 +1808,7 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
       );
     }
     broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
-    if (mappedStatus === "confirmado") setImmediate(() => sendCademiDelivery(merchantTransactionId));
+    if (mappedStatus === "confirmado") kickCademiDelivery(merchantTransactionId);
 
     res.json({ received: true, verified: true });
   } catch (err) {
@@ -1888,7 +1888,7 @@ async function applyWipayConfirm(code, wipayId) {
   }
   broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
   console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${j?.status})`);
-  if (mapped === "confirmado") setImmediate(() => sendCademiDelivery(code));
+  if (mapped === "confirmado") kickCademiDelivery(code);
   return mapped;
 }
 // ─── return_url: allowlist de origens (anti open-redirect) ──────────────────
@@ -2363,8 +2363,7 @@ async function fireEkwanzaCharge({ code, paymentId, amt, m, customer_phone, desc
       broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
       console.log(`[PAYMENTS] ${code}: pendente -> ${mapped} (resposta GPO: ${rawStatus})`);
       if (mapped === "confirmado") {
-        const dr = await sendCademiDelivery(code);
-        if (!dr.ok) console.log(`[CADEMI] ${code}: ${dr.skipped}`);
+        kickCademiDelivery(code);
       }
     } catch {}
   };
@@ -2605,12 +2604,7 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
 
     // Promo que cobre a totalidade: confirma sem gateway e entrega já o conteúdo.
     if (autoConfirm) {
-      setImmediate(async () => {
-        try {
-          const dr = await sendCademiDelivery(code);
-          if (!dr.ok) console.log(`[CADEMI] ${code}: ${dr.skipped || ""}`);
-        } catch (e) { console.error("[PAYMENTS] bg auto-confirm:", e.message); }
-      });
+      kickCademiDelivery(code);
       return;
     }
 
@@ -3271,6 +3265,32 @@ async function sendCademiDelivery(paymentCode, force = false) {
     if (!verified) return { ok: false, skipped: "entrega aceite pela Cademi mas acesso não confirmado (ver painel Cademi > Vendas e a regra de entrega)" };
     return { ok: true, email };
   } catch (e) { return { ok: false, skipped: e.message }; }
+}
+
+// Entrega Cademi com arranque rápido: tenta já e, se não confirmar o acesso,
+// volta a tentar em 15s/45s/90s antes de entregar o caso à rede de segurança de
+// 2 em 2 min. Sem isto, uma primeira tentativa que falhasse por erro transitório
+// (Cademi lenta / arranque a frio) só era recuperada no ciclo de 2 min — era o
+// que deixava a aula bloqueada 1-2 min depois de pagar.
+const _cademiKick = new Set();
+function kickCademiDelivery(code) {
+  code = String(code || "").trim();
+  if (!code || _cademiKick.has(code)) return;
+  _cademiKick.add(code);
+  const steps = [0, 15000, 45000, 90000]; // a 0s, 15s, 45s e 90s
+  let i = 0;
+  const run = async () => {
+    let done = false;
+    try {
+      const r = await sendCademiDelivery(code, i > 0); // 1ª sem force; reentregas com force
+      done = !!r.ok || r.skipped === "já enviado";
+      if (!done) console.log(`[CADEMI-KICK] ${code} (t${i}): ${r && r.skipped}`);
+    } catch (e) { console.error(`[CADEMI-KICK] ${code} (t${i}):`, e.message); }
+    i++;
+    if (done || i >= steps.length) { _cademiKick.delete(code); return; }
+    setTimeout(run, steps[i] - steps[i - 1]);
+  };
+  setTimeout(run, 0);
 }
 
 // Lista de entregas Cademi (slugs reais).
@@ -4344,7 +4364,7 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, 
       );
       console.log(`[CHECK-STATUS] ${payment.code}: ${payment.status} -> ${newStatus}`);
       broadcastPaymentUpdate({ type: "payment_updated", code: payment.code, status: newStatus });
-      if (newStatus === "confirmado") setImmediate(() => sendCademiDelivery(payment.code));
+      if (newStatus === "confirmado") kickCademiDelivery(payment.code);
     }
     res.json({
       paymentId: id,
@@ -4665,7 +4685,7 @@ setInterval(async () => {
         }
         console.log(`[AUTO-SYNC] ${code}: pendente -> ${mapped} (GPO: ${ch.status})`);
         broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
-        if (mapped === "confirmado") setImmediate(() => sendCademiDelivery(code));
+        if (mapped === "confirmado") kickCademiDelivery(code);
         await new Promise(r => setTimeout(r, 300));
       } catch (e) { console.error(`[AUTO-SYNC] ${code}:`, e.message); }
     }

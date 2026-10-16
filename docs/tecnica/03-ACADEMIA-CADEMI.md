@@ -25,11 +25,14 @@ deles e pode falhar/atrasar):
    prova de posse + rate-limit) assim que vê o pagamento confirmado, forçando a
    entrega na Cademi sem esperar pelo webhook.
 2. **Webhook/auto-sync:** `applyWipayConfirm` / webhook É-kwanza / auto-sync
-   chamam `sendCademiDelivery` na transição para `confirmado`.
-3. **Reentrega periódica (`[CADEMI-RETRY]`, a cada 2 min):** pagamentos
-   confirmados com `metadata.cademi_delivery != 'sent'` são reenviados até 25
-   tentativas (`metadata.cademi_attempts`), dentro de 48h. Cobre erros
-   transitórios e `sent_unverified`.
+   chamam `kickCademiDelivery(code)` na transição para `confirmado`. Tenta já e,
+   se não confirmar acesso, reentrega em 15s/45s/90s (arranque rápido, sem
+   polling à BD) — reduz de ~1-2 min para segundos o tempo até a aula
+   desbloquear quando a 1ª tentativa falha por erro transitório.
+3. **Reentrega periódica (`[CADEMI-RETRY]`, a cada 2 min):** rede de segurança.
+   Pagamentos confirmados com `metadata.cademi_delivery != 'sent'` são
+   reenviados até 25 tentativas (`metadata.cademi_attempts`), dentro de 48h.
+   Cobre erros persistentes e `sent_unverified`.
 
 Uma entrega com **produto explícito** no pagamento (`metadata.cademi_produto`,
 escolhido no widget) entrega mesmo que `cademi_auto_delivery` não esteja a `1`;
