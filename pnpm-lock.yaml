@@ -531,6 +531,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
       tsx:
         specifier: 'catalog:'
         version: 4.23.4

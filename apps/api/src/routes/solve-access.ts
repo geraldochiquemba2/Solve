@@ -7,12 +7,12 @@ const router = Router();
 // SEGURANÇA: proxy só para staff logado (antes era público).
 router.use(authenticate);
 
-const RENDER_URL = process.env.RENDER_URL || 'https://solve-sqoh.onrender.com';
+const RENDER_URL = process.env.RENDER_URL || process.env.RENDER_EXTERNAL_URL || '';
 // SEGURANÇA: sem fallback público — sem RENDER_API_KEY o proxy recusa.
 const RENDER_API_KEY = process.env.RENDER_API_KEY || '';
 
 function requireProxyKey(_req: Request, res: Response, next: () => void) {
-  if (!RENDER_API_KEY) {
+  if (!RENDER_API_KEY || !RENDER_URL) {
     res.status(503).json({ success: false, error: 'Proxy Solve Access não configurado' });
     return;
   }

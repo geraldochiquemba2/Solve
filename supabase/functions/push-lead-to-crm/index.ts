@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const CRM_URL = Deno.env.get("CRM_API_URL") || "https://solve-sqoh.onrender.com";
+// SEGURANÇA: sem fallback de domínio — CRM_API_URL obrigatório (novo deploy
+// = novo host; definir o segredo com o URL do CRM activo).
+const CRM_URL = Deno.env.get("CRM_API_URL") || "";
 // SEGURANÇA Set/2026: sem fallback público
 const CRM_API_KEY = Deno.env.get("CRM_API_KEY") || "";
 
@@ -17,8 +19,8 @@ serve(async (req) => {
     });
   }
 
-  if (!CRM_API_KEY) {
-    console.error("CRM_API_KEY em falta (configurar segredo CRM_API_KEY)");
+  if (!CRM_API_KEY || !CRM_URL) {
+    console.error("CRM_API_KEY/CRM_API_URL em falta (configurar segredos)");
     return new Response(JSON.stringify({ error: "Configuração em falta" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

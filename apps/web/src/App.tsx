@@ -17,7 +17,7 @@ import {
 import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import '@/lib/api';
+import { API_BASE_URL } from '@/lib/api';
 import { exportarExcel, exportarPDF, formatarData } from '@/lib/relatorios';
 
 // Landing page
@@ -1811,7 +1811,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const sendCademi = async () => {
     setSending(true); setSendResult(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: authHeaders() });
+      const res = await fetch(`${API_BASE_URL}/api/v1/payments/${payment.code || payment.id}/cademi-delivery`, { method: 'POST', headers: authHeaders() });
       const data = await res.json().catch(() => null);
       setSendResult(res.ok ? `Acesso libertado (${data?.email || ''})` : `Falha: ${data?.error || res.statusText}`);
     } catch (e: any) { setSendResult('Erro: ' + e.message); }
@@ -1821,7 +1821,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
   const checkStatus = async () => {
     setChecking(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/ekwanza/check-status/${payment.raw?.id || payment.id}`, { credentials: 'include' });
+      const res = await fetch(`${API_BASE_URL}/api/v1/payments/ekwanza/check-status/${payment.raw?.id || payment.id}`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setCheckResult(data);
@@ -1836,7 +1836,7 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
     if (!confirm(`Cancelar o pagamento ${code}? O aluno pode gerar nova cobrança depois.`)) return;
     setCancelling(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/payments/${code}/cancel`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/payments/${code}/cancel`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ email: payment.customerEmail || undefined, phone: payment.customerPhone || undefined }),
@@ -2644,7 +2644,7 @@ function AutomationsPage() {
   </div></div>}</>;
 }
 function ApiPage() {
-  const [copied, setCopied] = useState(false); const endpoint = (import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api';
+  const [copied, setCopied] = useState(false); const endpoint = (API_BASE_URL) + '/api';
   return <><PageHeader eyebrow="Ecossistema · Desenvolvimento" title="API & Webhooks" subtitle="Visibilidade operacional sobre a camada de integração." action={<button className="btn-secondary" onClick={() => { navigator.clipboard?.writeText(endpoint); setCopied(true); }}><Code2 size={14} /> {copied ? 'Copiado' : 'Copiar endpoint'}</button>} /><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem', marginBottom: '.8rem' }}><Section title="Endpoint base" note="Autenticação por chave de aplicação"><div className="card" style={{ boxShadow: 'none', background: 'hsl(var(--secondary) / .7)', padding: '.8rem', display: 'flex', justifyContent: 'space-between', gap: '.6rem', alignItems: 'center' }}><code className="mono" style={{ fontSize: '.7rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{endpoint}</code><IconButton label="copiar endpoint" onClick={() => { navigator.clipboard?.writeText(endpoint); setCopied(true); }}><FileKey2 size={14} /></IconButton></div></Section></div></>;
 }
 

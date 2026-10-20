@@ -1,11 +1,16 @@
 /* Solve CRM — Widget de pagamento para a Cademi (SamoraFit)
  * Uso na Cademi (Código personalizado, <head>):
- *   <script src="https://solve-sqoh.onrender.com/pay-widget.js"></script>
- * Opcional antes do script:
- *   <script>window.SOLVE_PAY_API = "https://solve-sqoh.onrender.com";</script>
+ *   <script src="https://<host-do-crm>/pay-widget.js"></script>
+ * Opcional antes do script (forçar API específica):
+ *   <script>window.SOLVE_PAY_API = "https://<host-do-crm>";</script>
  */
 (function () {
-  var API = (window.SOLVE_PAY_API || "https://solve-sqoh.onrender.com").replace(/\/$/, "");
+  // Sem SOLVE_PAY_API, deriva o host de onde o próprio script foi carregado —
+  // funciona em qualquer domínio sem editar o widget.
+  var API = (window.SOLVE_PAY_API || (function () {
+    try { var s = document.currentScript; if (s && s.src) return new URL(s.src).origin; } catch (e) {}
+    return window.location.origin;
+  })()).replace(/\/$/, "");
   // Configurar com a chave pública do widget (nunca commitar valor real)
   var API_KEY = "";
   var RED = "#D71920";

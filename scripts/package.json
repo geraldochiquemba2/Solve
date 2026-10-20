@@ -4,10 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "push-schema": "node ./push-schema.mjs"
+    "push-schema": "node ./push-schema.mjs",
+    "backup-neon": "node ./backup-neon.mjs",
+    "bootstrap-db": "node ./bootstrap-db.mjs",
+    "import-leads": "node ./import-leads.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "pg": "^8.13.0",
     "tsx": "catalog:"
   }
 }

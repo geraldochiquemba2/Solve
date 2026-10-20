@@ -1,6 +1,10 @@
 import { setBaseUrl, setAuthTokenGetter, setOnUnauthorized } from '@workspace/api-client-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+// Produção: same-origin (string vazia) — o backend é servido no mesmo host,
+// por isso a app funciona em qualquer domínio sem reconstruir o bundle.
+// Dev: sem VITE_API_URL no .env, aponta à API local.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3000' : '');
 
 setBaseUrl(API_BASE_URL);
 

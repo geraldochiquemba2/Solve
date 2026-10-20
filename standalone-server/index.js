@@ -9,14 +9,27 @@ import { dirname, join } from "path";
 
 const { Pool } = pg;
 
+// O Render pode injectar variaveis PGHOST/PGPORT/... de uma "Database" ligada
+// (ex.: uma BD chamada "base" -> PGHOST=base). Se a connectionString estiver
+// vazia, o driver pg usa-as e falha com "getaddrinfo ENOTFOUND base". Removemos
+// essas variaveis para garantir que so a connectionString manda.
+for (const k of ["PGHOST","PGPORT","PGUSER","PGPASSWORD","PGDATABASE","PGSSLMODE"]) {
+  delete process.env[k];
+}
+
+const _CONN = (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "")
+  .replace("&channel_binding=require", "")
+  .replace("channel_binding=require&", "");
+if (!_CONN) {
+  console.error("[boot] FATAL: CRM_DATABASE_URL/DATABASE_URL vazias. Define a URL do Postgres.");
+}
+
 const pool = new Pool({
   // Fase 2 BDs: o CRM (Cademi) usa CRM_DATABASE_URL (BD nova).
   // DATABASE_URL mantém a do ginásio (projeto antigo) — intocada.
   // Filtra channel_binding (Neon) como em packages/db — o driver pg não o suporta.
-  connectionString: (process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || "")
-    .replace("&channel_binding=require", "")
-    .replace("channel_binding=require&", ""),
-  ssl: { rejectUnauthorized: false }
+  connectionString: _CONN,
+  ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === "true" ? true : false }
 });
 
 // ─── BASE DE DADOS — MAPA DE TABELAS ────────────────────────────────────────
@@ -496,7 +509,10 @@ function emailRef(email) {
   return crypto.createHash("sha256").update(String(email).trim().toLowerCase()).digest("hex").slice(0, 16);
 }
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL || "http://localhost:5173,https://solve-sqoh.onrender.com,https://brunosamora.cademi.com.br";
+// Origem do próprio host via RENDER_EXTERNAL_URL (injectado pelo Render em
+// qualquer conta) — sem hardcoded de domínio, o CORS funciona num deploy novo.
+const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL ||
+  [process.env.RENDER_EXTERNAL_URL, "http://localhost:5173", "https://brunosamora.cademi.com.br"].filter(Boolean).join(",");
 app.use(cors({
   origin: CORS_ORIGIN.split(",").map(s => s.trim()).filter(Boolean),
   credentials: true,
@@ -583,6 +599,13 @@ pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).ca
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
 // Equipa: contador de acessos por utilizador (quem acedeu mais)
 pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0`).catch(() => {});
+// Subscricoes: aulas incluídas/consumidas (ausentes das migrations antigas; a BD
+// antiga tinha-as via ALTER manual — recriamos aqui para a BD nova ser completa).
+pool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_total INTEGER`).catch(() => {});
+pool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_done INTEGER DEFAULT 0`).catch(() => {});
+// Clientes: data de entrada no ginásio + género (também ausentes das migrations).
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS joined_at TIMESTAMP`).catch(() => {});
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`).catch(() => {});
 // Leads da landing são permanentes — passam a viver no funil; sem cleanup.
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
@@ -1862,7 +1885,7 @@ async function wipayReady() {
   catch { return false; }
 }
 function wipayBase() {
-  return (process.env.FRONTEND_URL || "https://solve-sqoh.onrender.com").replace(/\/$/, "");
+  return (process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173").replace(/\/$/, "");
 }
 // Estado WiPay -> interno. accepted=confirmado; falhas explicitas=rejeitado;
 // resto (requested/...) mantem pendente.
@@ -4551,7 +4574,7 @@ app.post("/api/v1/leads/fit90-sync", requireAuth, async (req, res) => {
 // Webhook Supabase (fit90_leads INSERT -> CRM, automático, sem chaves novas).
 // TEM de ficar antes do 404 catch-all abaixo, senão nunca é alcançado.
 // Configurar no dashboard Supabase: Database -> Webhooks -> POST
-// https://solve-sqoh.onrender.com/api/v1/leads/fit90-hook com header
+// https://<host-do-crm>/api/v1/leads/fit90-hook com header
 // X-API-Key = API_KEY do Solve. Idempotente por external_id.
 app.post("/api/v1/leads/fit90-hook", rateLimit(60), async (req, res) => {
   try {
@@ -4619,9 +4642,11 @@ if (SELF_PING_URL) {
   console.log(`[KEEP-ALIVE] ativo: ${SELF_PING_URL} a cada ${SELF_PING_INTERVAL / 60000} min`);
 }
 
-// Expiração de pendentes: 15min (cota Neon mensal) — override via EXPIRY_INTERVAL_MS.
+// Expiração de pendentes: 30min (era 15min) — poupa compute (Neon/Supabase).
+// Override via EXPIRY_INTERVAL_MS. Nada sensível a segundos: é só marcar
+// pendentes antigos como expirados.
 // Fase Cademi-CRM: sem tabelas do ginásio, só payments de compras Cademi.
-const EXPIRY_INTERVAL_MS = Number(process.env.EXPIRY_INTERVAL_MS || 15 * 60 * 1000);
+const EXPIRY_INTERVAL_MS = Number(process.env.EXPIRY_INTERVAL_MS || 30 * 60 * 1000);
 setInterval(async () => {
   try {
     const result = await pool.query(
@@ -4638,9 +4663,11 @@ setInterval(async () => {
 // Auto-sync É-kwanza (pendentes Cademi): 5min — override via AUTOSYNC_INTERVAL_MS.
 // O webhook /webhooks/ekwanza continua a atualizar em tempo real; isto é só rede de segurança.
 // (o webhook nem sempre dispara; sem isto o estado fica preso em "pendente").
-// NOTA: 5min acorda o Neon com frequência — vigiar a cota de 100 CU-h/mês.
+// NOTA: 15min (era 5min) para poupar compute (Neon/Supabase). O webhook
+// /webhooks/ekwanza continua a confirmar em tempo real; isto é só rede de
+// segurança. Não baixar sem rever a cota mensal.
 let _autoSyncRunning = false;
-const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 5 * 60 * 1000);
+const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 15 * 60 * 1000);
 setInterval(async () => {
   if (_autoSyncRunning) return;
   _autoSyncRunning = true;
@@ -4702,7 +4729,7 @@ setInterval(async () => {
 // transitório, `sent_unverified` (Cademi aceitou mas não criou acesso) e o caso
 // em que a entrega só dispara uma vez na transição pendente -> confirmado.
 // Só paga o custo da Cademi enquanto o acesso não estiver confirmado.
-const CADEMI_RETRY_INTERVAL_MS = Number(process.env.CADEMI_RETRY_INTERVAL_MS || 2 * 60 * 1000);
+const CADEMI_RETRY_INTERVAL_MS = Number(process.env.CADEMI_RETRY_INTERVAL_MS || 10 * 60 * 1000);
 const CADEMI_RETRY_MAX = Number(process.env.CADEMI_RETRY_MAX || 25);
 let _cademiRetryRunning = false;
 setInterval(async () => {
@@ -4736,7 +4763,7 @@ setInterval(async () => {
 // A landing grava direto em fit90_leads (Supabase) contornando a Edge Function;
 // este job empurra as linhas pushed=false para leads (idempotente por
 // external_id) e marca pushed=true. Sem SUPABASE_SERVICE_KEY, fica desligado.
-const FIT90_SYNC_INTERVAL_MS = Number(process.env.FIT90_SYNC_INTERVAL_MS || 5 * 60 * 1000);
+const FIT90_SYNC_INTERVAL_MS = Number(process.env.FIT90_SYNC_INTERVAL_MS || 15 * 60 * 1000);
 let _fit90Running = false;
 async function syncFit90Leads() {
   const sbUrl = String(process.env.SUPABASE_URL || "https://fslrkrhuatzfqxbzilnd.supabase.co").replace(/\/$/, "");

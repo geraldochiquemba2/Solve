@@ -1,7 +1,9 @@
 $env:PORT = "5173"
 $env:BASE_PATH = "/"
-$env:VITE_API_URL = "https://solve-sqoh.onrender.com"
-$env:VITE_ACCESS_API_URL = "https://solve-sqoh.onrender.com"
+# Dev: aponta ao backend local. Em producao o bundle usa URLs same-origin
+# (sem VITE_API_URL), por isso funciona em qualquer dominio/host Render.
+$env:VITE_API_URL = "http://localhost:3000"
+$env:VITE_ACCESS_API_URL = "http://localhost:3000"
 # Configurar localmente via variável de ambiente (nunca commitar valor real)
 $env:VITE_ACCESS_API_KEY = ""
 # Corre a partir de apps/web. O path anterior estava fixo para outra maquina e

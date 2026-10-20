@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { User } from '@workspace/api-client-react';
 import { login as apiLogin, UserRole } from '@workspace/api-client-react';
+import { API_BASE_URL } from '@/lib/api';
 
 // Nunca assumimos o papel mais permissivo. Um valor desconhecido, forjado ou
 // adulterado no localStorage cai sempre no papel mais restrito.
@@ -95,7 +96,7 @@ export function useAuth() {
     if (email) body.email = email;
     if (phone) body.phone = phone;
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/auth/login`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -121,7 +122,7 @@ export function useAuth() {
   const logout = useCallback(async () => {
     // Call logout endpoint to clear httpOnly cookie
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/v1/auth/logout`, {
+      await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

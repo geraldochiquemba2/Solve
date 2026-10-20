@@ -4,20 +4,38 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     envVars:
+      # BD no Supabase (projeto do CRM). Usar o POOLER (porta 6543, transaction
+      # mode) — e o suportado para servidores sem IPv6 e evita esgotar conexoes.
       - key: DATABASE_URL
+        sync: false
+      # O CRM usa uma so base: repetir a mesma URL (o standalone le CRM_DATABASE_URL
+      # primeiro). Se um dia separar ginasio/CRM, muda so esta.
+      - key: CRM_DATABASE_URL
         sync: false
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
+      # O pooler do Supabase usa cadeia de certificados self-signed: o driver pg
+      # precisa de desligar a verificacao (a ligacao ja e cifrada em TLS).
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      # Limites de compute (webhook-first, polling raro). Aumentar se a cota apertar.
+      - key: EXPIRY_INTERVAL_MS
+        value: "1800000"
+      - key: AUTOSYNC_INTERVAL_MS
+        value: "900000"
+      - key: CADEMI_RETRY_INTERVAL_MS
+        value: "600000"
+      - key: FIT90_SYNC_INTERVAL_MS
+        value: "900000"
       - key: JWT_SECRET
         sync: false
       - key: API_KEY
         sync: false
-      - key: FRONTEND_URL
-        value: https://solve-sqoh.onrender.com
-      - key: CORS_ORIGIN
-        value: https://solve-sqoh.onrender.com
+      # FRONTEND_URL e CORS_ORIGIN: intencionalmente ausentes — o backend usa
+      # RENDER_EXTERNAL_URL (injectado pelo Render) como fallback, por isso o
+      # mesmo render.yaml funciona em qualquer conta sem ajustes.
       - key: OVG_API_URL
         value: https://samorafitstudio.onvirtualgym.com
       - key: OVG_USERNAME

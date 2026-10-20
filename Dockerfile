@@ -9,7 +9,10 @@ COPY apps/web/ ./apps/web/
 COPY packages/api-client-react/ ./packages/api-client-react/
 ENV PORT=5173
 ENV BASE_PATH=/
-ARG VITE_API_URL=https://solve-sqoh.onrender.com
+# Vazio por omissão: o frontend usa URLs relativas (same-origin), por isso o
+# bundle funciona em qualquer domínio sem reconstruir. Só definir se a API
+# viver noutro host (ex.: render.yaml buildArgs).
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
 RUN pnpm --filter @workspace/solve-crm run build
 
