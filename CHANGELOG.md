@@ -6,7 +6,9 @@
 - Tabelas `studio_*` para clientes, planos, subscrições, pagamentos, faturas,
   reembolsos, alocações, chaves e log de sincronização (migração 0008).
 - Ligação automática de clientes/planos ao CRM e área no front
-  **Ecossistema → SamoraFit Studio**, com gestão de chaves e dados sincronizados.
+  **Ecossistema → SamoraFit Studio**, com dados sincronizados, filtros,
+  exportação para Excel e ligações profundas por vista. A gestão de chaves
+  passou para a API de administração.
 - Documentação de entrega em `docs/INTEGRACAO-SAMORAFIT-STUDIO.md`.
 
 ## Remoção da integração do ginásio (Solve Access / OVG)

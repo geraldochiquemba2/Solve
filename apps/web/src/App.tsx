@@ -14,7 +14,7 @@ import {
   SlidersHorizontal, Smartphone, Sparkles, Target, Ticket, ToggleLeft, ToggleRight,
   Trash2, TrendingUp, Upload, UserRound, Users, WalletCards, Webhook, X, Zap
 } from 'lucide-react';
-import { Link, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
+import { Link, Route, Switch, useLocation, useParams, useSearchParams, Router as WouterRouter } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useToast } from '@/hooks/use-toast';
@@ -31,7 +31,7 @@ import MinhaConta from '@/portal/MinhaConta';
 import PortalPagamentos from '@/portal/Pagamentos';
 import PortalRecibo from '@/portal/Recibo';
 import PortalShell from '@/portal/PortalShell';
-import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, useStudioSnapshot, useStudioOverview, useStudioKeys, useCreateStudioKey, useRevokeStudioKey, type PromoCode, type PromoValidation } from '@/hooks/use-api';
+import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, useStudioSnapshot, useStudioOverview, type PromoCode, type PromoValidation } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -2192,32 +2192,56 @@ const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof Briefcase
   { name: 'WhatsApp', desc: 'SamoraFit · Conversas comerciais', icon: LifeBuoy },
   { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2 },
 ];
+const STUDIO_VIEWS = ['clientes', 'planos', 'subscricoes', 'pagamentos', 'faturas', 'reembolsos'] as const;
+type StudioView = typeof STUDIO_VIEWS[number];
+
 function SamoraFitStudioPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'administrador';
   const snapshot = useStudioSnapshot();
   const overview = useStudioOverview();
-  const keys = useStudioKeys({ enabled: isAdmin });
-  const createKey = useCreateStudioKey();
-  const revokeKey = useRevokeStudioKey();
-  const [tab, setTab] = useState<'clientes' | 'planos' | 'subscricoes' | 'pagamentos' | 'faturas' | 'reembolsos'>('clientes');
+  const [params, setParams] = useSearchParams();
+  const vistaUrl = params.get('vista');
+  const tab: StudioView = STUDIO_VIEWS.includes(vistaUrl as StudioView) ? vistaUrl as StudioView : 'clientes';
+  const setTab = (id: StudioView) => {
+    const next = new URLSearchParams(params);
+    next.set('vista', id);
+    setParams(next, { replace: true });
+  };
   const [search, setSearch] = useState('');
-  const [keyName, setKeyName] = useState('SamoraFit Studio');
-  const [newKey, setNewKey] = useState<string | null>(null);
+  const [estado, setEstado] = useState('todos');
   const [copied, setCopied] = useState('');
   const d = snapshot.data?.data;
   const o = overview.data?.data;
-  const apiUrl = `${window.location.origin}/api/v1/integrations/samorafit-studio`;
+  const apiUrl = `${API_BASE_URL || window.location.origin}/api/v1/integrations/samorafit-studio`;
   const loading = snapshot.isLoading || overview.isLoading;
+  const erro = snapshot.isError || overview.isError;
+  const erroMsg = (snapshot.error as Error | null)?.message || (overview.error as Error | null)?.message || 'Não foi possível contactar a API do Studio.';
+  const semResumo = erro && !o;
+  const sync = o?.lastSync;
+  const limite = 200;
+  const recarregar = () => { snapshot.refetch(); overview.refetch(); };
+  useEffect(() => { setEstado('todos'); setSearch(''); }, [tab]);
   const term = search.trim().toLowerCase();
   const match = (...values: Array<string | null | undefined>) => !term || values.some(v => String(v || '').toLowerCase().includes(term));
-  const customers = (d?.customers ?? []).filter(c => match(c.name, c.phone, c.email, c.nif, c.externalId));
-  const subscriptions = (d?.subscriptions ?? []).filter(s => match(s.customerName, s.planName, s.externalId));
-  const payments = (d?.payments ?? []).filter(p => match(p.customerName, p.reference, p.externalId));
-  const invoices = (d?.invoices ?? []).filter(i => match(i.customerName, i.externalId));
-  const refunds = (d?.refunds ?? []).filter(r => match(r.customerName, r.externalId));
-  const plans = (d?.plans ?? []).filter(p => match(p.name, p.externalId));
+  const matchEstado = (s: string) => estado === 'todos' || String(s).toUpperCase() === estado;
+  const matchEstadoPlano = (active: boolean) => estado === 'todos' || (estado === 'ATIVO' ? active : !active);
+  const statusOptions = useMemo(() => {
+    const lista: Array<string | null | undefined> =
+      tab === 'planos' ? (d?.plans ?? []).map(p => p.active ? 'ATIVO' : 'INATIVO') :
+      tab === 'clientes' ? (d?.customers ?? []).map(c => c.status) :
+      tab === 'subscricoes' ? (d?.subscriptions ?? []).map(s => s.status) :
+      tab === 'pagamentos' ? (d?.payments ?? []).map(p => p.status) :
+      tab === 'faturas' ? (d?.invoices ?? []).map(i => i.status) :
+      (d?.refunds ?? []).map(r => r.status);
+    return Array.from(new Set(lista.map(v => String(v || '').toUpperCase()).filter(Boolean))).sort();
+  }, [tab, d]);
+  const customers = (d?.customers ?? []).filter(c => match(c.name, c.phone, c.email, c.nif, c.externalId) && matchEstado(c.status));
+  const subscriptions = (d?.subscriptions ?? []).filter(s => match(s.customerName, s.planName, s.externalId) && matchEstado(s.status));
+  const payments = (d?.payments ?? []).filter(p => match(p.customerName, p.reference, p.externalId) && matchEstado(p.status));
+  const invoices = (d?.invoices ?? []).filter(i => match(i.customerName, i.externalId) && matchEstado(i.status));
+  const refunds = (d?.refunds ?? []).filter(r => match(r.customerName, r.externalId) && matchEstado(r.status));
+  const plans = (d?.plans ?? []).filter(p => match(p.name, p.externalId) && matchEstadoPlano(p.active));
   const tone = (s: string) => ['ACTIVE', 'CONFIRMED', 'PAID', 'REGISTERED'].includes(String(s).toUpperCase()) ? 'good' : ['PENDING', 'OVERDUE', 'FROZEN', 'PARTIAL'].includes(String(s).toUpperCase()) ? 'warn' : 'neutral';
+  const etiquetaEstado = (s: string) => ({ ACTIVE: 'Ativo', CONFIRMED: 'Confirmado', PAID: 'Pago', PENDING: 'Pendente', OVERDUE: 'Em atraso', FROZEN: 'Congelado', PARTIAL: 'Parcial', CANCELLED: 'Cancelado', REFUNDED: 'Reembolsado', REGISTERED: 'Registado', ATIVO: 'Ativo', INATIVO: 'Inativo' } as Record<string, string>)[String(s || '').toUpperCase()] || s;
   const copy = async (text: string, label: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1800); } catch { setCopied(''); }
   };
@@ -2229,54 +2253,79 @@ function SamoraFitStudioPage() {
     { id: 'faturas', label: 'Faturas', count: d?.invoices.length ?? 0 },
     { id: 'reembolsos', label: 'Reembolsos', count: d?.refunds.length ?? 0 },
   ];
+  const visivel = tab === 'clientes' ? customers.length : tab === 'planos' ? plans.length : tab === 'subscricoes' ? subscriptions.length : tab === 'pagamentos' ? payments.length : tab === 'faturas' ? invoices.length : refunds.length;
+  const totalVista = tabs.find(t => t.id === tab)?.count ?? 0;
+  const exportar = () => {
+    const base = `samorafit-studio-${tab}`;
+    if (tab === 'clientes') {
+      exportarExcel(base, [{ nome: 'Clientes', cabecalho: ['Cliente', 'Número', 'Email', 'Telefone', 'NIF', 'Estado', 'Sincronizado'], linhas: customers.map(c => [c.name, c.customerNumber || c.externalId, c.email || '', c.phone || '', c.nif || '', etiquetaEstado(c.status), formatarData(c.syncedAt)]) }]);
+    } else if (tab === 'planos') {
+      exportarExcel(base, [{ nome: 'Planos', cabecalho: ['Plano', 'Preço', 'Matrícula', 'Renovação', 'Tipo', 'Aulas', 'Validade (meses)', 'Activo'], linhas: plans.map(p => [p.name, p.price, p.enrollmentFee, p.renewalFee, p.planType || '', p.classesQuantity ?? 'Ilimitadas', p.validityMonths, p.active ? 'Sim' : 'Não']) }]);
+    } else if (tab === 'subscricoes') {
+      exportarExcel(base, [{ nome: 'Subscrições', cabecalho: ['Cliente', 'Plano', 'Início', 'Fim', 'Preço', 'Aulas', 'Estado'], linhas: subscriptions.map(s => [s.customerName || s.customerExternalId, s.planName || s.planExternalId, formatarData(s.startDate), s.endDate ? formatarData(s.endDate) : '', s.price, s.classesQuantity ?? '', etiquetaEstado(s.status)]) }]);
+    } else if (tab === 'pagamentos') {
+      exportarExcel(base, [{ nome: 'Pagamentos', cabecalho: ['Cliente', 'Data', 'Valor', 'Método', 'Tipo', 'Referência', 'Estado'], linhas: payments.map(p => [p.customerName || p.customerExternalId || '', p.paymentDate ? formatarData(p.paymentDate) : '', p.amount, p.paymentMethod || '', p.kind || '', p.reference || p.externalId, etiquetaEstado(p.status)]) }]);
+    } else if (tab === 'faturas') {
+      exportarExcel(base, [{ nome: 'Faturas', cabecalho: ['Cliente', 'Período', 'Devido', 'Pago', 'Em falta', 'Vencimento', 'Estado'], linhas: invoices.map(i => [i.customerName || i.customerExternalId, i.periodStart ? formatarData(i.periodStart) : i.year && i.month ? `${String(i.month).padStart(2, '0')}/${i.year}` : '', i.amountDue, i.amountPaid, i.amountRemaining, i.dueDate ? formatarData(i.dueDate) : '', etiquetaEstado(i.status)]) }]);
+    } else {
+      exportarExcel(base, [{ nome: 'Reembolsos', cabecalho: ['Cliente', 'Pagamento', 'Valor', 'Motivo', 'Data', 'Estado'], linhas: refunds.map(r => [r.customerName || r.customerExternalId || '', r.paymentExternalId || '', r.amount, r.reason || '', r.refundedAt ? formatarData(r.refundedAt) : '', etiquetaEstado(r.status)]) }]);
+    }
+  };
   return <>
-    <PageHeader eyebrow="Ecossistema · SamoraFit Studio" title="SamoraFit Studio" subtitle="Clientes, planos, subscrições, pagamentos, faturas e reembolsos recebidos do ginásio." action={<button className="btn-secondary" onClick={() => { snapshot.refetch(); overview.refetch(); }}><RefreshCw size={14} className={snapshot.isFetching ? 'animate-spin' : ''} /> Actualizar</button>} />
-    <div className="grid-4" style={{ marginBottom: '.8rem' }}>
-      <Metric label="Clientes" value={loading ? '…' : String(o?.customers.total ?? 0)} note={`${o?.customers.active ?? 0} activos no Studio`} />
-      <Metric label="Subscrições activas" value={loading ? '…' : String(o?.subscriptions.active ?? 0)} note={`${o?.subscriptions.total ?? 0} no total`} />
-      <Metric label="Recebido" value={loading ? '…' : money(o?.payments.amount ?? 0)} note={`${o?.payments.confirmed ?? 0} pagamentos confirmados`} />
-      <Metric label="Faturas em falta" value={loading ? '…' : money(o?.invoices.pending ?? 0)} note={`${o?.invoices.total ?? 0} faturas registadas`} />
+    <PageHeader eyebrow="Ecossistema · Operação" title="SamoraFit Studio" subtitle="Clientes, planos e financeiro recebidos do ginásio. O CRM é um espelho de leitura." action={<button className="btn-secondary" onClick={recarregar}><RefreshCw size={14} className={snapshot.isFetching || overview.isFetching ? 'animate-spin' : ''} /> Atualizar</button>} />
+    <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}>
+      <Metric label="Clientes" value={semResumo ? '—' : String(o?.customers.total ?? 0)} note={semResumo ? 'indisponível' : `${o?.customers.active ?? 0} activos no Studio`} loading={loading} />
+      <Metric label="Subscrições activas" value={semResumo ? '—' : String(o?.subscriptions.active ?? 0)} note={semResumo ? 'indisponível' : `${o?.subscriptions.total ?? 0} no total`} loading={loading} />
+      <Metric label="Recebido" value={semResumo ? '—' : money(o?.payments.amount ?? 0)} note={semResumo ? 'indisponível' : `${o?.payments.confirmed ?? 0} pagamentos confirmados`} loading={loading} />
+      <Metric label="Faturas em falta" value={semResumo ? '—' : money(o?.invoices.pending ?? 0)} note={semResumo ? 'indisponível' : `${o?.invoices.total ?? 0} por regularizar`} loading={loading} />
     </div>
-    {isAdmin && (<Section title="Ligação para a equipa do Studio" note="URL base, autenticação e chaves de API desta integração." className="mb-3">
-      <div style={{ display: 'grid', gap: '.65rem' }}>
+    {erro && <div className="card" style={{ padding: '1rem', marginBottom: '.8rem', borderColor: 'hsl(var(--destructive) / .45)', display: 'flex', gap: '.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <AlertTriangle size={18} style={{ color: 'hsl(var(--destructive))', flex: '0 0 auto', marginTop: 2 }} />
+      <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: '.82rem' }}>Não foi possível ler os dados do Studio</div>
+        <div className="section-note" style={{ marginTop: '.2rem', overflowWrap: 'anywhere' }}>{erroMsg}</div>
+      </div>
+      <button className="btn-secondary" onClick={recarregar}><RefreshCw size={14} className={snapshot.isFetching || overview.isFetching ? 'animate-spin' : ''} /> Tentar novamente</button>
+    </div>}
+    <Section title="Dados sincronizados" note={sync ? `Última sincronização ${fmtRel(sync.started_at)} · ${sync.upserted_count} registos recebidos` : 'Sem sincronizações registadas'}>
+      {sync && <div style={{ display: 'flex', gap: '.45rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.7rem' }}>
+        <Status tone={sync.status === 'partial' || sync.error_count > 0 ? 'warn' : 'good'}>{sync.status === 'partial' || sync.error_count > 0 ? 'Sincronização parcial' : 'Sincronização ok'}</Status>
+        <span className="section-note" style={{ margin: 0 }}>{sync.error_count > 0 ? `${sync.error_count} registo(s) com erro` : 'Sem erros reportados'}</span>
+      </div>}
+      <div role="tablist" aria-label="Dados do SamoraFit Studio" style={{ display: 'flex', gap: '.4rem', overflowX: 'auto', paddingBottom: '.5rem', marginBottom: '.6rem' }}>
+        {tabs.map(t => <button key={t.id} type="button" role="tab" aria-selected={t.id === tab} className="btn-secondary" onClick={() => { setTab(t.id); setSearch(''); }} style={{ whiteSpace: 'nowrap', ...(t.id === tab ? { borderColor: 'hsl(var(--accent) / .55)', background: 'hsl(var(--accent) / .12)', color: 'hsl(var(--accent))' } : {}) }}>{t.label} <span style={{ opacity: .75 }}>{t.count}</span></button>)}
+      </div>
+      <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.35rem' }}>
+        <input className="input" aria-label="Pesquisar dados do SamoraFit Studio" placeholder="Pesquisar nesta lista…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: '1 1 240px' }} />
+        {statusOptions.length > 0 && <select className="input" aria-label="Filtrar por estado" value={estado} onChange={e => setEstado(e.target.value)} style={{ flex: '0 1 180px' }}>
+          <option value="todos">Todos os estados</option>
+          {statusOptions.map(s => <option key={s} value={s}>{etiquetaEstado(s)}</option>)}
+        </select>}
+        <button className="btn-secondary" onClick={exportar} disabled={visivel === 0} title="Exportar a vista actual para Excel"><FileSpreadsheet size={14} /> Exportar</button>
+      </div>
+      <div className="section-note" style={{ marginBottom: '.65rem' }}>A mostrar {visivel} de {totalVista} registos{estado !== 'todos' ? ` com estado ${etiquetaEstado(estado)}` : ''} · limite de {limite} por entidade. Os totais dos KPIs vêm do Studio.</div>
+      {loading ? <div className="section-note">A carregar dados do Studio…</div> : erro && !d ? <div className="section-note">Sem dados para mostrar enquanto a ligação falha.</div> : visivel === 0 && totalVista > 0 ? <EmptyState title="Sem resultados" text="Nenhum registo corresponde à pesquisa e ao filtro selecionados." action={<button className="btn-secondary" onClick={() => { setSearch(''); setEstado('todos'); }}>Limpar filtros</button>} /> : (
+        <>
+          {tab === 'clientes' && (customers.length === 0 ? <EmptyState title="Sem clientes" text="Ainda não foram recebidos clientes do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Nº</th><th>Contacto</th><th>Estado</th><th>CRM</th><th>Sincronizado</th></tr></thead><tbody>{customers.map(c => <tr key={c.id}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{c.customerNumber || c.externalId}</td><td><div style={{ fontSize: '.72rem' }}>{c.phone || '—'}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.email || '—'}</div></td><td><Status tone={tone(c.status)}>{etiquetaEstado(c.status)}</Status></td><td>{c.crmCustomerId ? <Link href={`/admin/clientes/${c.crmCustomerId}`} style={{ color: 'hsl(var(--primary))' }}>Ver no CRM</Link> : <span style={{ color: 'hsl(var(--muted-foreground))' }}>—</span>}</td><td style={{ fontSize: '.68rem' }}>{fmtRel(c.syncedAt)}</td></tr>)}</tbody></table></div>)}
+          {tab === 'planos' && (plans.length === 0 ? <EmptyState title="Sem planos" text="Ainda não foram recebidos planos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Plano</th><th>Preço</th><th>Matrícula</th><th>Renovação</th><th>Tipo</th><th>Aulas</th><th>Validade</th><th>Estado</th></tr></thead><tbody>{plans.map(p => <tr key={p.id}><td style={{ fontWeight: 600 }}>{p.name}</td><td>{money(p.price)}</td><td>{money(p.enrollmentFee)}</td><td>{money(p.renewalFee)}</td><td>{p.planType || '—'}</td><td>{p.classesQuantity ?? 'Ilimitadas'}</td><td>{p.validityMonths} mês(es)</td><td><Status tone={p.active ? 'good' : 'neutral'}>{p.active ? 'Activo' : 'Inactivo'}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'subscricoes' && (subscriptions.length === 0 ? <EmptyState title="Sem subscrições" text="Ainda não foram recebidas subscrições do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Início</th><th>Fim</th><th>Preço</th><th>Aulas</th><th>Estado</th></tr></thead><tbody>{subscriptions.map(s => <tr key={s.id}><td>{s.customerName || s.customerExternalId}</td><td>{s.planName || s.planExternalId}</td><td>{formatarData(s.startDate)}</td><td>{s.endDate ? formatarData(s.endDate) : '—'}</td><td>{money(s.price)}</td><td>{s.classesQuantity ?? '—'}</td><td><Status tone={tone(s.status)}>{etiquetaEstado(s.status)}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'pagamentos' && (payments.length === 0 ? <EmptyState title="Sem pagamentos" text="Ainda não foram recebidos pagamentos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Valor</th><th>Método</th><th>Tipo</th><th>Referência</th><th>Estado</th></tr></thead><tbody>{payments.map(p => <tr key={p.id}><td>{p.customerName || p.customerExternalId || '—'}</td><td>{p.paymentDate ? formatarData(p.paymentDate) : '—'}</td><td style={{ fontWeight: 600 }}>{money(p.amount)}</td><td>{p.paymentMethod || '—'}</td><td>{p.kind || '—'}</td><td>{p.reference || p.externalId}</td><td><Status tone={tone(p.status)}>{etiquetaEstado(p.status)}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'faturas' && (invoices.length === 0 ? <EmptyState title="Sem faturas" text="Ainda não foram recebidas faturas/períodos de faturação do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Período</th><th>Devido</th><th>Pago</th><th>Em falta</th><th>Vencimento</th><th>Estado</th></tr></thead><tbody>{invoices.map(i => <tr key={i.id}><td>{i.customerName || i.customerExternalId}</td><td>{i.periodStart ? formatarData(i.periodStart) : i.year && i.month ? `${String(i.month).padStart(2, '0')}/${i.year}` : '—'}</td><td>{money(i.amountDue)}</td><td>{money(i.amountPaid)}</td><td style={{ fontWeight: 600 }}>{money(i.amountRemaining)}</td><td>{i.dueDate ? formatarData(i.dueDate) : '—'}</td><td><Status tone={tone(i.status)}>{etiquetaEstado(i.status)}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'reembolsos' && (refunds.length === 0 ? <EmptyState title="Sem reembolsos" text="Ainda não foram recebidos reembolsos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Pagamento</th><th>Valor</th><th>Motivo</th><th>Data</th><th>Estado</th></tr></thead><tbody>{refunds.map(r => <tr key={r.id}><td>{r.customerName || r.customerExternalId || '—'}</td><td>{r.paymentExternalId || '—'}</td><td style={{ fontWeight: 600 }}>{money(r.amount)}</td><td>{r.reason || '—'}</td><td>{r.refundedAt ? formatarData(r.refundedAt) : '—'}</td><td><Status tone={tone(r.status)}>{etiquetaEstado(r.status)}</Status></td></tr>)}</tbody></table></div>)}
+        </>
+      )}
+    </Section>
+    <Section title="Ligação da API" note="URL e autenticação usadas pela equipa do Studio. A chave é configurada fora desta página.">
+      <div style={{ display: 'grid', gap: '.6rem' }}>
         <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="eyebrow">URL da API</span>
+          <span className="eyebrow">URL base</span>
           <code style={{ fontSize: '.72rem', background: 'hsl(var(--secondary) / .7)', padding: '.35rem .5rem', borderRadius: '.35rem', wordBreak: 'break-all' }}>{apiUrl}</code>
           <button className="btn-quiet" onClick={() => copy(apiUrl, 'url')}>{copied === 'url' ? <><Check size={13} /> Copiado</> : 'Copiar'}</button>
         </div>
         <div style={{ fontSize: '.74rem', color: 'hsl(var(--muted-foreground))' }}>
-          Autenticação: <strong>X-API-Key</strong>. Ingestão: <code>POST {apiUrl}/sync</code> (lote) ou <code>POST {apiUrl}/events</code> (evento). Estado: <code>GET {apiUrl}/status</code>. Documentação completa em <code>docs/INTEGRACAO-SAMORAFIT-STUDIO.md</code>.
-        </div>
-        <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ flex: '1 1 220px' }}><span className="form-label">Nome da chave</span><input className="input" value={keyName} onChange={e => setKeyName(e.target.value)} /></label>
-          <button className="btn-primary" disabled={createKey.isPending} onClick={() => createKey.mutate(keyName, { onSuccess: (r: any) => setNewKey(r?.data?.key || null) })}><KeyRound size={14} /> {createKey.isPending ? 'A gerar…' : 'Gerar chave'}</button>
-        </div>
-        {newKey && <div style={{ padding: '.7rem', borderRadius: '.45rem', background: 'hsl(142 70% 45% / .12)', border: '1px solid hsl(142 70% 45% / .35)' }}>
-          <div className="eyebrow">Guarde agora — não volta a ser mostrada</div>
-          <code style={{ display: 'block', marginTop: '.35rem', fontSize: '.74rem', wordBreak: 'break-all' }}>{newKey}</code>
-          <div style={{ marginTop: '.5rem', display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => copy(newKey, 'key')}>{copied === 'key' ? <><Check size={13} /> Copiada</> : 'Copiar chave'}</button><button className="btn-quiet" onClick={() => setNewKey(null)}>Fechar</button></div>
-        </div>}
-        <div>
-          <div className="eyebrow" style={{ marginBottom: '.35rem' }}>Chaves activas</div>
-          {(keys.data?.data ?? []).filter(k => k.active).length === 0 ? <div className="section-note">Ainda não há chaves. Gere uma e entregue-a à equipa do Studio.</div> : <div style={{ display: 'grid', gap: '.35rem' }}>{(keys.data?.data ?? []).filter(k => k.active).map(k => <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'center', fontSize: '.75rem' }}><span><KeyRound size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /><strong>{k.name}</strong> · {k.prefix}… · criada {fmtRel(k.createdAt)}{k.lastUsedAt ? ` · usada ${fmtRel(k.lastUsedAt)}` : ''}</span><button className="btn-quiet" onClick={() => revokeKey.mutate(k.id)} disabled={revokeKey.isPending}><Trash2 size={13} /> Revogar</button></div>)}</div>}
+          Autenticação: <strong>X-API-Key</strong> (ou Bearer). Ingestão: <code>POST {apiUrl}/sync</code> (lote) ou <code>POST {apiUrl}/events</code> (evento). Estado: <code>GET {apiUrl}/status</code>. Documentação: <code>docs/INTEGRACAO-SAMORAFIT-STUDIO.md</code>.
         </div>
       </div>
-    </Section>)}
-    <Section title="Dados sincronizados" note={o?.lastSync ? `Última sincronização ${fmtRel(o.lastSync.started_at)} · ${o.lastSync.upserted_count} registos` : 'Sem sincronizações registadas'}>
-      <div style={{ display: 'flex', gap: '.4rem', overflowX: 'auto', paddingBottom: '.5rem', marginBottom: '.6rem' }}>
-        {tabs.map(t => <button key={t.id} className={t.id === tab ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab(t.id)} style={{ whiteSpace: 'nowrap' }}>{t.label} <span style={{ opacity: .75 }}>{t.count}</span></button>)}
-      </div>
-      <div style={{ marginBottom: '.6rem' }}><input className="input" placeholder="Pesquisar por nome, NIF, telefone, referência…" value={search} onChange={e => setSearch(e.target.value)} /></div>
-      {loading ? <div className="section-note">A carregar dados do Studio…</div> : (
-        <>
-          {tab === 'clientes' && (customers.length === 0 ? <EmptyState title="Sem clientes" text="Ainda não foram recebidos clientes do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Nº</th><th>Contacto</th><th>Estado</th><th>CRM</th><th>Sincronizado</th></tr></thead><tbody>{customers.map(c => <tr key={c.id}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{c.customerNumber || c.externalId}</td><td><div style={{ fontSize: '.72rem' }}>{c.phone || '—'}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.email || '—'}</div></td><td><Status tone={tone(c.status)}>{c.status}</Status></td><td>{c.crmCustomerId ? <Link href={`/admin/clientes/${c.crmCustomerId}`} style={{ color: 'hsl(var(--primary))' }}>Ver no CRM</Link> : <span style={{ color: 'hsl(var(--muted-foreground))' }}>—</span>}</td><td style={{ fontSize: '.68rem' }}>{fmtRel(c.syncedAt)}</td></tr>)}</tbody></table></div>)}
-          {tab === 'planos' && (plans.length === 0 ? <EmptyState title="Sem planos" text="Ainda não foram recebidos planos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Plano</th><th>Preço</th><th>Matrícula</th><th>Renovação</th><th>Tipo</th><th>Aulas</th><th>Validade</th><th>Estado</th></tr></thead><tbody>{plans.map(p => <tr key={p.id}><td style={{ fontWeight: 600 }}>{p.name}</td><td>{money(p.price)}</td><td>{money(p.enrollmentFee)}</td><td>{money(p.renewalFee)}</td><td>{p.planType || '—'}</td><td>{p.classesQuantity ?? 'Ilimitadas'}</td><td>{p.validityMonths} mês(es)</td><td><Status tone={p.active ? 'good' : 'neutral'}>{p.active ? 'Activo' : 'Inactivo'}</Status></td></tr>)}</tbody></table></div>)}
-          {tab === 'subscricoes' && (subscriptions.length === 0 ? <EmptyState title="Sem subscrições" text="Ainda não foram recebidas subscrições do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Início</th><th>Fim</th><th>Preço</th><th>Aulas</th><th>Estado</th></tr></thead><tbody>{subscriptions.map(s => <tr key={s.id}><td>{s.customerName || s.customerExternalId}</td><td>{s.planName || s.planExternalId}</td><td>{formatarData(s.startDate)}</td><td>{s.endDate ? formatarData(s.endDate) : '—'}</td><td>{money(s.price)}</td><td>{s.classesQuantity ?? '—'}</td><td><Status tone={tone(s.status)}>{s.status}</Status></td></tr>)}</tbody></table></div>)}
-          {tab === 'pagamentos' && (payments.length === 0 ? <EmptyState title="Sem pagamentos" text="Ainda não foram recebidos pagamentos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Valor</th><th>Método</th><th>Tipo</th><th>Referência</th><th>Estado</th></tr></thead><tbody>{payments.map(p => <tr key={p.id}><td>{p.customerName || p.customerExternalId || '—'}</td><td>{p.paymentDate ? formatarData(p.paymentDate) : '—'}</td><td style={{ fontWeight: 600 }}>{money(p.amount)}</td><td>{p.paymentMethod || '—'}</td><td>{p.kind || '—'}</td><td>{p.reference || p.externalId}</td><td><Status tone={tone(p.status)}>{p.status}</Status></td></tr>)}</tbody></table></div>)}
-          {tab === 'faturas' && (invoices.length === 0 ? <EmptyState title="Sem faturas" text="Ainda não foram recebidas faturas/períodos de faturação do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Período</th><th>Devido</th><th>Pago</th><th>Em falta</th><th>Vencimento</th><th>Estado</th></tr></thead><tbody>{invoices.map(i => <tr key={i.id}><td>{i.customerName || i.customerExternalId}</td><td>{i.periodStart ? formatarData(i.periodStart) : i.year && i.month ? `${String(i.month).padStart(2, '0')}/${i.year}` : '—'}</td><td>{money(i.amountDue)}</td><td>{money(i.amountPaid)}</td><td style={{ fontWeight: 600 }}>{money(i.amountRemaining)}</td><td>{i.dueDate ? formatarData(i.dueDate) : '—'}</td><td><Status tone={tone(i.status)}>{i.status}</Status></td></tr>)}</tbody></table></div>)}
-          {tab === 'reembolsos' && (refunds.length === 0 ? <EmptyState title="Sem reembolsos" text="Ainda não foram recebidos reembolsos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Pagamento</th><th>Valor</th><th>Motivo</th><th>Data</th><th>Estado</th></tr></thead><tbody>{refunds.map(r => <tr key={r.id}><td>{r.customerName || r.customerExternalId || '—'}</td><td>{r.paymentExternalId || '—'}</td><td style={{ fontWeight: 600 }}>{money(r.amount)}</td><td>{r.reason || '—'}</td><td>{r.refundedAt ? formatarData(r.refundedAt) : '—'}</td><td><Status tone={tone(r.status)}>{r.status}</Status></td></tr>)}</tbody></table></div>)}
-        </>
-      )}
     </Section>
   </>;
 }
