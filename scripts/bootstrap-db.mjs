@@ -60,6 +60,8 @@ for (const stmt of [
   `ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`,
   `ALTER TABLE customers ADD COLUMN IF NOT EXISTS joined_at TIMESTAMP`,
   `ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`,
+  `ALTER TABLE payments ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`,
+  `ALTER TABLE payments ADD COLUMN IF NOT EXISTS entity VARCHAR(50)`,
   `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_total INTEGER`,
   `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_done INTEGER DEFAULT 0`,
   `ALTER TABLE payments ALTER COLUMN customer_id DROP NOT NULL`,
