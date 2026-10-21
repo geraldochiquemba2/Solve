@@ -1,5 +1,7 @@
 # Estrutura do Repositório
 
+> **Nota (2026):** a integração com o ginásio (Solve Access / OVG / catraca) foi removida. Referências históricas nestes documentos estão obsoletas.
+
 Mapa completo do que existe em disco e em Git, verificado em 2026-10-05.
 
 > **316 ficheiros rastreados** (depois da limpeza desta auditoria).

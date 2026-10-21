@@ -1,5 +1,7 @@
 # Workflows
 
+> **Nota (2026):** a integração com o ginásio (Solve Access / OVG / catraca) foi removida. Referências históricas nestes documentos estão obsoletas.
+
 Fluxos **verificados por leitura do código** em 2026-10-05. Cada fluxo indica ficheiro de entrada, função principal, tabelas, integrações e resultado.
 
 > **Regra de leitura:** existem **duas APIs** a implementar o mesmo domínio. `standalone-server/index.js` é a de **produção**; `apps/api` é a **local/catraca**. Onde divergem, assinalado.

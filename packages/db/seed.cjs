@@ -37,7 +37,6 @@ async function run() {
 
   // 2. Integrations
   const integrations = [
-    { name: 'ovg', status: 'operacional', errorCount: 0 },
     { name: 'pay4all', status: 'operacional', errorCount: 0 },
     { name: 'cademi', status: 'atencao', errorCount: 2 },
     { name: 'whatsapp', status: 'operacional', errorCount: 0 },
@@ -70,10 +69,10 @@ async function run() {
 
   // 4. Leads
   const leads = [
-    { name: 'Carlos Silva', email: 'carlos@empresa.co.ao', phone: '923456789', company: 'Silva & Associados', source: 'OVG', status: 'qualificado', value: 245000 },
+    { name: 'Carlos Silva', email: 'carlos@empresa.co.ao', phone: '923456789', company: 'Silva & Associados', source: 'Website', status: 'qualificado', value: 245000 },
     { name: 'Maria Fernandes', email: 'maria@tech.co.ao', phone: '912345678', company: 'Tech Angola', source: 'Website', status: 'contacto', value: 85000 },
     { name: 'Pedro Santos', email: 'pedro@construcoes.co.ao', phone: '934567890', company: 'Santos Construcoes', source: 'WhatsApp', status: 'novo_lead', value: 500000 },
-    { name: 'Ana Rodrigues', email: 'ana@consultoria.co.ao', phone: '945678901', company: 'Consultoria Rod', source: 'OVG', status: 'proposta', value: 245000 },
+    { name: 'Ana Rodrigues', email: 'ana@consultoria.co.ao', phone: '945678901', company: 'Consultoria Rod', source: 'Website', status: 'proposta', value: 245000 },
     { name: 'Jorge Mendes', email: 'jorge@importacoes.co.ao', phone: '956789012', company: 'Mendes Import', source: 'Website', status: 'negociacao', value: 500000 },
   ];
   const leadIds = [];

@@ -73,9 +73,7 @@ describe("Plans API", () => {
         price: 10000,
         periodicity: "mensal",
         duration: null,
-        active: true,
-        ovgPlanId: null,
-        createdAt: new Date(),
+        active: true,        createdAt: new Date(),
         updatedAt: new Date(),
       };
 

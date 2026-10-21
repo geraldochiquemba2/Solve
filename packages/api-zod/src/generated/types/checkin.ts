@@ -10,6 +10,5 @@ export interface Checkin {
   id?: string;
   customerId?: string;
   location?: string;
-  ovgCheckinId?: string;
   checkedInAt?: Date;
 }

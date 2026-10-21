@@ -42,19 +42,6 @@ const statements = [
      "consumed" boolean DEFAULT false NOT NULL,
      "created_at" timestamp DEFAULT now() NOT NULL
    )`,
-  `CREATE TABLE IF NOT EXISTS "solve_access_logs" (
-     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-     "remote_id" integer NOT NULL,
-     "customer_id" integer NOT NULL,
-     "customer_name" varchar(255),
-     "access_date" varchar(10) NOT NULL,
-     "access_time" varchar(20) NOT NULL,
-     "access_type" varchar(20) NOT NULL,
-     "result" varchar(20) NOT NULL,
-     "reason" text,
-     "synced_at" timestamp DEFAULT now() NOT NULL,
-     CONSTRAINT "solve_access_logs_remote_id_unique" UNIQUE("remote_id")
-   )`,
   // 4. Índices que falharam antes por colunas/tabelas em falta
   `CREATE INDEX IF NOT EXISTS idx_payments_status_expires ON payments(status, expires_at)`,
   `CREATE INDEX IF NOT EXISTS idx_portal_otps_phone ON portal_otps(phone)`,

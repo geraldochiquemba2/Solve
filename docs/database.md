@@ -1,5 +1,7 @@
 # Mapa do Banco de Dados
 
+> **Nota (2026):** a integração com o ginásio (Solve Access / OVG / catraca) foi removida. Referências históricas nestes documentos estão obsoletas.
+
 Verificado por leitura directa do schema, migrations, scripts e SQL runtime em 2026-10-05.
 
 > **Leia primeiro:** o que corre em produção é `standalone-server/index.js`, e ele executa DDL no arranque. O schema Drizzle e as migrations versionadas **não** descrevem todo o banco real. Ver §5 (drift).

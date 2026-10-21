@@ -1,5 +1,7 @@
 # Arquitectura
 
+> **Nota (2026):** a integração com o ginásio (Solve Access / OVG / catraca) foi removida. Referências históricas nestes documentos estão obsoletas.
+
 Documento de referência técnica. Descreve **a arquitectura que existe no código**, verificada por leitura directa em 2026-10-05.
 
 > Documentação operacional para o cliente continua em `docs/cliente/`.

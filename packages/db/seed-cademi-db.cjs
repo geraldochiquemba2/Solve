@@ -1,5 +1,5 @@
 // Seed da BD NOVA — fase Cademi-CRM (SEM ginásio).
-// Cria: admin + integrações (cademi operacional; ovg/whatsapp inativos).
+// Cria: admin + integrações (cademi operacional; whatsapp inativo).
 // PLANOS: negócio à parte — NUNCA nascem da Cademi. Criar só na página Planos.
 // Uso:  DATABASE_URL="<nova-url-neon>" node packages/db/seed-cademi-db.cjs
 // NUNCA hardcoded: a URL vem do ambiente.
@@ -40,9 +40,8 @@ async function run() {
     console.log(`OK admin criado: ${adminEmail} / telefone ${adminPhone}`);
   } else console.log('OK admin já existe, salto.');
 
-  // 2. Integrações — só Cademi operacional; ginásio (ovg) desligado nesta fase
+  // 2. Integrações — só Cademi operacional
   const integrations = [
-    { name: 'ovg', status: 'inativo' },
     { name: 'pay4all', status: 'operacional' },
     { name: 'cademi', status: 'operacional' },
     { name: 'whatsapp', status: 'inativo' },
@@ -55,7 +54,7 @@ async function run() {
       [uuid(), ig.name, ig.status, now(), now()]
     );
   }
-  console.log('OK integrações (cademi=operacional, ovg=inativo).');
+  console.log('OK integrações (cademi=operacional).');
   console.log('NOTA: planos criam-se só na página Planos (nunca da Cademi).');
 
   await client.end();

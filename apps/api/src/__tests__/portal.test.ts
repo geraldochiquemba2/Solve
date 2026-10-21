@@ -46,9 +46,7 @@ const activeCustomer = {
   email: "maria@example.com",
   phone: "+244934000001",
   whatsappPhone: null,
-  state: "activo",
-  ovgId: null,
-};
+  state: "activo",};
 
 const activeSub = {
   id: "sub-1",

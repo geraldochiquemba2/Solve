@@ -12,7 +12,6 @@ const router = Router();
 const checkinSchema = z.object({
   customerId: z.string().uuid(),
   location: z.string().max(255).optional(),
-  ovgCheckinId: z.string().max(100).optional(),
   checkedInAt: z.string().datetime().optional(),
 });
 
@@ -74,7 +73,6 @@ router.post(
         .values({
           customerId: req.body.customerId,
           location: req.body.location,
-          ovgCheckinId: req.body.ovgCheckinId,
           checkedInAt: req.body.checkedInAt ? new Date(req.body.checkedInAt) : new Date(),
         })
         .returning();

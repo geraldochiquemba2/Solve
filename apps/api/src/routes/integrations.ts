@@ -51,16 +51,6 @@ router.post("/integrations/:name/sync", authenticate, authorize("administrador",
 
     // Perform actual sync based on integration name
     switch (name) {
-      case "ovg": {
-        // OVG sync is handled by dedicated /ovg/sync route
-        const configured = !!(process.env.OVG_API_URL && process.env.OVG_USERNAME && process.env.OVG_PASSWORD);
-        if (!configured) {
-          syncResult.errors.push("OVG não configurado");
-        } else {
-          syncResult = { synced: 0, errors: ["Use /api/ovg/sync para sincronizar membros OVG"] };
-        }
-        break;
-      }
       case "cademi": {
         const configured = !!(process.env.CADEMI_API_URL && process.env.CADEMI_API_KEY);
         if (!configured) {

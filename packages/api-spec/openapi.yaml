@@ -1968,8 +1968,6 @@ components:
           type: string
         status:
           type: string
-        ovgAccessId:
-          type: string
         cademiAccessId:
           type: string
         activatedAt:
@@ -1992,8 +1990,6 @@ components:
           type: string
         status:
           type: string
-        ovgAccessId:
-          type: string
         cademiAccessId:
           type: string
         activatedAt:
@@ -2013,8 +2009,6 @@ components:
           format: uuid
         location:
           type: string
-        ovgCheckinId:
-          type: string
         checkedInAt:
           type: string
           format: date-time
@@ -2026,8 +2020,6 @@ components:
           type: string
           format: uuid
         location:
-          type: string
-        ovgCheckinId:
           type: string
         checkedInAt:
           type: string

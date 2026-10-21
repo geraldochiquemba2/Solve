@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { Instagram, Linkedin, Youtube, ArrowRight } from 'lucide-react'
-import solveAccessLogo from '../logo/Solve-Access.jpeg'
 
 const footerLinks = {
   Serviços: [
@@ -46,12 +45,7 @@ export default function Footer() {
           {/* Brand column */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-6">
-              <img 
-                src={solveAccessLogo} 
-                alt="Solve Access Logo" 
-                className="h-12 w-auto object-contain"
-                style={{ backgroundColor: '#fff', borderRadius: 8, padding: '4px 12px' }}
-              />
+              <span className="font-heading font-bold text-xl text-zinc-900 dark:text-white">Solve Corporate</span>
             </div>
 
             <p className="text-zinc-500 dark:text-zinc-400 text-sm font-body leading-relaxed mb-6 max-w-xs">

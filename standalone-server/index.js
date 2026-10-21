@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import pg from "pg";
 import jwt from "jsonwebtoken";
@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { registerStudioIntegration } from "./studio-integration.js";
 
 const { Pool } = pg;
 
@@ -33,37 +34,21 @@ const pool = new Pool({
 });
 
 // ─── BASE DE DADOS — MAPA DE TABELAS ────────────────────────────────────────
-// Tabelas criadas pelo AGENTE (sync directo SQLite → Neon via pg_sync.py):
-//   clientes (294)         — espelho da BD local do ZKTeco
-//   acessos (1595)         — log de acessos da catraca (mirror local)
-//   terminais (3)          — dispositivos registados
-//   admin (2)              — dados de admin local
-//   sync_state (3)         — controlo de último ID sincronizado
-//   checkins (0)           — checkins (vazio)
-//   fila_sincronizacao_ovg (0) — fila OVG (vazio)
-//
-// Tabelas criadas pelo SERVIDOR (Render API):
-//   solve_access_logs      — acessos enviados via sync_crm.py POST /api/v1/access/sync
-//   ovg_members (279)      — membros OnVirtualGym via sync_ovg.py
-//   sync_log (292)         — log de syncs do sync_crm.py
-//   customers (264)        — clientes CRM (API principal)
+// Tabelas do CRM (criadas por migrations / bootstrap):
+//   customers              — clientes CRM (API principal)
 //   users                  — utilizadores do CRM (auth/login)
-//   payments (25)          — pagamentos
-//   plans (3)              — planos de subscrição
+//   payments               — pagamentos
+//   plans                  — planos de subscrição
 //   leads                  — leads comerciais
 //   automations            — regras de automação
 //   audit_logs             — log de auditoria
 //   settings               — definições
 //   api_keys               — chaves de API
-//   integrations (5)       — integrações activas
+//   integrations           — integrações activas
 //   webhooks               — webhooks registados
 //   webhook_deliveries     — entregas de webhooks
 //
-// FLUXOS DE DADOS:
-//   1. ZKTeco catraca → sync_crm.py → POST /api/v1/access/sync → solve_access_logs
-//   2. ZKTeco catraca → pg_sync.py → INSERT directo Neon → clientes, acessos, terminais
-//   3. OnVirtualGym API → sync_ovg.py → POST /api/v1/access/ovg-sync → ovg_members
-//   4. Frontend CRM → GET/POST endpoints → customers, leads, plans, etc.
+// A integração com o ginásio (Solve Access / catraca / OVG) foi removida.
 // ────────────────────────────────────────────────────────────────────────────
 
 const API_KEY = process.env.API_KEY || "";
@@ -80,15 +65,11 @@ if (process.env.NODE_ENV === "production" && (!API_KEY || !JWT_SECRET)) {
 if (!API_KEY || !JWT_SECRET) {
   console.warn("[segurança] API_KEY/JWT_SECRET em falta: a usar modo dev local inseguro");
 }
-// Chave das máquinas do ginásio (edge_agent.py, sync_crm.py, sync_ovg.py):
-// por defeito igual à API_KEY; os scripts do PC enviam `X-API-Key: <valor>`.
-const EDGE_API_KEY = process.env.EDGE_API_KEY || API_KEY;
 // Diagnóstico de arranque: visível nos logs do Render (só nomes/host, sem valores).
 const _DB_SRC = process.env.CRM_DATABASE_URL ? "CRM_DATABASE_URL" : (process.env.DATABASE_URL ? "DATABASE_URL" : "nenhuma");
 const _DB_HOST = ((_DB_SRC === "CRM_DATABASE_URL" ? process.env.CRM_DATABASE_URL : process.env.DATABASE_URL) || "").replace(/\?.*$/, "").split("@")[1]?.split(/[/:]/)[0] || "?";
 console.log(`[boot] NODE_ENV=${process.env.NODE_ENV || "?"}` +
   ` API_KEY=${API_KEY ? "ok" : "EM FALTA"} JWT_SECRET=${JWT_SECRET ? "ok" : "EM FALTA"}` +
-  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"} DB=${_DB_SRC}@${_DB_HOST}` +
   // Fit90 (landing -> CRM): sem chave de serviço o varrimento fica desligado.
   ` SUPABASE=${process.env.SUPABASE_SERVICE_KEY ? "ok" : "varrimento OFF"}`);
 
@@ -114,13 +95,6 @@ async function cfg(key, envVal = "") {
   const v = await getSetting(key);
   return (v ?? "").toString().trim();
 }
-
-// REGRA CRM (isMember): funcionário = nome único (sem espaço) OU >3 entradas
-// no mesmo dia → oculto das contagens e listas em todo o CRM. Sócios têm
-// nome completo e ≤3 entradas/dia. Alias da tabela clientes como argumento.
-const isMember = (alias) => `(TRIM(${alias}.nome) LIKE '% %' AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = ${alias}.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3))`;
-// Registos apagados têm numero_cartao com sufixo _del → ocultar também.
-const notDeleted = (alias) => `(COALESCE(POSITION('_del' IN ${alias}.numero_cartao), 0) = 0)`;
 
 function apiKeyMatches(provided, expected) {
   if (typeof provided !== "string" || !expected) return false;
@@ -272,14 +246,6 @@ async function requireAuth(req, res, next) {
   } catch {
     return res.status(401).json({ error: "Token inválido ou expirado" });
   }
-}
-
-// Auth das máquinas do ginásio (só chave via header, sem JWT): sync_crm.py,
-// sync_ovg.py, edge_agent.py enviam `X-API-Key: <API_KEY>`. Sem chave → 401.
-function requireEdgeAuth(req, res, next) {
-  const key = req.headers["x-api-key"] || req.headers["x-edge-key"];
-  if (apiKeyMatches(key, EDGE_API_KEY)) return next();
-  return res.status(401).json({ error: "Chave de máquina inválida" });
 }
 
 // Auditoria de acesso negado com throttle: uma página que consulta a cada
@@ -526,12 +492,14 @@ app.use(express.json({ limit: "100kb",
 }));
 app.use(rateLimit(200));
 
+// Integração SamoraFit Studio: ingestão autenticada por chave dedicada + leitura no CRM.
+registerStudioIntegration(app, { pool, requireAuth, requireRole, rateLimit, audit });
+
 app.get("/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // Diagnóstico TEMPORÁRIO (remover após whitelist): IP público de saída do Render.
-// Se a OVG bloquear por IP, este é o IP a autorizar no lado deles.
 app.get("/api/v1/debug/egress-ip", requireAuth, async (_req, res) => {
   try {
     const ctrl = new AbortController();
@@ -545,41 +513,6 @@ app.get("/api/v1/debug/egress-ip", requireAuth, async (_req, res) => {
   }
 });
 
-// ─── Diagnóstico /db-* REMOVIDO (segurança, Set/2026) ───────────────────────
-// Expunha SELECT * de clientes/acessos/terminais e a lista de tabelas a
-// qualquer visitante, sem login. Quem precisar de diagnóstico usa a BD
-// (Neon) com credenciais próprias ou logs do Render. Mantém-se 410 Gone
-// para não confundir com "rota inexistente".
-for (const p of ["/api/v1/db-acessos", "/api/v1/db-clientes", "/api/v1/db-terminais", "/api/v1/db-tables"]) {
-  app.get(p, (_req, res) => res.status(410).json({ error: "Diagnóstico removido por segurança" }));
-}
-
-// ─── Sync: PC da catraca envia acessos ──────────────────────────────────────
-
-// Create sync_log table on startup
-pool.query(`CREATE TABLE IF NOT EXISTS sync_log (
-  id SERIAL PRIMARY KEY,
-  synced_at TIMESTAMPTZ DEFAULT NOW(),
-  records_synced INT DEFAULT 0,
-  source TEXT DEFAULT 'sync_crm'
-)`).catch(() => {});
-
-// Create ovg_members table on startup
-pool.query(`CREATE TABLE IF NOT EXISTS ovg_members (
-  customer_number TEXT PRIMARY KEY,
-  name TEXT,
-  sex TEXT,
-  nif TEXT,
-  mobile_number TEXT,
-  email TEXT,
-  status TEXT,
-  club TEXT,
-  last_entry TEXT,
-  entry_date TEXT,
-  synced_at TIMESTAMPTZ DEFAULT NOW()
-)`).catch(() => {});
-// Add entry_date column if missing (migration)
-pool.query(`ALTER TABLE ovg_members ADD COLUMN IF NOT EXISTS entry_date TEXT`).catch(() => {});
 // Add cademi_id column if missing (Cademi ↔ CRM link)
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS cademi_id TEXT`).catch(() => {});
 // Webhook-created payments may arrive without a known customer
@@ -917,595 +850,48 @@ app.put("/api/v1/settings", rateLimit(40), requireAuth, requireManager, async (r
   }
 });
 
-// SEGURANÇA: só as máquinas do ginásio (X-API-Key). Antes aceitava qualquer
-// POST da internet e escrevia acessos falsos.
-app.post("/api/v1/access/sync", requireEdgeAuth, async (req, res) => {
-  try {
-    const { acessos } = req.body;
-    if (!Array.isArray(acessos) || acessos.length === 0) {
-      res.status(400).json({ error: "Array 'acessos' vazio" });
-      return;
-    }
-
-    let inserted = 0;
-    for (const a of acessos) {
-      try {
-        await pool.query(
-          `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT (remote_id) DO NOTHING`,
-          [a.id_acesso, a.cliente_id, a.cliente_nome || null, a.data_acesso, a.hora_acesso, a.tipo_acesso, a.resultado, a.motivo || null]
-        );
-        inserted++;
-      } catch (e) { console.error("insert error:", e.message); }
-    }
-
-    // Log sync event
-    pool.query("INSERT INTO sync_log (synced_at, records_synced) VALUES (NOW(), $1)", [inserted]).catch(() => {});
-
-    res.json({ ok: true, inserted });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── OVG Sync: PC envia membros OVG ────────────────────────────────────────
-// SEGURANÇA: só as máquinas do ginásio (X-API-Key).
-app.post("/api/v1/access/ovg-sync", requireEdgeAuth, async (req, res) => {
-  try {
-    const { members } = req.body;
-    if (!Array.isArray(members) || members.length === 0) {
-      res.status(400).json({ error: "Array 'members' vazio" });
-      return;
-    }
-    let upserted = 0;
-    for (const m of members) {
-      try {
-        await pool.query(
-          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-           ON CONFLICT (customer_number) DO UPDATE SET
-             name = EXCLUDED.name, sex = EXCLUDED.sex, nif = EXCLUDED.nif,
-             mobile_number = EXCLUDED.mobile_number, email = EXCLUDED.email,
-             status = EXCLUDED.status, club = EXCLUDED.club, last_entry = EXCLUDED.last_entry,
-             entry_date = EXCLUDED.entry_date,
-             synced_at = NOW()`,
-          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null,
-           m.mobile_number || null, m.email || null, m.status || null,
-           m.club || null, m.last_entry || null, m.entry_date || null]
-        );
-        upserted++;
-      } catch (e) { console.error("ovg upsert error:", e.message); }
-    }
-    pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg')", [upserted]).catch(() => {});
-    res.json({ ok: true, upserted });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// OVG Sync status (só staff logado)
-app.get("/api/v1/access/ovg-status", requireAuth, async (req, res) => {
-  try {
-    const count = await pool.query("SELECT COUNT(*) as cnt FROM ovg_members");
-    const last = await pool.query("SELECT MAX(synced_at) as last_sync FROM ovg_members");
-    res.json({ total: parseInt(count.rows[0].cnt), lastSync: last.rows[0].last_sync });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── OVG Re-seed: fetches directly from OnVirtualGym API ──────────────────
-const OVG_API_URL = (process.env.OVG_API_URL || "https://samorafitstudio.onvirtualgym.com").trim();
-const OVG_USERNAME = (process.env.OVG_USERNAME || "").trim();
-const OVG_PASSWORD = (process.env.OVG_PASSWORD || "").trim();
-const OVG_CLUB_CODE = (process.env.OVG_CLUB_CODE || "LUA").trim();
-
-async function ovgLogin() {
-  const base = await cfg("ovg_api_url", OVG_API_URL);
-  const user = await cfg("ovg_username", OVG_USERNAME);
-  const pass = await cfg("ovg_password", OVG_PASSWORD);
-  if (!user || !pass) throw new Error("OVG credentials not configured (Integrações > Configurar)");
-  const url = `${base}/APIControlAccess`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
-    body: JSON.stringify({ username: user, password: pass }),
-  });
-  const body = await resp.text();
-  // SEGURANÇA: logs mínimos — nunca despejar corpo da resposta (pode ter tokens).
-  if (!resp.ok) throw new Error(`OVG login failed: ${resp.status}`);
-  const data = JSON.parse(body);
-  const token = data.token || data.Token || data.access_token;
-  if (!token) throw new Error("OVG: no token in response");
-  return token;
-}
-
-async function ovgGetMembers(token) {
-  const base = await cfg("ovg_api_url", OVG_API_URL);
-  const club = await cfg("ovg_club_code", OVG_CLUB_CODE);
-  const url = `${base}/ListOfCustomersDataDetailed/${club}`;
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
-  });
-  const body = await resp.text();
-  if (!resp.ok) throw new Error(`OVG members failed: ${resp.status}`);
-  const data = JSON.parse(body);
-  return data.clients_data || data.data?.clients_data || [];
-}
-
-app.post("/api/v1/access/ovg-reseed", requireAuth, requireManager, async (req, res) => {
-  // On-demand (zona de Clientes no CRM): sem polling de fundo (cota Neon).
-  // Aceita Bearer (login) ou X-API-Key (frontend/turnstile).
-  const user = await cfg("ovg_username", OVG_USERNAME);
-  const pass = await cfg("ovg_password", OVG_PASSWORD);
-  if (!user || !pass) {
-    return res.status(400).json({ error: "OVG credentials not configured (Integrações > Configurar)" });
-  }
-  try {
-    const token = await ovgLogin();
-    const members = await ovgGetMembers(token);
-    let upserted = 0;
-    for (const m of members) {
-      try {
-        await pool.query(
-          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-           ON CONFLICT (customer_number) DO UPDATE SET
-             name = EXCLUDED.name, sex = EXCLUDED.sex, nif = EXCLUDED.nif,
-             mobile_number = EXCLUDED.mobile_number, email = EXCLUDED.email,
-             status = EXCLUDED.status, club = EXCLUDED.club, last_entry = EXCLUDED.last_entry,
-             entry_date = EXCLUDED.entry_date,
-             synced_at = NOW()`,
-          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null,
-           m.mobile_number || null, m.email || null, m.status || null,
-           m.club_cod || m.club || null, m.last_entry || null, m.entry_date || null]
-        );
-        upserted++;
-      } catch (e) { console.error("ovg reseed error:", e.message); }
-    }
-    pool.query("INSERT INTO sync_log (synced_at, records_synced, source) VALUES (NOW(), $1, 'ovg-reseed')", [upserted]).catch(() => {});
-    res.json({ ok: true, upserted, total: members.length });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// Sync status endpoint (só staff logado)
-app.get("/api/v1/access/sync-status", requireAuth, async (req, res) => {
-  try {
-    const last = await pool.query("SELECT synced_at, records_synced FROM sync_log ORDER BY id DESC LIMIT 1");
-    const totalSyncs = await pool.query("SELECT COUNT(*) as cnt FROM sync_log");
-    const todaySyncs = await pool.query("SELECT COUNT(*) as cnt FROM sync_log WHERE synced_at::date = CURRENT_DATE");
-    res.json({
-      lastSync: last.rows[0] || null,
-      totalSyncs: parseInt(totalSyncs.rows[0].cnt),
-      todaySyncs: parseInt(todaySyncs.rows[0].cnt),
-    });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── Stats ──────────────────────────────────────────────────────────────────
-
-// Quem ficou "preso" (online=true sem movimento hoje, ex. após a meia-noite)
-// é marcado como fora. Só toca em quem NÃO tem movimentos hoje — seguro
-// para correr em qualquer leitura.
-async function midnightReset() {
-  try {
-    await pool.query(
-      `UPDATE clientes SET online = false WHERE online = true AND id_cliente NOT IN (
-         SELECT DISTINCT cliente_id FROM acessos WHERE data_acesso::date = CURRENT_DATE
-       )`
-    );
-  } catch {}
-}
-
-// Quem está dentro AGORA: última movimentação de hoje é entrada
-// (não usa a flag online, que dessincroniza quando passam sem picar)
-async function countInsideNow() {
-  try {
-    const r = await pool.query(
-      `SELECT COUNT(*) as cnt FROM (
-         SELECT DISTINCT ON (a.cliente_id) a.cliente_id, a.tipo_acesso
-         FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente
-         WHERE a.data_acesso::date = CURRENT_DATE
-           AND ${isMember("c")} AND ${notDeleted("c")}
-         ORDER BY a.cliente_id, a.id_acesso DESC
-       ) t WHERE t.tipo_acesso = 'entrada'`
-    );
-    return parseInt(r.rows[0].cnt);
-  } catch { return 0; }
-}
-
-app.post("/api/v1/access/midnight-reset", requireAuth, async (req, res) => {
-  try {
-    const r = await pool.query(
-      `UPDATE clientes SET online = false WHERE online = true AND id_cliente NOT IN (
-         SELECT DISTINCT cliente_id FROM acessos WHERE data_acesso::date = CURRENT_DATE
-       )`
-    );
-    res.json({ ok: true, checkedOut: r.rowCount });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-app.get("/api/v1/access/stats", requireAuth, async (req, res) => {
-  try {
-    await midnightReset();
-    const M = isMember("c");
-    const ND = notDeleted("c");
-    const E = "a.tipo_acesso = 'entrada'";
-    const totalResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E}`);
-    const todayResult = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE`);
-    const authorizedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) = 'autorizado'`);
-    const deniedToday = await pool.query(`SELECT COUNT(*) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E} AND a.data_acesso::date = CURRENT_DATE AND LOWER(a.resultado) != 'autorizado'`);
-    const uniqueClients = await pool.query(`SELECT COUNT(DISTINCT a.cliente_id) as cnt FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente WHERE ${M} AND ${ND} AND ${E}`);
-    const insideNow = await countInsideNow();
-    const onlineNow = insideNow;
-    const recentAccesses = await pool.query(
-      `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text, a.hora_acesso,
-              a.tipo_acesso, a.resultado, a.motivo
-       FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente
-       WHERE ${M} AND ${ND}
-       ORDER BY a.id_acesso DESC LIMIT 10`
-    );
-
-    res.json({
-      data: {
-        clients: { total: parseInt(uniqueClients.rows[0].cnt), active: insideNow, online: onlineNow, blocked: 0 },
-        accesses: {
-          today: parseInt(todayResult.rows[0].cnt),
-          month: parseInt(totalResult.rows[0].cnt),
-          authorizedToday: parseInt(authorizedToday.rows[0].cnt),
-          deniedToday: parseInt(deniedToday.rows[0].cnt),
-        },
-        recentAccesses: recentAccesses.rows,
-        accessByDay: [],
-        peakHours: [],
-      },
-    });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── Logs ───────────────────────────────────────────────────────────────────
-
-app.get("/api/v1/access/logs", requireAuth, async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(1000, parseInt(req.query.limit) || 200);
-    const offset = (page - 1) * limit;
-
-    const where = [];
-    const params = [];
-
-    // Ocultar funcionários e registos apagados em todas as listagens
-    where.push(isMember("c"));
-    where.push(notDeleted("c"));
-
-    if (req.query.client_id) {
-      where.push("a.cliente_id = $" + (params.length + 1));
-      params.push(parseInt(req.query.client_id));
-    }
-    if (req.query.resultado) {
-      where.push("LOWER(a.resultado) = $" + (params.length + 1));
-      params.push(req.query.resultado.toLowerCase());
-    }
-    if (req.query.tipo_acesso) {
-      where.push("a.tipo_acesso = $" + (params.length + 1));
-      params.push(req.query.tipo_acesso);
-    }
-    if (req.query.date_from) {
-      where.push("a.data_acesso >= $" + (params.length + 1));
-      params.push(req.query.date_from);
-    }
-    if (req.query.date_to) {
-      where.push("a.data_acesso <= $" + (params.length + 1));
-      params.push(req.query.date_to);
-    }
-    if (req.query.search) {
-      where.push("(LOWER(c.nome) LIKE $" + (params.length + 1) + " OR a.cliente_id::text LIKE $" + (params.length + 2) + ")");
-      params.push("%" + req.query.search.toLowerCase() + "%", req.query.search);
-    }
-
-    const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
-
-    const totalResult = await pool.query(
-      "SELECT COUNT(*) as cnt FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente " + whereClause, params
-    );
-    const logs = await pool.query(
-      `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome, a.data_acesso::text as data_acesso, a.hora_acesso,
-              a.tipo_acesso, a.resultado, a.motivo
-       FROM acessos a LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
-       ${whereClause}
-       ORDER BY a.id_acesso DESC LIMIT ${limit} OFFSET ${offset}`,
-      params
-    );
-
-    res.json({
-      data: logs.rows,
-      pagination: { page, limit, total: parseInt(totalResult.rows[0].cnt), totalPages: Math.ceil(parseInt(totalResult.rows[0].cnt) / limit) },
-    });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── Terminal Status ──────────────────────────────────────────────────────────
-
-app.get("/api/v1/terminal/status", requireAuth, async (req, res) => {
-  try {
-    await midnightReset();
-    const recentResult = await pool.query(
-      "SELECT MAX(data_acesso || ' ' || hora_acesso) as last_sync FROM acessos"
-    );
-    const lastSync = recentResult.rows[0]?.last_sync;
-    const isOnline = lastSync && (Date.now() - new Date(lastSync).getTime()) < 30 * 60 * 1000;
-
-    const onlineClients = await countInsideNow();
-
-    res.json({
-      data: {
-        nome_terminal: "Solve Access",
-        online: isOnline,
-        ip: "192.168.1.182",
-        porta: 8080,
-        modelo: "ZKTeco",
-        tipo: "Entrada",
-        lastSync: lastSync,
-        onlineClients: onlineClients,
-      },
-    });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── Terminal Unlock ───────────────────────────────────────────────────────
-// SEGURANÇA: só staff logado. Abre a catraca física — nunca público.
-app.post("/api/v1/terminal/unlock", requireAuth, async (req, res) => {
-  try {
-    const { door, tipo } = req.body;
-    console.log(`[UNLOCK] Pedido de desbloqueio: porta ${door} (${tipo})`);
-
-    try {
-      const http = await import("http");
-      const doorId = door || 1;
-      const postData = JSON.stringify({ door: doorId, action: "open" });
-
-      const unlockResult = await new Promise((resolve, reject) => {
-        const request = http.request(
-          {
-            hostname: "127.0.0.1",
-            port: 8080,
-            path: `/api/remoteOpen`,
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(postData) },
-            timeout: 5000,
-          },
-          (response) => {
-            let data = "";
-            response.on("data", (chunk) => (data += chunk));
-            response.on("end", () => resolve({ status: response.statusCode, body: data }));
-          }
-        );
-        request.on("error", reject);
-        request.on("timeout", () => { request.destroy(); reject(new Error("timeout")); });
-        request.write(postData);
-        request.end();
-      });
-
-      console.log(`[UNLOCK] Resultado:`, unlockResult);
-      res.json({ ok: true, message: `Catraca ${tipo || "entrada"} desbloqueada`, detail: unlockResult });
-    } catch (e) {
-      console.log(`[UNLOCK] Erro ao contactar ZKTeco: ${e.message}`);
-      // SEGURANÇA: falha reportada como falha (antes dizia ok:true e enganava).
-      res.status(502).json({ ok: false, error: "Catraca inalcançável. Verificar PC do ginásio." });
-    }
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-// ─── Clients ────────────────────────────────────────────────────────────────
-
-app.get("/api/v1/access/clients", requireAuth, async (req, res) => {
-  try {
-    await midnightReset();
-    const result = await pool.query(
-      `SELECT DISTINCT
-        a.cliente_id as id_cliente,
-        c.nome as nome,
-        c.numero_cartao as numero_cartao,
-        MAX(a.data_acesso::text) as ultimo_acesso,
-        MAX(a.hora_acesso) as ultimo_hora,
-        COUNT(*) as total_acessos,
-        COUNT(*) FILTER (WHERE LOWER(a.resultado) = 'autorizado') as acessos_autorizados,
-        COUNT(*) FILTER (WHERE LOWER(a.resultado) != 'autorizado') as acessos_negados,
-        c.online,
-        c.bloqueado,
-        c.numero_entradas,
-        c.limite_entradas,
-        c.status as cliente_status,
-        o.sex as ovg_sex,
-        o.email as ovg_email,
-        o.mobile_number as ovg_phone,
-        o.nif as ovg_nif,
-        o.status as ovg_status,
-        o.last_entry as ovg_last_entry,
-        o.entry_date as ovg_entry_date
-       FROM acessos a
-       LEFT JOIN clientes c ON a.cliente_id = c.id_cliente
-       LEFT JOIN ovg_members o ON o.customer_number = CAST(c.numero_cartao AS TEXT)
-       GROUP BY a.cliente_id, c.nome, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, c.status, c.numero_cartao, o.sex, o.email, o.mobile_number, o.nif, o.status, o.last_entry, o.entry_date
-       ORDER BY c.nome ASC`
-    );
-    // Filtra funcionários (nome único OU >3 entradas/dia) e registos apagados (_del)
-    let staffIds = new Set();
-    try {
-      const s = await pool.query(
-        `SELECT DISTINCT ax.cliente_id FROM acessos ax WHERE ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3`
-      );
-      s.rows.forEach(r => staffIds.add(String(r.cliente_id)));
-    } catch {}
-    const filtered = result.rows.filter(r => {
-      if (!(r.nome || '').trim().includes(' ')) return false;
-      if ((r.numero_cartao || '').includes('_del')) return false;
-      if (staffIds.has(String(r.id_cliente))) return false;
-      return true;
-    });
-    res.json({ data: filtered, total: filtered.length });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
 // ─── Customers (legacy endpoint for frontend compatibility) ─────────────────
 
 app.get("/api/v1/customers", requireAuth, async (req, res) => {
   try {
-    await midnightReset();
     const result = await pool.query(
-      `SELECT DISTINCT
-        c.id_cliente as id,
-        c.nome as name,
-        MAX(a.data_acesso::text) as "joinedAt",
-        MAX(a.data_acesso::text) as "createdAt",
-        MAX(a.data_acesso::text) as "updatedAt",
-        o.email,
-        o.mobile_number as phone,
-        o.sex as gender,
-        o.entry_date as "entryDate",
-        o.nif,
-        o.status as state,
-        c.status as client_status,
-        c.online,
-        c.bloqueado,
-        c.numero_entradas,
-        c.limite_entradas,
-        '' as company,
-        null as "planName",
-        null as "subscriptionEnd",
-        c.numero_cartao as code
-       FROM clientes c
-       LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
-       LEFT JOIN ovg_members o ON o.customer_number = c.numero_cartao
-       WHERE EXISTS (SELECT 1 FROM acessos a2 WHERE a2.cliente_id = c.id_cliente)
-         AND (TRIM(c.nome) LIKE '% %')
-         AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
-         AND (COALESCE(POSITION('_del' IN c.numero_cartao), 0) = 0)
-       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number
-       ORDER BY c.nome ASC`
+      `SELECT c.id::text AS id, c.name,
+        COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
+        c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
+        c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
+        c.state AS client_status, false AS online, false AS bloqueado,
+        CASE WHEN sl.t = 0 THEN NULL ELSE sl.t - sl.d END AS numero_entradas,
+        CASE WHEN sl.t = 0 THEN NULL ELSE sl.t END AS limite_entradas,
+        COALESCE(c.company,'') AS company, p.name AS "planName",
+        s.end_date::text AS "subscriptionEnd", c.code,
+        c.cademi_id AS "cademiId", c.lead_id::text AS "leadId"
+       FROM customers c
+       LEFT JOIN LATERAL (SELECT * FROM subscriptions WHERE customer_id = c.id ORDER BY start_date DESC LIMIT 1) s ON true
+       LEFT JOIN plans p ON p.id = s.plan_id
+       LEFT JOIN LATERAL (SELECT COALESCE(SUM(lessons_total), 0) AS t, COALESCE(SUM(lessons_done), 0) AS d FROM subscriptions WHERE customer_id = c.id) sl ON true
+       ORDER BY c.name ASC`
     );
     res.json({ data: result.rows, total: result.rows.length });
   } catch (err) {
-    // Fase Cademi-CRM: sem tabelas do ginásio -> lista da tabela CRM customers
-    try {
-      const fb = await pool.query(
-        `SELECT c.id::text AS id, c.name,
-          COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
-          c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
-          c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
-          c.state AS client_status, false AS online, false AS bloqueado,
-          CASE WHEN sl.t = 0 THEN NULL ELSE sl.t - sl.d END AS numero_entradas,
-          CASE WHEN sl.t = 0 THEN NULL ELSE sl.t END AS limite_entradas,
-          COALESCE(c.company,'') AS company, p.name AS "planName",
-          s.end_date::text AS "subscriptionEnd", c.code,
-          c.ovg_id AS "ovgId", c.cademi_id AS "cademiId", c.lead_id::text AS "leadId"
-         FROM customers c
-         LEFT JOIN LATERAL (SELECT * FROM subscriptions WHERE customer_id = c.id ORDER BY start_date DESC LIMIT 1) s ON true
-         LEFT JOIN plans p ON p.id = s.plan_id
-         LEFT JOIN LATERAL (SELECT COALESCE(SUM(lessons_total), 0) AS t, COALESCE(SUM(lessons_done), 0) AS d FROM subscriptions WHERE customer_id = c.id) sl ON true
-         ORDER BY c.name ASC`
-      );
-      res.json({ data: fb.rows, total: fb.rows.length });
-    } catch (e2) {
-      console.error("[CUSTOMERS LIST] Error:", e2.message);
-      res.status(500).json({ error: "Erro a ler clientes. Ver logs do servidor." });
-    }
+    console.error("[CUSTOMERS LIST] Error:", err.message);
+    res.status(500).json({ error: "Erro a ler clientes. Ver logs do servidor." });
   }
 });
 
 app.get("/api/v1/customers/:id", requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT DISTINCT
-        c.id_cliente as id,
-        c.nome as name,
-        MAX(a.data_acesso::text) as "joinedAt",
-        o.email,
-        o.mobile_number as phone,
-        o.sex as gender,
-        o.entry_date as "entryDate",
-        o.nif,
-        o.status as state,
-        c.status as client_status,
-        c.online,
-        c.bloqueado,
-        c.numero_entradas,
-        c.limite_entradas,
-        '' as company
-       FROM clientes c
-       LEFT JOIN acessos a ON a.cliente_id = c.id_cliente
-       LEFT JOIN ovg_members o ON o.customer_number = c.numero_cartao
-       WHERE c.id_cliente = $1
-         AND (TRIM(c.nome) LIKE '% %')
-         AND NOT EXISTS (SELECT 1 FROM acessos ax WHERE ax.cliente_id = c.id_cliente AND ax.tipo_acesso = 'entrada' GROUP BY ax.cliente_id, ax.data_acesso::date HAVING COUNT(*) > 3)
-         AND (COALESCE(POSITION('_del' IN c.numero_cartao), 0) = 0)
-       GROUP BY c.id_cliente, c.nome, c.numero_cartao, c.status, c.online, c.bloqueado, c.numero_entradas, c.limite_entradas, o.email, o.mobile_number, o.sex, o.entry_date, o.nif, o.status, o.customer_number`,
-      [req.params.id]
+    const fb = await pool.query(
+      `SELECT c.id::text AS id, c.name,
+        COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
+        c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
+        c.state AS client_status, false AS online, false AS bloqueado,
+        NULL AS numero_entradas, NULL AS limite_entradas,
+        COALESCE(c.company,'') AS company
+       FROM customers c WHERE c.id::text = $1 LIMIT 1`,
+      [String(req.params.id)]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
-    res.json({ data: result.rows[0] });
-  } catch (err) {
-    // Fase Cademi-CRM: fallback à tabela CRM customers (uuid)
-    try {
-      const fb = await pool.query(
-        `SELECT c.id::text AS id, c.name,
-          COALESCE(c.joined_at, c.created_at)::text AS "joinedAt",
-          c.email, c.phone, c.gender, NULL AS "entryDate", c.nif, c.state,
-          c.state AS client_status, false AS online, false AS bloqueado,
-          NULL AS numero_entradas, NULL AS limite_entradas,
-          COALESCE(c.company,'') AS company
-         FROM customers c WHERE c.id::text = $1 LIMIT 1`,
-        [String(req.params.id)]
-      );
-      if (fb.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
-      res.json({ data: fb.rows[0] });
-    } catch (e2) {
-      console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-    }
-  }
-});
-
-app.post("/api/v1/customers/import-dates", requireAuth, requireManager, async (req, res) => {
-  try {
-    const { rows } = req.body;
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: "No rows provided" });
-    }
-    let updated = 0, notFound = 0, errors = [];
-    for (const row of rows) {
-      try {
-        const dateStr = row.joined_at;
-        if (!dateStr) { notFound++; continue; }
-        let customerId = null;
-        if (row.code) customerId = row.code;
-        else if (row.ovg_id) customerId = row.ovg_id;
-        if (!customerId) { notFound++; continue; }
-    const r = await pool.query(
-          `UPDATE ovg_members SET entry_date = $1 WHERE customer_number = $2`,
-          [dateStr, String(customerId)]
-        );
-        if (r.rowCount > 0) updated++;
-        else notFound++;
-      } catch (e) { errors.push(e.message); }
-    }
-    res.json({ data: { updated, notFound, errors, total: rows.length }, message: `${updated} actualizados, ${notFound} não encontrados` });
+    if (fb.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
+    res.json({ data: fb.rows[0] });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -2116,15 +1502,15 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
       `SELECT p.* FROM payments p
        ${whereClause} ORDER BY p.created_at DESC, p.id DESC LIMIT 200`, params
     );
-    
+
     const total = await pool.query("SELECT COUNT(*) as cnt FROM payments p " + whereClause, params);
     const sum = await pool.query("SELECT COALESCE(SUM(p.amount), 0) as total FROM payments p " + whereClause, params);
     const byStatus = await pool.query(
       "SELECT p.status, COUNT(*) as cnt, COALESCE(SUM(p.amount), 0) as total FROM payments p " + whereClause + " GROUP BY p.status", params
     );
 
-    res.json({ 
-      data: result.rows, 
+    res.json({
+      data: result.rows,
       total: parseInt(total.rows[0].cnt),
       sum: parseFloat(sum.rows[0].total),
       byStatus: byStatus.rows
@@ -2933,25 +2319,6 @@ app.get("/api/v1/cademi/health", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/v1/ovg/health", requireAuth, async (req, res) => {
-  try {
-    const user = await cfg("ovg_username", OVG_USERNAME);
-    const pass = await cfg("ovg_password", OVG_PASSWORD);
-    if (!user || !pass) {
-      return res.json({ data: { connected: false, message: "Credenciais OVG em falta (Integrações > Configurar)" } });
-    }
-    const count = await qNum("SELECT COUNT(*) as cnt FROM ovg_members");
-    let lastSync = null;
-    try {
-      const r = await pool.query("SELECT MAX(synced_at) as m FROM ovg_members");
-      lastSync = r.rows[0]?.m || null;
-    } catch {}
-    res.json({ data: { connected: count > 0, message: count > 0 ? `${count} sócios sincronizados` : "Sem sócios sincronizados", details: lastSync } });
-  } catch (err) {
-    res.json({ data: { connected: false, message: err.message } });
-  }
-});
-
 app.get("/api/v1/pay4all/health", requireAuth, async (req, res) => {
   try {
     const token = await getEkwanzaToken();
@@ -3129,22 +2496,6 @@ app.post("/api/v1/cademi/sync", requireAuth, requireManager, async (req, res) =>
           customerId = ins.rows[0].id;
           created++;
         }
-        // Enriquece género/telefone via espelho OVG (a Cademi não tem género).
-        // Só preenche vazios; corre no sync manual (custo irrisório, sem polling).
-        try {
-          const digits = String(u.celular || '').replace(/\D/g, '').slice(-9);
-          const om = await pool.query(
-            `SELECT sex, mobile_number FROM ovg_members
-             WHERE sex IN ('M','F') AND (LOWER(email) = LOWER($1)
-               OR ($2 <> '' AND RIGHT(REGEXP_REPLACE(COALESCE(mobile_number,''), '[^0-9]', '', 'g'), 9) = $2))
-             LIMIT 1`,
-            [email, digits]);
-          if (om.rows.length > 0) {
-            await pool.query(
-              `UPDATE customers SET gender = COALESCE(gender, $1), phone = COALESCE(phone, $2), updated_at = NOW() WHERE id = $3`,
-              [om.rows[0].sex, om.rows[0].mobile_number, customerId]);
-          }
-        } catch {}
         // Acessos ativos na Cademi = pagantes -> subscription + payment confirmado
         let acessos = [];
         try {
@@ -3247,19 +2598,11 @@ async function sendCademiDelivery(paymentCode, force = false) {
     // Nome + email: a metadata (formulário desta compra) tem PRIORIDADE — o
     // customer_id vem do telefone (pode ser de outra pessoa, ex. familiar que
     // pagou no Express) e nunca pode substituir o aluno desta compra.
-    // customers/OVG só como recurso quando a metadata não traz email/nome.
     let nome = meta.name || null, email = meta.email || null, phone = meta.phone || null;
     if ((!email || !nome) && payment.customer_id) {
       try {
         const cr = await pool.query("SELECT name, email, phone FROM customers WHERE id = $1", [payment.customer_id]);
         if (cr.rows[0]) { email = email || cr.rows[0].email; nome = nome || cr.rows[0].name; phone = phone || cr.rows[0].phone; }
-      } catch {}
-    }
-    if (!email && phone) {
-      try {
-        const digits = String(phone).replace(/\D/g, "").slice(-9);
-        const or = await pool.query("SELECT email, name FROM ovg_members WHERE mobile_number LIKE $1 LIMIT 1", [`%${digits}`]);
-        if (or.rows[0]?.email) { email = or.rows[0].email; nome = nome || or.rows[0].name; }
       } catch {}
     }
     if (!email) return { ok: false, skipped: "sem email (preenche no cliente e reenvia)" };
@@ -3424,12 +2767,10 @@ app.get("/api/v1/cademi/nome", studentLookupLimit(), async (req, res) => {
       const found = users.find(u => String(u.email || "").toLowerCase() === email.toLowerCase());
       if (found?.nome) return res.json({ data: { nome: found.nome, fonte: "cademi" } });
     } catch {}
-    // 2) Fallback: base local (customers / ovg_members)
+    // 2) Fallback: base local (customers)
     try {
       const cr = await pool.query("SELECT name FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
       if (cr.rows[0]?.name) return res.json({ data: { nome: cr.rows[0].name, fonte: "crm" } });
-      const or = await pool.query("SELECT name FROM ovg_members WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
-      if (or.rows[0]?.name) return res.json({ data: { nome: or.rows[0].name, fonte: "ovg" } });
 } catch {}
   // Email desconhecido responde 200 com objecto vazio, igual ao encontrado sem
   // nome. Um 404 aqui era um oráculo de enumeração: bastava comparar o status
@@ -3560,20 +2901,8 @@ async function qNum(sql, params = [], fallback = 0) {
   } catch { return fallback; }
 }
 
-// Fase Cademi-CRM: tenta a query do ginásio; sem as tabelas-espelho cai para a tabela CRM.
-async function qNumGymOrCrm(gymSql, crmSql, params = []) {
-  try {
-    const r = await pool.query(gymSql, params);
-    return parseFloat(r.rows[0]?.cnt ?? 0);
-  } catch {
-    return qNum(crmSql, params, 0);
-  }
-}
-
 async function getIntegrationsLive() {
-  const [ovgCount, ovgSync, payCount, paySync, leadCount, cademi, cademiKey] = await Promise.all([
-    qNum("SELECT COUNT(*) as cnt FROM ovg_members"),
-    (async () => { try { const r = await pool.query("SELECT MAX(synced_at) as m FROM ovg_members"); return r.rows[0]?.m || null; } catch { return null; } })(),
+  const [payCount, paySync, leadCount, cademi, cademiKey] = await Promise.all([
     qNum("SELECT COUNT(*) as cnt FROM payments"),
     (async () => { try { const r = await pool.query("SELECT MAX(created_at) as m FROM payments"); return r.rows[0]?.m || null; } catch { return null; } })(),
     qNum("SELECT COUNT(*) as cnt FROM leads"),
@@ -3582,7 +2911,6 @@ async function getIntegrationsLive() {
   ]);
   const now = new Date().toISOString();
   return [
-    { id: "ovg", name: "OVG", status: ovgCount > 0 ? "operacional" : "atencao", lastSyncAt: ovgSync, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "pay4all", name: "Pay4All", status: payCount > 0 ? "operacional" : "atencao", lastSyncAt: paySync, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "cademi", name: "Cademi", status: !cademiKey ? "inativo" : (cademi.connected ? "operacional" : "atencao"), lastSyncAt: cademi.connected ? now : null, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "whatsapp", name: "WhatsApp", status: "inativo", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
@@ -3593,14 +2921,8 @@ async function getIntegrationsLive() {
 app.get("/api/v1/dashboard/stats", requireAuth, async (req, res) => {
   try {
     const [totalCustomers, activeCustomers, totalLeads, revenue30d, pendingPayments, latePayments, integrations] = await Promise.all([
-      // Fase Cademi-CRM: sem tabelas do ginásio, conta a tabela CRM customers
-      qNumGymOrCrm(
-        `SELECT COUNT(*) as cnt FROM clientes WHERE ${isMember("clientes")} AND ${notDeleted("clientes")}`,
-        `SELECT COUNT(*) as cnt FROM customers`),
-      // Activo = status ativo E sócio (não funcionário) E com pelo menos 1 acesso na catraca
-      qNumGymOrCrm(
-        `SELECT COUNT(DISTINCT c.id_cliente) as cnt FROM clientes c WHERE LOWER(c.status) = 'ativo' AND ${isMember("c")} AND ${notDeleted("c")} AND EXISTS (SELECT 1 FROM acessos a WHERE a.cliente_id = c.id_cliente)`,
-        `SELECT COUNT(*) as cnt FROM customers WHERE state = 'activo'`),
+      qNum("SELECT COUNT(*) as cnt FROM customers"),
+      qNum("SELECT COUNT(*) as cnt FROM customers WHERE state = 'activo'"),
       qNum("SELECT COUNT(*) as cnt FROM leads"),
       qNum("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE LOWER(status::text) = 'confirmado' AND created_at >= NOW() - INTERVAL '30 days'"),
       qNum("SELECT COUNT(*) as cnt FROM payments WHERE LOWER(status::text) = 'pendente'"),
@@ -3677,27 +2999,11 @@ app.get("/api/v1/audit-logs", requireAuth, requireManager, async (req, res) => {
   try {
     const events = [];
     try {
-      const r = await pool.query("SELECT DISTINCT ON (source) id, synced_at, records_synced, source FROM sync_log ORDER BY source, id DESC");
-      r.rows.forEach(s => events.push({
-        id: `sync-${s.id}`, actor: "Sistema",
-        action: `Última sincronização ${s.source || ''}: ${s.records_synced ?? 0} registos`,
-        entity: s.source || 'sync', entityId: null, createdAt: s.synced_at,
-      }));
-    } catch {}
-    try {
       const r = await pool.query("SELECT id, code, amount, status, created_at FROM payments ORDER BY created_at DESC LIMIT 50");
       r.rows.forEach(p => events.push({
         id: `pay-${p.id}`, actor: "Pay4All",
         action: `Pagamento ${p.status}: ${p.amount} Kz`,
         entity: "payment", entityId: p.code, createdAt: p.created_at,
-      }));
-    } catch {}
-    try {
-      const r = await pool.query("SELECT id_cliente, nome, data_atualizacao FROM clientes WHERE bloqueado = true ORDER BY data_atualizacao DESC LIMIT 20");
-      r.rows.forEach(c => events.push({
-        id: `blk-${c.id_cliente}`, actor: "Sistema",
-        action: `Conta bloqueada: ${c.nome}`,
-        entity: "customer", entityId: String(c.id_cliente), createdAt: c.data_atualizacao,
       }));
     } catch {}
     events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -3883,73 +3189,12 @@ app.patch("/api/v1/users/:id/toggle", rateLimit(50), requireAuth, requireAdmin, 
   }
 });
 
-// ─── OVG sync (usa credenciais das settings) ────────────────────────────────
-
-app.get("/api/v1/ovg/sync/status", requireAuth, async (req, res) => {
-  try {
-    const r = await pool.query("SELECT MAX(synced_at) as last, COUNT(*) as cnt FROM ovg_members");
-    res.json({ data: { isSyncing: false, lastSync: r.rows[0]?.last ? { timestamp: r.rows[0].last, created: 0, updated: parseInt(r.rows[0].cnt) } : null, nextSyncIn: 0 } });
-  } catch (err) {
-    res.json({ data: { isSyncing: false, lastSync: null, nextSyncIn: 0 } });
-  }
-});
-
-app.post("/api/v1/ovg/sync/now", requireAuth, requireManager, async (req, res) => {
-  try {
-    const user = await cfg("ovg_username", OVG_USERNAME);
-    const pass = await cfg("ovg_password", OVG_PASSWORD);
-    if (!user || !pass) return res.status(400).json({ error: "Credenciais OVG em falta (Integrações > Configurar)" });
-    const token = await ovgLogin();
-    const members = await ovgGetMembers(token);
-    let upserted = 0;
-    for (const m of members) {
-      try {
-        await pool.query(
-          `INSERT INTO ovg_members (customer_number, name, sex, nif, mobile_number, email, status, club, last_entry, entry_date, synced_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-           ON CONFLICT (customer_number) DO UPDATE SET name=EXCLUDED.name, sex=EXCLUDED.sex, nif=EXCLUDED.nif, mobile_number=EXCLUDED.mobile_number, email=EXCLUDED.email, status=EXCLUDED.status, club=EXCLUDED.club, last_entry=EXCLUDED.last_entry, entry_date=EXCLUDED.entry_date, synced_at=NOW()`,
-          [String(m.customer_number), m.name || null, m.sex || null, m.nif || null, m.mobile_number || null, m.email || null, m.status || null, m.club_cod || m.club || null, m.last_entry || null, m.entry_date || null]
-        );
-        upserted++;
-      } catch {}
-    }
-    res.json({ data: { synced: upserted, total: members.length }, message: `${upserted} sócios sincronizados` });
-  } catch (err) {
-    console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
-  }
-});
-
-app.get("/api/v1/ovg/members", requireAuth, async (req, res) => {
-  try {
-    const r = await pool.query("SELECT * FROM ovg_members ORDER BY name ASC LIMIT 500");
-    res.json({ data: r.rows, total: r.rows.length });
-  } catch (err) {
-    console.error("[OVG MEMBERS] Error:", err.message);
-    res.status(500).json({ error: "Erro a ler membros OVG. Ver logs do servidor." });
-  }
-});
-
-// ─── Customers PATCH (só campos de contacto; catraca mantém o resto) ─────────
+// ─── Customers PATCH (só campos de contacto) ────────────────────────────────
 
 app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
   try {
     const id = String(req.params.id);
-    // 1) Espelho do ginásio (id numérico ou cartão) — só nome/telefone/email.
-    // NOTA: pg_sync.py reenvia online/bloqueado/numero_entradas a cada 10s.
-    try {
-      const fields = [];
-      const params = [];
-      if (req.body.nome !== undefined) { fields.push("nome = $" + (params.length + 1)); params.push(req.body.nome); }
-      if (req.body.telefone !== undefined) { fields.push("telefone = $" + (params.length + 1)); params.push(req.body.telefone); }
-      if (req.body.email !== undefined) { fields.push("email = $" + (params.length + 1)); params.push(req.body.email); }
-      if (fields.length > 0) {
-        const gp = [...params, id];
-        const r = await pool.query(`UPDATE clientes SET ${fields.join(", ")} WHERE (id_cliente::text = $${params.length + 1} OR numero_cartao = $${params.length + 1}) RETURNING id_cliente, nome, telefone, email`, gp);
-        if (r.rows.length > 0) return res.json({ data: r.rows[0] });
-      }
-    } catch {}
-    // 2) Tabela CRM customers (uuid) — nome/telefone/email + género (M/F).
-    // O espelho OVG é só-leitura (ids "ovg-*"): 404 abaixo é esperado para esses.
+    // Tabela CRM customers (uuid) — nome/telefone/email + género (M/F).
     const cfields = [];
     const cparams = [];
     if (req.body.nome !== undefined) { cfields.push("name = $" + (cparams.length + 1)); cparams.push(req.body.nome); }
@@ -4412,12 +3657,12 @@ app.post("/api/v1/leads/:id/convert", requireAuth, async (req, res) => {
 
 app.post("/api/v1/plans", requireAuth, requireManager, async (req, res) => {
   try {
-    const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
+    const { name, description, price, periodicity, duration, active } = req.body;
     if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
     const result = await pool.query(
-      `INSERT INTO plans (name, description, price, periodicity, duration, active, ovg_plan_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [name, description || null, price || 0, periodicity || 'mensal', duration || null, active !== false, ovg_plan_id || null]
+      `INSERT INTO plans (name, description, price, periodicity, duration, active)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name, description || null, price || 0, periodicity || 'mensal', duration || null, active !== false]
     );
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
@@ -4427,7 +3672,7 @@ app.post("/api/v1/plans", requireAuth, requireManager, async (req, res) => {
 
 app.put("/api/v1/plans/:id", requireAuth, requireManager, async (req, res) => {
   try {
-    const { name, description, price, periodicity, duration, active, ovg_plan_id } = req.body;
+    const { name, description, price, periodicity, duration, active } = req.body;
     const fields = [];
     const params = [];
     if (name !== undefined) { fields.push("name = $" + (params.length + 1)); params.push(name); }
@@ -4436,7 +3681,7 @@ app.put("/api/v1/plans/:id", requireAuth, requireManager, async (req, res) => {
     if (periodicity !== undefined) { fields.push("periodicity = $" + (params.length + 1)); params.push(periodicity); }
     if (duration !== undefined) { fields.push("duration = $" + (params.length + 1)); params.push(duration); }
     if (active !== undefined) { fields.push("active = $" + (params.length + 1)); params.push(active); }
-    if (ovg_plan_id !== undefined) { fields.push("ovg_plan_id = $" + (params.length + 1)); params.push(ovg_plan_id); }
+
     if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar" });
     fields.push("updated_at = NOW()");
     params.push(req.params.id);
@@ -4586,107 +3831,6 @@ app.get("/api/v1/payments/ekwanza/check-status/:id", rateLimit(60), async (req, 
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
-
-// ─── Edge Agent API (PC do ginásio) ─────────────────────────────────────────
-// SEGURANÇA: só com X-API-Key das máquinas (requireEdgeAuth). Os scripts do
-// PC (edge_agent.py, sync_crm.py, sync_ovg.py) têm de enviar o header.
-const pendingCommands = [];
-
-app.post("/api/edge/evento", requireEdgeAuth, async (req, res) => {
-  try {
-    const { tipo, pin, terminal_serie, timestamp } = req.body;
-    if (!tipo || !pin) {
-      return res.status(400).json({ autorizado: false, mensagem: "Dados inválidos" });
-    }
-
-    const now = timestamp ? new Date(timestamp) : new Date();
-    const remoteId = Date.now();
-    const accessType = tipo === "entrada" ? "entrada" : "saida";
-
-    await pool.query(
-      `INSERT INTO solve_access_logs (id, remote_id, customer_id, customer_name, access_date, access_time, access_type, result, reason)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (remote_id) DO NOTHING`,
-      [remoteId, parseInt(pin) || 0, `Cliente ${pin}`, now.toISOString().split('T')[0], now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0'), accessType, 'autorizado', null]
-    );
-
-    console.log(`[EDGE] ${accessType} pin=${pin}`);
-    res.json({ autorizado: true, mensagem: "Acesso autorizado", unlock: true });
-  } catch (err) {
-    console.error("[EDGE EVENTO] Error:", err.message);
-    res.status(500).json({ autorizado: false, mensagem: err.message });
-  }
-});
-
-app.get("/api/edge/comandos", requireEdgeAuth, (req, res) => {
-  const agentId = req.query.agent_id || "PC01";
-  const cmds = pendingCommands.filter(c => c.agent_id === agentId || !c.agent_id);
-  // Clear delivered commands
-  pendingCommands.length = 0;
-  res.json({ comandos: cmds });
-});
-
-app.get("/api/edge/sincronizar", requireEdgeAuth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT DISTINCT customer_id as id, customer_name as nome FROM solve_access_logs ORDER BY customer_name ASC"
-    );
-    res.json({ clientes: result.rows });
-  } catch (err) {
-    console.error("[EDGE SYNC] Error:", err.message);
-    res.json({ clientes: [] });
-  }
-});
-
-// ─── SSE: Streaming de acessos em tempo real ─────────────────────────────────
-
-const sseClients = new Set();
-let lastSyncedId = 0;
-
-// Posiciona no MAX atual para não despejar histórico no arranque
-pool.query("SELECT COALESCE(MAX(id_acesso), 0) as m FROM acessos")
-  .then(r => { lastSyncedId = parseInt(r.rows[0].m); })
-  .catch(() => {});
-
-const ACCESS_SELECT = `SELECT a.id_acesso, a.cliente_id, c.nome as cliente_nome,
-  a.data_acesso::text as data_acesso, a.hora_acesso,
-  a.tipo_acesso, a.resultado, a.motivo
-  FROM acessos a JOIN clientes c ON a.cliente_id = c.id_cliente`;
-
-app.get("/api/v1/access/stream", requireAuth, async (req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-  });
-
-  try {
-    const result = await pool.query(
-      `${ACCESS_SELECT} WHERE ${isMember("c")} AND ${notDeleted("c")} ORDER BY a.id_acesso DESC LIMIT 20`
-    );
-    res.write(`data: ${JSON.stringify({ type: "connected", history: result.rows })}\n\n`);
-  } catch {}
-
-  sseClients.add(res);
-  req.on("close", () => sseClients.delete(res));
-});
-
-setInterval(async () => {
-  if (sseClients.size === 0) return; // quota Neon: só consulta com clientes ligados (era 5s)
-  try {
-    const result = await pool.query(
-      `${ACCESS_SELECT} WHERE a.id_acesso > $1 AND ${isMember("c")} AND ${notDeleted("c")} ORDER BY a.id_acesso DESC LIMIT 50`,
-      [lastSyncedId]
-    );
-    if (result.rows.length > 0) {
-      lastSyncedId = result.rows[0].id_acesso;
-      for (const client of sseClients) {
-        try { client.write(`data: ${JSON.stringify({ type: "access", data: result.rows })}\n\n`); }
-        catch { sseClients.delete(client); }
-      }
-    }
-  } catch {}
-}, 15 * 1000);
 
 // /admin: o HTML do backoffice só é entregue com sessão de staff válida.
 // Registado antes do fallback SPA; sem isto, express.static + sendFile

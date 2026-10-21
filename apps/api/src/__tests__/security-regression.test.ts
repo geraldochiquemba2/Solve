@@ -71,7 +71,6 @@ describe("redirect /api/* -> /api/v1/* (rotas legítimas, via supertest)", () =>
     ["/api/plans", "/api/v1/plans"],
     ["/api/users", "/api/v1/users"],
     ["/api/cademi/entregas", "/api/v1/cademi/entregas"],
-    ["/api/solve-access/stream", "/api/v1/solve-access/stream"],
     ["/api/webhooks/ekwanza", "/api/v1/webhooks/ekwanza"],
     ["/api/leads/123", "/api/v1/leads/123"],
     ["/api/portal", "/api/v1/portal"],

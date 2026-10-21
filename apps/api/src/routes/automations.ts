@@ -17,7 +17,6 @@ const automationSchema = z.object({
     "payment_overdue",
     "lead_created",
     "lead_no_activity",
-    "ovg_lead_qualified",
   ]),
   action: z.string(),
   active: z.boolean().default(true),

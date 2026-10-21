@@ -31,7 +31,7 @@ import MinhaConta from '@/portal/MinhaConta';
 import PortalPagamentos from '@/portal/Pagamentos';
 import PortalRecibo from '@/portal/Recibo';
 import PortalShell from '@/portal/PortalShell';
-import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useAccessStats, useAccessLogs, useSolveAccessDashboard, useSolveAccessTerminals, useSolveAccessHealth, useUnlockTurnstile, useSolveAccessStream, useOVGClientsRefresh, useOVGSyncStatus, useOVGSyncNow, useOVGHealth, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, useImportCustomerDates, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, type PromoCode, type PromoValidation } from '@/hooks/use-api';
+import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, useStudioSnapshot, useStudioOverview, useStudioKeys, useCreateStudioKey, useRevokeStudioKey, type PromoCode, type PromoValidation } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -67,7 +67,7 @@ const queryClient = new QueryClient({
 });
 
 type Lead = { id: string; name: string; company: string; source: string; status: string; statusApi?: string; owner: string; value: number; last: string; email: string; phone: string; notes: string; code: string; createdAt: string; whatsapp?: string | null; produtoInteresse?: string | null; proximoContato?: string | null; motivoPerda?: string | null; contactosTotal?: number | null; convertedAt?: string | null; ultimoContactoAt?: string | null; ultimoResultado?: string | null; ultimoStaff?: string | null; externalId?: string | null; campanhas?: Array<{ source: string; produtoInteresse?: string | null; createdAt?: string | null }> | null };
-type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; nif?: string | null; club?: string | null; ovgId?: string | null; cademiId?: string | null; entryDate?: string | null; lessonsLeft?: number | null; lessonsLimit?: number | null; _accessStats?: { total: number; autorizados: number; negados: number; ultimoAcesso: string } | null };
+type Customer = { id: string; name: string; company: string; plan: string; state: string; joined: string; expires: string; email: string; phone: string; gender: string; nif?: string | null; cademiId?: string | null };
 
 // ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
 // As etapas "Proposta" e "Negociação" deixaram de existir: o acompanhamento é
@@ -130,7 +130,6 @@ const LEAD_SOURCE_ALIASES: Record<string, string> = {
   whatsapp: 'WhatsApp',
   indicacao: 'Indicação',
   'indicação': 'Indicação',
-  ovg: 'OVG',
   linkedin: 'LinkedIn',
   balcao: 'Balcão',
   'balcão': 'Balcão',
@@ -139,7 +138,7 @@ const srcLabel = (s?: string | null) => { const k = String(s || '').toLowerCase(
 // Canal de entrada: com externalId veio de fora (integração/landing); sem externalId foi criado no CRM.
 const canalOf = (l: Lead) => ((l as any).externalId ? 'Integração' : 'CRM');
 // Sugestões para o campo Origem (input livre — o gestor pode adicionar novas campanhas).
-const LEAD_SOURCE_SUGG = ['Website', 'WhatsApp', 'Indicação', 'OVG', 'LinkedIn', 'Fit90 Landing', 'Landing Bruno Samora', 'Balcão'];
+const LEAD_SOURCE_SUGG = ['Website', 'WhatsApp', 'Indicação', 'LinkedIn', 'Fit90 Landing', 'Landing Bruno Samora', 'Balcão'];
 
 // Fetch autenticado para seguimento de leads (Bearer staff; recurso X-API-Key).
 const leadApiBase = () => import.meta.env.VITE_API_URL || '';
@@ -148,7 +147,7 @@ function leadHeaders(): HeadersInit {
     const t = localStorage.getItem('token');
     if (t) return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
   } catch {}
-  return { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "", 'Content-Type': 'application/json' };
+  return { 'Content-Type': 'application/json' };
 }
 async function leadFetch(path: string, opts: RequestInit = {}) {
   const r = await fetch(`${leadApiBase()}${path}`, { ...opts, headers: { ...leadHeaders(), ...(opts.headers || {}) } });
@@ -165,7 +164,7 @@ function authHeaders(extra: HeadersInit = {}): HeadersInit {
     const t = localStorage.getItem('token');
     if (t) return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json', ...extra };
   } catch {}
-  return { 'X-API-Key': import.meta.env.VITE_ACCESS_API_KEY || "", 'Content-Type': 'application/json', ...extra };
+  return { 'Content-Type': 'application/json', ...extra };
 }
 
 // Telefone → wa.me (AO: 9 dígitos ganham 244) e tel:.
@@ -205,19 +204,12 @@ function mapApiCustomer(c: any): Customer {
       if (diff === 1) return 'Ontem';
       if (diff < 7) return `H\u00e1 ${diff} dias`;
       if (diff < 30) return `H\u00e1 ${Math.floor(diff / 7)} sem.`;
-      return formatDate(d);
-    } catch { return formatDate(d); }
+      return formatarData(d);
+    } catch { return formatarData(d); }
   };
-  const isAccessClient = !!c._accessStats;
   const joinedRaw: string | null = c.joinedAt ?? c.subscriptionEnd ?? c.createdAt ?? null;
   let joined = '';
-  if (isAccessClient && c.entryDate) {
-    joined = formatDate(c.entryDate);
-  } else if (isAccessClient && c._accessStats?.ultimoAcesso) {
-    joined = relativeDate(c._accessStats.ultimoAcesso);
-  } else if (c.entryDate) {
-    joined = formatDate(c.entryDate);
-  } else if (c.joinedAt) {
+  if (c.joinedAt) {
     joined = relativeDate(c.joinedAt);
   } else if (c.subscriptionEnd) {
     const endDate = new Date(c.subscriptionEnd);
@@ -230,28 +222,21 @@ function mapApiCustomer(c: any): Customer {
   const fallbackState = (c.client_status ?? '').toString().toLowerCase();
   const normState = rawState || fallbackState;
   const isBlocked = c.bloqueado === true;
-  // OVG usa ortografia brasileira (ativo/inativo, sem C); acesso local usa europeia (activo)
   const isActive = normState === 'activo' || normState === 'ativo';
   const isInactive = normState === 'inactivo' || normState === 'inativo';
   return {
     id: c.code ?? c.id ?? '',
     name: c.name ?? '',
     company: c.company ?? '',
-    plan: isAccessClient ? 'Solve Access' : (c.planName ?? ''),
+    plan: c.planName ?? '',
     state: isBlocked ? 'Bloqueado' : isActive ? 'Activo' : isInactive ? 'Inactivo' : normState === 'em_atraso' ? 'Em atraso' : normState === 'suspenso' ? 'Suspenso' : (c.state || c.client_status || 'Activo'),
     joined,
-    expires: isAccessClient ? '' : formatDate(c.subscriptionEnd ?? null),
+    expires: formatarData(c.subscriptionEnd ?? null),
     email: c.email ?? '',
     phone: c.phone ?? '',
     gender: c.gender === 'M' ? 'Masculino' : c.gender === 'F' ? 'Feminino' : c.gender ?? '',
     nif: c.nif ?? null,
-    club: c.club ?? null,
-    ovgId: c.ovgId ?? null,
     cademiId: c.cademiId ?? null,
-    entryDate: c.entryDate ?? null,
-    lessonsLeft: c.numero_entradas ?? c.lessonsLeft ?? null,
-    lessonsLimit: c.limite_entradas ?? c.lessonsLimit ?? null,
-    _accessStats: c._accessStats ?? null,
   };
 }
 
@@ -259,7 +244,7 @@ const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: s
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/meu-progresso', label: 'Meu Progresso', icon: TrendingUp }, { href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }, { href: '/admin/promocodes', label: 'Promoções', icon: Ticket, roles: ['administrador', 'gestor'] }] },
-   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
+   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/samorafit-studio', label: 'SamoraFit Studio', icon: Activity, roles: ['administrador', 'gestor'] }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
   { label: 'Governação', roles: ['administrador', 'gestor'], items: [{ href: '/admin/equipa', label: 'Equipa', icon: Users }, { href: '/admin/utilizadores', label: 'Utilizadores', icon: ShieldCheck }] },
 ];
 
@@ -282,7 +267,6 @@ const fmtRel = (d?: string | null) => {
 
 // Descrições das integrações vindas da API (evita ecoar o nome).
 const INTEGRATION_DESC: Record<string, string> = {
-  ovg: 'Virtual Gym · Sócios e acessos',
   pay4all: 'Pagamentos e reconciliação',
   cademi: 'Acessos e área de membros',
   whatsapp: 'SamoraFit · Conversas comerciais',
@@ -354,7 +338,7 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
     .filter((g) => g.items.length > 0);
   // Modo Solve escondido: SamoraFit Workout e Integrações ficam ocultos.
   const shownGroups = isSolve
-    ? visibleGroups.map((g) => ({ ...g, items: g.items.filter((i) => i.href !== '/admin/academia' && i.href !== '/admin/integracoes') })).filter((g) => g.items.length > 0)
+    ? visibleGroups.map((g) => ({ ...g, items: g.items.filter((i) => i.href !== '/admin/academia' && i.href !== '/admin/samorafit-studio' && i.href !== '/admin/integracoes') })).filter((g) => g.items.length > 0)
     : visibleGroups;
   return <><aside className={`sidebar ${open ? 'open' : ''}`} style={{ width: 238, minHeight: '100dvh', padding: '1.25rem .8rem', position: 'fixed', inset: '0 auto 0 0', zIndex: 40, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
     {isSolve ? <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><img src="/solve-corporate-logo.png" alt="Solve Corporate" style={{ height: 36, width: 'auto', maxWidth: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} /></div> : <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>}
@@ -1247,15 +1231,11 @@ function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?
 
 function CustomersPage({ customers, loading, onChanged }: { customers: Customer[]; loading?: boolean; onChanged?: () => void }) {
   const [q, setQ] = useState('');
-  // OVG on-demand: atualiza ao entrar aqui (máx 1x/hora); sem polling de fundo.
-  const ovg = useOVGClientsRefresh(() => onChanged?.());
   const [status, setStatus] = useState(() => {
     const f = new URLSearchParams(window.location.search).get('filtro');
     return ['Todos', 'Activo', 'Inactivo', 'Bloqueado', 'Em atraso', 'Esgotadas'].includes(f ?? '') ? f as string : 'Todos';
   });
-  const filtered = customers.filter(c => `${c.name} ${c.company} ${c.id}`.toLowerCase().includes(q.toLowerCase()) && (status === 'Todos' || (status === 'Esgotadas' ? (c.lessonsLimit !== -1 && (c.lessonsLeft ?? 1) === 0) : c.state === status)));
-  const importMutation = useImportCustomerDates();
-  const [importMsg, setImportMsg] = useState('');
+  const filtered = customers.filter(c => `${c.name} ${c.company} ${c.id}`.toLowerCase().includes(q.toLowerCase()) && (status === 'Todos' || c.state === status));
   const createLeadMut = useCreateLead();
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -1263,10 +1243,10 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
   const [newEmail, setNewEmail] = useState('');
   const [newMsg, setNewMsg] = useState('');
   const exportarRelatorioClientes = (formato: 'excel' | 'pdf') => {
-    const cab = ['Nome', 'Empresa', 'Plano', 'Estado', 'Género', 'Entrada', 'Email', 'Telefone', 'Aulas'];
-    const linhas = filtered.map(c => [c.name, c.company || '', c.plan || '', c.state, c.gender || '', c.joined || '', c.email || '', c.phone || '', c.lessonsLimit === -1 ? 'Ilimitadas' : `${c.lessonsLeft ?? '-'} / ${c.lessonsLimit ?? '-'}`]);
+    const cab = ['Nome', 'Empresa', 'Plano', 'Estado', 'Género', 'Entrada', 'Email', 'Telefone'];
+    const linhas = filtered.map(c => [c.name, c.company || '', c.plan || '', c.state, c.gender || '', c.joined || '', c.email || '', c.phone || '']);
     const subt = `Filtro: ${status}${q ? ` · pesquisa "${q}"` : ''} · ${filtered.length} clientes`;
-    if (formato === 'excel') exportarExcel('relatorio-clientes', [{ nome: 'Clientes', cabecalho: cab, linhas, larguras: [26, 22, 18, 12, 12, 14, 28, 16, 14] }]);
+    if (formato === 'excel') exportarExcel('relatorio-clientes', [{ nome: 'Clientes', cabecalho: cab, linhas, larguras: [26, 22, 18, 12, 12, 14, 28, 16] }]);
     else exportarPDF({ titulo: 'Relatório de Clientes — SamoraFit', subtitulo: subt, ficheiro: 'relatorio-clientes', seccoes: [{ cabecalho: cab, linhas }] });
   };
   const saveNewClient = () => {
@@ -1276,38 +1256,7 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
       onError: (e: any) => setNewMsg('Erro: ' + (e.message || 'desconhecido')),
     });
   };
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { setImportMsg('CSV vazio'); return; }
-      const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
-      const codeIdx = header.findIndex(h => h === 'code' || h === 'codigo' || h === 'código');
-      const ovgIdx = header.findIndex(h => h === 'ovg_id' || h === 'ovgid' || h === 'customer_number');
-      const nameIdx = header.findIndex(h => h === 'name' || h === 'nome');
-      const dateIdx = header.findIndex(h => h === 'joined_at' || h === 'data_entrada' || h === 'entry_date' || h === 'joined');
-      if (dateIdx === -1) { setImportMsg('CSV precisa de coluna "joined_at" (ou "data_entrada", "entry_date")'); return; }
-      const rows = lines.slice(1).map(line => {
-        const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
-        return {
-          code: codeIdx >= 0 ? cols[codeIdx] : undefined,
-          ovg_id: ovgIdx >= 0 ? cols[ovgIdx] : undefined,
-          name: nameIdx >= 0 ? cols[nameIdx] : undefined,
-          joined_at: cols[dateIdx],
-        };
-      }).filter(r => r.joined_at);
-      importMutation.mutate(rows, {
-        onSuccess: (res) => { setImportMsg(res.message); },
-        onError: (err: any) => { setImportMsg('Erro: ' + (err.message || 'desconhecido')); },
-      });
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-  return <><PageHeader eyebrow="Receita · Relação" title="Clientes" subtitle="Registos únicos e contexto completo de cada conta." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => exportarRelatorioClientes('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioClientes('pdf')}><FileText size={14} /> PDF</button></div>} />{importMsg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{importMsg}</span><button className="btn-quiet" onClick={() => setImportMsg('')} aria-label="Fechar mensagem"><X size={14} /></button></div>}{ovg.msg && <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{ovg.msg}</span><button className="btn-quiet" onClick={() => ovg.clearMsg()} aria-label="Fechar mensagem"><X size={14} /></button></div>}<div className="card" style={{ padding: '.7rem', marginBottom: '.8rem', display: 'flex', gap: '.5rem' }}><div style={{ position: 'relative', maxWidth: 380, width: '100%' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-customers" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar cliente ou empresa" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-customer-state" className="select" value={status} onChange={e => setStatus(e.target.value)} style={{ maxWidth: 160 }}><option>Todos</option><option>Activo</option><option>Inactivo</option><option>Bloqueado</option><option>Em atraso</option><option>Esgotadas</option></select></div><Section title="Directório de clientes" note={loading ? 'A carregar…' : `${filtered.length} contas com registo consolidado${ovg.updating ? ' · OVG a atualizar…' : ''}`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Estado</th><th>Género</th><th>Entrada</th><th>Aulas</th><th>Contacto</th><th /></tr></thead><tbody>{loading ? <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}><div style={{ display: 'inline-block', width: 28, height: 28, border: '3px solid hsl(var(--border))', borderTopColor: 'hsl(var(--accent))', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /><div style={{ marginTop: '.6rem', color: 'hsl(var(--muted-foreground))', fontSize: '.75rem' }}>A carregar clientes...</div></td></tr> : filtered.map(c => <tr key={c.id}><td><Link href={`/admin/clientes/${c.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '.6rem' }} data-testid={`link-customer-${c.id}`}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{c.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{c.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{c.company} · {c.id}</div></div></Link></td><td>{c.plan || '—'}</td><td><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></td><td style={{ fontSize: '.72rem' }}>{c.gender || '—'}</td><td>{c.joined}</td><td style={{ fontWeight: 600, color: c.lessonsLimit !== -1 && (c.lessonsLeft ?? 1) === 0 ? 'hsl(0 70% 50%)' : undefined }}>{c.lessonsLimit === -1 ? '∞' : `${c.lessonsLeft ?? '—'} / ${c.lessonsLimit ?? '—'}`}</td><td><div style={{ fontSize: '.72rem' }}>{c.email}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.phone}</div></td><td><ChevronRight size={15} color="hsl(var(--muted-foreground))" /></td></tr>)}</tbody></table></div></Section>
+  return <><PageHeader eyebrow="Receita · Relação" title="Clientes" subtitle="Registos únicos e contexto completo de cada conta." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => exportarRelatorioClientes('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioClientes('pdf')}><FileText size={14} /> PDF</button></div>} /><div className="card" style={{ padding: '.7rem', marginBottom: '.8rem', display: 'flex', gap: '.5rem' }}><div style={{ position: 'relative', maxWidth: 380, width: '100%' }}><Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: 'hsl(var(--muted-foreground))' }} /><input data-testid="input-search-customers" className="input" style={{ paddingLeft: 31 }} placeholder="Pesquisar cliente ou empresa" value={q} onChange={e => setQ(e.target.value)} /></div><select data-testid="select-customer-state" className="select" value={status} onChange={e => setStatus(e.target.value)} style={{ maxWidth: 160 }}><option>Todos</option><option>Activo</option><option>Inactivo</option><option>Bloqueado</option><option>Em atraso</option></select></div><Section title="Directório de clientes" note={loading ? 'A carregar…' : `${filtered.length} contas com registo consolidado`}><div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Estado</th><th>Género</th><th>Entrada</th><th>Contacto</th><th /></tr></thead><tbody>{loading ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}><div style={{ display: 'inline-block', width: 28, height: 28, border: '3px solid hsl(var(--border))', borderTopColor: 'hsl(var(--accent))', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /><div style={{ marginTop: '.6rem', color: 'hsl(var(--muted-foreground))', fontSize: '.75rem' }}>A carregar clientes...</div></td></tr> : filtered.map(c => <tr key={c.id}><td><Link href={`/admin/clientes/${c.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '.6rem' }} data-testid={`link-customer-${c.id}`}><div style={{ width: 30, height: 30, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', fontSize: '.64rem', fontWeight: 700 }}>{c.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{c.name}</div><div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}>{c.company} · {c.id}</div></div></Link></td><td>{c.plan || '—'}</td><td><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></td><td style={{ fontSize: '.72rem' }}>{c.gender || '—'}</td><td>{c.joined}</td><td><div style={{ fontSize: '.72rem' }}>{c.email}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.phone}</div></td><td><ChevronRight size={15} color="hsl(var(--muted-foreground))" /></td></tr>)}</tbody></table></div></Section>
   {newOpen && <div className="modal-backdrop" onClick={() => setNewOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Novo cliente</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista como lead de Balcão para acompanhamento comercial.</div>
@@ -1328,7 +1277,6 @@ function CustomersPage({ customers, loading, onChanged }: { customers: Customer[
 }
 function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onChanged?: () => void }) {
   const { id } = useParams<{ id: string }>(); const customer = customers.find(c => c.id === id) ?? customers[0];
-  const [, setLocation] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [fName, setFName] = useState(''); const [fPhone, setFPhone] = useState(''); const [fEmail, setFEmail] = useState(''); const [fGender, setFGender] = useState('');
@@ -1364,7 +1312,6 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
   };
   if (!customer) return <EmptyState title="Cliente não encontrado" text="O registo solicitado não foi localizado." action={<Link href="/admin/clientes" className="btn-primary">Voltar  à lista</Link>} />; 
   return <><PageHeader eyebrow="Cliente · Perfil 360º" title={customer.name} subtitle={`${customer.company} · ${customer.id}`} action={<div className="page-actions" style={{ display: 'flex', gap: '.4rem' }}><button className="btn-secondary" onClick={openEdit}><Edit3 size={14} /> Editar</button><div style={{ position: 'relative' }}><button className="btn-primary" onClick={() => setMenuOpen(!menuOpen)}><MoreHorizontal size={14} /> Acções</button>{menuOpen && <div className="card" style={{ position: 'absolute', right: 0, top: '110%', zIndex: 30, padding: '.4rem', minWidth: 180 }}>
-    <button className="btn-quiet" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => { setMenuOpen(false); setLocation(`/admin/acesso-fisico?search=${encodeURIComponent(customer.name)}`); }}>Ver acessos</button>
     <button className="btn-quiet" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => { setMenuOpen(false); waLink(); }}>WhatsApp</button>
   </div>}</div></div>} /><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: '.8rem' }}><Section title="Resumo da conta" note="Fonte única de verdade"><div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', marginBottom: '1rem' }}><div style={{ width: 51, height: 51, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'hsl(var(--primary))', color: 'white', fontWeight: 700 }}>{customer.name.slice(0, 2).toUpperCase()}</div><div><div style={{ fontWeight: 700 }}>{customer.company}</div><div className="section-note">{customer.email} · {customer.phone}</div></div></div>    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.6rem' }}>
       {[
@@ -1378,38 +1325,20 @@ function CustomerDetail({ customers, onChanged }: { customers: Customer[]; onCha
         </div>
       ))}
     </div>
-    {customer.lessonsLimit !== undefined && customer.lessonsLimit !== null && (
-      <div style={{ marginTop: '.7rem', padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.73rem', marginBottom: '.35rem' }}><span className="eyebrow">Aulas restantes</span><strong>{customer.lessonsLimit === -1 ? 'Ilimitado' : `${customer.lessonsLeft ?? '—'} de ${customer.lessonsLimit}`}</strong></div>
-        {customer.lessonsLimit !== -1 && customer.lessonsLimit > 0 && (
-          <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.min(100, ((customer.lessonsLeft ?? 0) / customer.lessonsLimit) * 100)}%`, background: (customer.lessonsLeft ?? 0) === 0 ? 'hsl(0 70% 50%)' : undefined }} /></div>
-        )}
-      </div>
-    )}
-    {customer.gender && (
+        {customer.gender && (
       <div style={{ marginTop: '.7rem', padding: '.5rem .7rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.5rem', fontSize: '.75rem' }}>
         <span style={{ color: 'hsl(var(--muted-foreground))' }}>Género:</span>{' '}
         <span style={{ fontWeight: 600 }}>{customer.gender}</span>
       </div>
     )}
-    {customer.ovgId && (
-      <div style={{ marginTop: '.7rem', padding: '.5rem .7rem', background: 'hsl(var(--secondary) / .45)', borderRadius: '.5rem', fontSize: '.75rem', display: 'grid', gap: '.3rem' }}>
-        <div style={{ fontWeight: 700, fontSize: '.72rem' }}>Dados OVG</div>
-        {[['Nº sócio', customer.ovgId], ['NIF', customer.nif || '—'], ['Clube', customer.club || '—'], ['Sócio desde', customer.entryDate || '—']].map(([l, v]) => (
-          <div key={l} style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'hsl(var(--muted-foreground))' }}>{l}:</span><strong>{v}</strong></div>
-        ))}
-      </div>
-    )}</Section><Section title="Saúde da conta" note="Indicadores de retenção"><div style={{ display: 'grid', gap: '.9rem' }}>{(() => {
-        const unlimited = customer.lessonsLimit === -1;
-        const lessonsLabel = unlimited ? 'Ilimitado' : (customer.lessonsLeft !== null && customer.lessonsLeft !== undefined && customer.lessonsLimit ? `${customer.lessonsLeft} de ${customer.lessonsLimit}` : '—');
-        const lessonsPct = unlimited ? 100 : (customer.lessonsLimit ? Math.max(0, Math.min(100, Math.round(((customer.lessonsLeft ?? 0) / customer.lessonsLimit) * 100))) : 0);
+    </Section><Section title="Saúde da conta" note="Indicadores de retenção"><div style={{ display: 'grid', gap: '.9rem' }}>{(() => {
         const rows = customer.state === 'Activo'
-          ? [['Estado da conta', 'Activo', 100], ['Aulas restantes', lessonsLabel, lessonsPct], ['Último acesso', customer.joined || '—', 100]]
-          : [['Estado da conta', customer.state, customer.state === 'Inactivo' ? 0 : 50], ['Aulas restantes', lessonsLabel, lessonsPct], ['Último acesso', customer.joined || '—', 100]];
+          ? [['Estado da conta', 'Activo', 100], ['Último acesso', customer.joined || '—', 100]]
+          : [['Estado da conta', customer.state, customer.state === 'Inactivo' ? 0 : 50], ['Último acesso', customer.joined || '—', 100]];
         return rows.map(([l, v, p]) => <div key={l as string}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.73rem', marginBottom: '.35rem' }}><span>{l as string}</span><strong>{v as string}</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${p as number}%`, background: (p as number) === 100 ? 'hsl(155 41% 43%)' : undefined }} /></div></div>)})()}</div></Section></div>
   {editOpen && <div className="modal-backdrop" onClick={() => setEditOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Editar cliente</h3>
-    <div className="section-note" style={{ marginBottom: '1rem' }}>Só nome, telefone, email e género (a catraca gere o resto).</div>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>Nome, telefone, email e género.</div>
     <label className="form-label">Nome *</label>
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
@@ -2258,27 +2187,110 @@ function PaymentsPage() {
 }
 
 const INTEGRATION_DEFAULTS: { name: string; desc: string; icon: typeof BriefcaseBusiness }[] = [
-  { name: 'OVG', desc: 'Virtual Gym · Sócios e acessos', icon: BriefcaseBusiness },
   { name: 'Pay4All', desc: 'Pagamentos e reconciliação', icon: CreditCard },
   { name: 'SamoraFit Workout', desc: 'Acessos e área de membros', icon: KeyRound },
   { name: 'WhatsApp', desc: 'SamoraFit · Conversas comerciais', icon: LifeBuoy },
   { name: 'Website', desc: 'Formulários e canais digitais', icon: Link2 },
 ];
+function SamoraFitStudioPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrador';
+  const snapshot = useStudioSnapshot();
+  const overview = useStudioOverview();
+  const keys = useStudioKeys({ enabled: isAdmin });
+  const createKey = useCreateStudioKey();
+  const revokeKey = useRevokeStudioKey();
+  const [tab, setTab] = useState<'clientes' | 'planos' | 'subscricoes' | 'pagamentos' | 'faturas' | 'reembolsos'>('clientes');
+  const [search, setSearch] = useState('');
+  const [keyName, setKeyName] = useState('SamoraFit Studio');
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState('');
+  const d = snapshot.data?.data;
+  const o = overview.data?.data;
+  const apiUrl = `${window.location.origin}/api/v1/integrations/samorafit-studio`;
+  const loading = snapshot.isLoading || overview.isLoading;
+  const term = search.trim().toLowerCase();
+  const match = (...values: Array<string | null | undefined>) => !term || values.some(v => String(v || '').toLowerCase().includes(term));
+  const customers = (d?.customers ?? []).filter(c => match(c.name, c.phone, c.email, c.nif, c.externalId));
+  const subscriptions = (d?.subscriptions ?? []).filter(s => match(s.customerName, s.planName, s.externalId));
+  const payments = (d?.payments ?? []).filter(p => match(p.customerName, p.reference, p.externalId));
+  const invoices = (d?.invoices ?? []).filter(i => match(i.customerName, i.externalId));
+  const refunds = (d?.refunds ?? []).filter(r => match(r.customerName, r.externalId));
+  const plans = (d?.plans ?? []).filter(p => match(p.name, p.externalId));
+  const tone = (s: string) => ['ACTIVE', 'CONFIRMED', 'PAID', 'REGISTERED'].includes(String(s).toUpperCase()) ? 'good' : ['PENDING', 'OVERDUE', 'FROZEN', 'PARTIAL'].includes(String(s).toUpperCase()) ? 'warn' : 'neutral';
+  const copy = async (text: string, label: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1800); } catch { setCopied(''); }
+  };
+  const tabs: Array<{ id: typeof tab; label: string; count: number }> = [
+    { id: 'clientes', label: 'Clientes', count: d?.customers.length ?? 0 },
+    { id: 'planos', label: 'Planos', count: d?.plans.length ?? 0 },
+    { id: 'subscricoes', label: 'Subscrições', count: d?.subscriptions.length ?? 0 },
+    { id: 'pagamentos', label: 'Pagamentos', count: d?.payments.length ?? 0 },
+    { id: 'faturas', label: 'Faturas', count: d?.invoices.length ?? 0 },
+    { id: 'reembolsos', label: 'Reembolsos', count: d?.refunds.length ?? 0 },
+  ];
+  return <>
+    <PageHeader eyebrow="Ecossistema · SamoraFit Studio" title="SamoraFit Studio" subtitle="Clientes, planos, subscrições, pagamentos, faturas e reembolsos recebidos do ginásio." action={<button className="btn-secondary" onClick={() => { snapshot.refetch(); overview.refetch(); }}><RefreshCw size={14} className={snapshot.isFetching ? 'animate-spin' : ''} /> Actualizar</button>} />
+    <div className="grid-4" style={{ marginBottom: '.8rem' }}>
+      <Metric label="Clientes" value={loading ? '…' : String(o?.customers.total ?? 0)} note={`${o?.customers.active ?? 0} activos no Studio`} />
+      <Metric label="Subscrições activas" value={loading ? '…' : String(o?.subscriptions.active ?? 0)} note={`${o?.subscriptions.total ?? 0} no total`} />
+      <Metric label="Recebido" value={loading ? '…' : money(o?.payments.amount ?? 0)} note={`${o?.payments.confirmed ?? 0} pagamentos confirmados`} />
+      <Metric label="Faturas em falta" value={loading ? '…' : money(o?.invoices.pending ?? 0)} note={`${o?.invoices.total ?? 0} faturas registadas`} />
+    </div>
+    {isAdmin && (<Section title="Ligação para a equipa do Studio" note="URL base, autenticação e chaves de API desta integração." className="mb-3">
+      <div style={{ display: 'grid', gap: '.65rem' }}>
+        <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="eyebrow">URL da API</span>
+          <code style={{ fontSize: '.72rem', background: 'hsl(var(--secondary) / .7)', padding: '.35rem .5rem', borderRadius: '.35rem', wordBreak: 'break-all' }}>{apiUrl}</code>
+          <button className="btn-quiet" onClick={() => copy(apiUrl, 'url')}>{copied === 'url' ? <><Check size={13} /> Copiado</> : 'Copiar'}</button>
+        </div>
+        <div style={{ fontSize: '.74rem', color: 'hsl(var(--muted-foreground))' }}>
+          Autenticação: <strong>X-API-Key</strong>. Ingestão: <code>POST {apiUrl}/sync</code> (lote) ou <code>POST {apiUrl}/events</code> (evento). Estado: <code>GET {apiUrl}/status</code>. Documentação completa em <code>docs/INTEGRACAO-SAMORAFIT-STUDIO.md</code>.
+        </div>
+        <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label style={{ flex: '1 1 220px' }}><span className="form-label">Nome da chave</span><input className="input" value={keyName} onChange={e => setKeyName(e.target.value)} /></label>
+          <button className="btn-primary" disabled={createKey.isPending} onClick={() => createKey.mutate(keyName, { onSuccess: (r: any) => setNewKey(r?.data?.key || null) })}><KeyRound size={14} /> {createKey.isPending ? 'A gerar…' : 'Gerar chave'}</button>
+        </div>
+        {newKey && <div style={{ padding: '.7rem', borderRadius: '.45rem', background: 'hsl(142 70% 45% / .12)', border: '1px solid hsl(142 70% 45% / .35)' }}>
+          <div className="eyebrow">Guarde agora — não volta a ser mostrada</div>
+          <code style={{ display: 'block', marginTop: '.35rem', fontSize: '.74rem', wordBreak: 'break-all' }}>{newKey}</code>
+          <div style={{ marginTop: '.5rem', display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => copy(newKey, 'key')}>{copied === 'key' ? <><Check size={13} /> Copiada</> : 'Copiar chave'}</button><button className="btn-quiet" onClick={() => setNewKey(null)}>Fechar</button></div>
+        </div>}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: '.35rem' }}>Chaves activas</div>
+          {(keys.data?.data ?? []).filter(k => k.active).length === 0 ? <div className="section-note">Ainda não há chaves. Gere uma e entregue-a à equipa do Studio.</div> : <div style={{ display: 'grid', gap: '.35rem' }}>{(keys.data?.data ?? []).filter(k => k.active).map(k => <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'center', fontSize: '.75rem' }}><span><KeyRound size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /><strong>{k.name}</strong> · {k.prefix}… · criada {fmtRel(k.createdAt)}{k.lastUsedAt ? ` · usada ${fmtRel(k.lastUsedAt)}` : ''}</span><button className="btn-quiet" onClick={() => revokeKey.mutate(k.id)} disabled={revokeKey.isPending}><Trash2 size={13} /> Revogar</button></div>)}</div>}
+        </div>
+      </div>
+    </Section>)}
+    <Section title="Dados sincronizados" note={o?.lastSync ? `Última sincronização ${fmtRel(o.lastSync.started_at)} · ${o.lastSync.upserted_count} registos` : 'Sem sincronizações registadas'}>
+      <div style={{ display: 'flex', gap: '.4rem', overflowX: 'auto', paddingBottom: '.5rem', marginBottom: '.6rem' }}>
+        {tabs.map(t => <button key={t.id} className={t.id === tab ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab(t.id)} style={{ whiteSpace: 'nowrap' }}>{t.label} <span style={{ opacity: .75 }}>{t.count}</span></button>)}
+      </div>
+      <div style={{ marginBottom: '.6rem' }}><input className="input" placeholder="Pesquisar por nome, NIF, telefone, referência…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+      {loading ? <div className="section-note">A carregar dados do Studio…</div> : (
+        <>
+          {tab === 'clientes' && (customers.length === 0 ? <EmptyState title="Sem clientes" text="Ainda não foram recebidos clientes do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Nº</th><th>Contacto</th><th>Estado</th><th>CRM</th><th>Sincronizado</th></tr></thead><tbody>{customers.map(c => <tr key={c.id}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{c.customerNumber || c.externalId}</td><td><div style={{ fontSize: '.72rem' }}>{c.phone || '—'}</div><div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{c.email || '—'}</div></td><td><Status tone={tone(c.status)}>{c.status}</Status></td><td>{c.crmCustomerId ? <Link href={`/admin/clientes/${c.crmCustomerId}`} style={{ color: 'hsl(var(--primary))' }}>Ver no CRM</Link> : <span style={{ color: 'hsl(var(--muted-foreground))' }}>—</span>}</td><td style={{ fontSize: '.68rem' }}>{fmtRel(c.syncedAt)}</td></tr>)}</tbody></table></div>)}
+          {tab === 'planos' && (plans.length === 0 ? <EmptyState title="Sem planos" text="Ainda não foram recebidos planos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Plano</th><th>Preço</th><th>Matrícula</th><th>Renovação</th><th>Tipo</th><th>Aulas</th><th>Validade</th><th>Estado</th></tr></thead><tbody>{plans.map(p => <tr key={p.id}><td style={{ fontWeight: 600 }}>{p.name}</td><td>{money(p.price)}</td><td>{money(p.enrollmentFee)}</td><td>{money(p.renewalFee)}</td><td>{p.planType || '—'}</td><td>{p.classesQuantity ?? 'Ilimitadas'}</td><td>{p.validityMonths} mês(es)</td><td><Status tone={p.active ? 'good' : 'neutral'}>{p.active ? 'Activo' : 'Inactivo'}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'subscricoes' && (subscriptions.length === 0 ? <EmptyState title="Sem subscrições" text="Ainda não foram recebidas subscrições do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Plano</th><th>Início</th><th>Fim</th><th>Preço</th><th>Aulas</th><th>Estado</th></tr></thead><tbody>{subscriptions.map(s => <tr key={s.id}><td>{s.customerName || s.customerExternalId}</td><td>{s.planName || s.planExternalId}</td><td>{formatarData(s.startDate)}</td><td>{s.endDate ? formatarData(s.endDate) : '—'}</td><td>{money(s.price)}</td><td>{s.classesQuantity ?? '—'}</td><td><Status tone={tone(s.status)}>{s.status}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'pagamentos' && (payments.length === 0 ? <EmptyState title="Sem pagamentos" text="Ainda não foram recebidos pagamentos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Valor</th><th>Método</th><th>Tipo</th><th>Referência</th><th>Estado</th></tr></thead><tbody>{payments.map(p => <tr key={p.id}><td>{p.customerName || p.customerExternalId || '—'}</td><td>{p.paymentDate ? formatarData(p.paymentDate) : '—'}</td><td style={{ fontWeight: 600 }}>{money(p.amount)}</td><td>{p.paymentMethod || '—'}</td><td>{p.kind || '—'}</td><td>{p.reference || p.externalId}</td><td><Status tone={tone(p.status)}>{p.status}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'faturas' && (invoices.length === 0 ? <EmptyState title="Sem faturas" text="Ainda não foram recebidas faturas/períodos de faturação do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Período</th><th>Devido</th><th>Pago</th><th>Em falta</th><th>Vencimento</th><th>Estado</th></tr></thead><tbody>{invoices.map(i => <tr key={i.id}><td>{i.customerName || i.customerExternalId}</td><td>{i.periodStart ? formatarData(i.periodStart) : i.year && i.month ? `${String(i.month).padStart(2, '0')}/${i.year}` : '—'}</td><td>{money(i.amountDue)}</td><td>{money(i.amountPaid)}</td><td style={{ fontWeight: 600 }}>{money(i.amountRemaining)}</td><td>{i.dueDate ? formatarData(i.dueDate) : '—'}</td><td><Status tone={tone(i.status)}>{i.status}</Status></td></tr>)}</tbody></table></div>)}
+          {tab === 'reembolsos' && (refunds.length === 0 ? <EmptyState title="Sem reembolsos" text="Ainda não foram recebidos reembolsos do Studio." /> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Pagamento</th><th>Valor</th><th>Motivo</th><th>Data</th><th>Estado</th></tr></thead><tbody>{refunds.map(r => <tr key={r.id}><td>{r.customerName || r.customerExternalId || '—'}</td><td>{r.paymentExternalId || '—'}</td><td style={{ fontWeight: 600 }}>{money(r.amount)}</td><td>{r.reason || '—'}</td><td>{r.refundedAt ? formatarData(r.refundedAt) : '—'}</td><td><Status tone={tone(r.status)}>{r.status}</Status></td></tr>)}</tbody></table></div>)}
+        </>
+      )}
+    </Section>
+  </>;
+}
+
 function IntegrationsPage() {
   const { data } = useListIntegrations(REFETCH_5_MIN());
-  const ovgSync = useOVGSyncStatus();
-  const ovgHealth = useOVGHealth();
-  const syncNowMut = useOVGSyncNow();
   const cademiHealth = useCademiHealth();
   const cademiSyncMut = useCademiSync();
   const payHealth = usePay4AllHealth();
   const apiIntegrations = data?.data ?? [];
-  const ovgSyncData = ovgSync.data?.data;
-  const ovgHealthData = ovgHealth.data?.data;
   const cademiHealthData = cademiHealth.data;
   const payHealthData = payHealth.data?.data;
   const [configName, setConfigName] = useState<string | null>(null);
-  
+
   const items = useMemo(() => {
     const applyCademi = (list: any[]) => list.map(item => {
       if (!['cademi', 'samorafit workout'].includes(String(item.name ?? '').toLowerCase())) return item;
@@ -2294,26 +2306,19 @@ function IntegrationsPage() {
       };
     });
     if (apiIntegrations.length > 0) {
-      const iconMap: Record<string, typeof BriefcaseBusiness> = { OVG: BriefcaseBusiness, Pay4All: CreditCard, 'SamoraFit Workout': KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
+      const iconMap: Record<string, typeof BriefcaseBusiness> = { Pay4All: CreditCard, 'SamoraFit Workout': KeyRound, WhatsApp: LifeBuoy, Website: Link2 };
       return applyCademi(apiIntegrations.map(ig => {
         const igName = String(ig.name ?? '');
         const key = igName.toLowerCase();
-        const isOVG = key === 'ovg';
         const isPay = key === 'pay4all';
-        const syncInfo = isOVG && ovgSyncData ? ovgSyncData : null;
-        const healthInfo = isOVG && ovgHealthData ? ovgHealthData : null;
-        // Pay4All mostra o estado REAL da É-kwanza (ex. 401): problema visível no cartão.
         const payOk = isPay && payHealthData ? payHealthData.connected : null;
-
         return {
-          name: isOVG ? 'OVG' : igName,
-          desc: INTEGRATION_DESC[key] ?? (isOVG ? 'Virtual Gym · Sócios e acessos' : igName),
-          icon: iconMap[isOVG ? 'OVG' : igName] ?? iconMap[Object.keys(iconMap).find(k => k.toLowerCase() === key) ?? ''] ?? Link2,
-          state: healthInfo ? (healthInfo.connected ? 'Operacional' : 'Erro') : (payOk === false ? 'Erro' : (ig.status === 'operacional' ? 'Operacional' : ig.status === 'atencao' ? 'Atenção' : ig.status === 'erro' ? 'Erro' : 'Inativo')),
-          sync: syncInfo ? (syncInfo.isSyncing ? 'A sincronizar…' : (syncInfo.lastSync ? `há ${Math.round((Date.now() - new Date(syncInfo.lastSync.timestamp).getTime()) / 60000)} min` : 'Nunca')) : fmtRel(ig.lastSyncAt),
-          volume: syncInfo ? (syncInfo.lastSync ? `${syncInfo.lastSync.created} criados, ${syncInfo.lastSync.updated} actualizados` : 'Aguardando primeira sincronização') : (ig.errorCount ? `${ig.errorCount} erros` : ''),
-          isOVG,
-          syncInfo,
+          name: igName,
+          desc: INTEGRATION_DESC[key] ?? igName,
+          icon: iconMap[igName] ?? iconMap[Object.keys(iconMap).find(k => k.toLowerCase() === key) ?? ''] ?? Link2,
+          state: payOk === false ? 'Erro' : (ig.status === 'operacional' ? 'Operacional' : ig.status === 'atencao' ? 'Atenção' : ig.status === 'erro' ? 'Erro' : 'Inativo'),
+          sync: fmtRel(ig.lastSyncAt),
+          volume: ig.errorCount ? `${ig.errorCount} erros` : '',
           isPay,
           pay: isPay ? payHealthData : null,
         };
@@ -2325,13 +2330,12 @@ function IntegrationsPage() {
       state: 'Inativo',
       sync: 'Nunca',
       volume: 'Aguardando configuração',
-      isOVG: ig.name === 'OVG',
-      syncInfo: null,
     })));
-  }, [apiIntegrations, ovgSyncData, ovgHealthData, cademiHealthData, payHealthData]);
-  
-  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => syncNowMut.mutate()} disabled={syncNowMut.isPending || ovgSyncData?.isSyncing}><RefreshCw size={14} className={syncNowMut.isPending || ovgSyncData?.isSyncing ? 'animate-spin' : ''} /> {syncNowMut.isPending || ovgSyncData?.isSyncing ? 'A sincronizar…' : 'Sincronizar tudo'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isOVG, syncInfo, isCademi, cademi, isPay, pay }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{syncInfo?.isSyncing ? <span style={{ color: 'hsl(var(--accent))' }}>A sincronizar...</span> : `Sincronizado ${sync}`}</span><span>{volume}</span></div>{isOVG && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{ovgHealthData ? (ovgHealthData.connected ? `✓ ${ovgHealthData.message}` : `✗ ${ovgHealthData.message}`) : 'A verificar…'}</div>}{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `SamoraFit Workout OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar…'}</div>}{isPay && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{pay ? (pay.connected ? `✓ ${pay.message}` : `✗ ${pay.message}`) : 'A verificar…'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{(isOVG || isCademi) && <button className="btn-secondary" onClick={() => isOVG ? syncNowMut.mutate() : cademiSyncMut.mutate()} disabled={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending}><RefreshCw size={13} className={syncNowMut.isPending || syncInfo?.isSyncing || cademiSyncMut.isPending ? 'animate-spin' : ''} /> {isOVG ? (syncInfo?.isSyncing ? 'A sincronizar…' : 'Sincronizar') : (cademiSyncMut.isPending ? 'A sincronizar…' : 'Sincronizar')}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={[...(ovgSyncData?.lastSync ? [`OVG · ${ovgSyncData.lastSync.created} criados, ${ovgSyncData.lastSync.updated} actualizados · agora`] : []), 'Pay4All · 86 transacções importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'SamoraFit Workout · 2 acessos pendentes · há 17 min']} /></Section></>;
+  }, [apiIntegrations, cademiHealthData, payHealthData]);
+
+  return <><PageHeader eyebrow="Ecossistema · Conectividade" title="Integrações" subtitle="Estado dos canais que alimentam a operação." action={<button className="btn-secondary" onClick={() => cademiSyncMut.mutate()} disabled={cademiSyncMut.isPending}><RefreshCw size={14} className={cademiSyncMut.isPending ? 'animate-spin' : ''} /> {cademiSyncMut.isPending ? 'A sincronizar…' : 'Sincronizar'}</button>} /><div className="grid-2">{items.map(({ name, desc, icon: I, state, sync, volume, isCademi, cademi, isPay, pay }) => <div className="card" key={name} style={{ padding: '1rem' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}><div style={{ width: 37, height: 37, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'hsl(var(--secondary))', color: 'hsl(var(--primary))' }}><I size={17} /></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}><div><div style={{ fontWeight: 700, fontSize: '.85rem' }}>{name}</div><div className="section-note">{desc}</div></div><Status tone={state === 'Operacional' ? 'good' : 'warn'}>{state}</Status></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', fontSize: '.67rem', color: 'hsl(var(--muted-foreground))' }}><span><Clock3 size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Sincronizado {sync}</span><span>{volume}</span></div>{isCademi && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{cademi ? (cademi.connected ? `SamoraFit Workout OK · ${cademi.products ?? 0} produtos` : cademi.message) : 'A verificar…'}</div>}{isPay && <div style={{ marginTop: '.5rem', fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{pay ? (pay.connected ? `OK · ${pay.message}` : `Falha · ${pay.message}`) : 'A verificar…'}</div>}<div style={{ display: 'flex', gap: '.45rem', marginTop: '.75rem' }}>{isCademi && <button className="btn-secondary" onClick={() => cademiSyncMut.mutate()} disabled={cademiSyncMut.isPending}><RefreshCw size={13} className={cademiSyncMut.isPending ? 'animate-spin' : ''} /> {cademiSyncMut.isPending ? 'A sincronizar…' : 'Sincronizar'}</button>}<button className="btn-quiet" onClick={() => setConfigName(name)}>Configurar <ChevronRight size={13} /></button></div></div></div></div>)}</div>{configName && <IntegrationConfigModal name={configName} onClose={() => setConfigName(null)} />}<Section title="Actividade de sincronização" note="Eventos mais recentes"><MiniList items={['Pay4All · 86 transações importadas · há 4 min', 'Website · 12 leads recebidos · há 8 min', 'SamoraFit Workout · 2 acessos pendentes · há 17 min']} /></Section></>;
 }
+
 
 // Catálogo de conteúdos do SamoraFit Workout: só os planos de duração, em ordem
 // crescente de meses (1, 3, 6 e 12). A Cademi devolve também produtos que não são
@@ -2535,12 +2539,6 @@ const [produtoEntrega, setProdutoEntrega] = useState('');
 }
 
 const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string }>> = {
-  OVG: [
-    { key: 'ovg_api_url', label: 'URL da API', placeholder: 'https://...' },
-    { key: 'ovg_username', label: 'Utilizador' },
-    { key: 'ovg_password', label: 'Password', type: 'password' },
-    { key: 'ovg_club_code', label: 'Código do clube', placeholder: 'LUA' },
-  ],
   'SamoraFit Workout': [
     { key: 'cademi_api_url', label: 'URL da API', placeholder: 'https://...' },
     { key: 'cademi_api_key', label: 'Chave de API', type: 'password' },
@@ -2553,7 +2551,6 @@ const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: stri
 };
 
 const INTEGRATION_HEALTH_URL: Record<string, string> = {
-  OVG: '/api/v1/ovg/health',
   'SamoraFit Workout': '/api/v1/cademi/health',
   Pay4All: '/api/v1/pay4all/health',
 };
@@ -2647,7 +2644,7 @@ function AutomationsPage() {
       <div style={{ flex: 1 }}><label className="form-label">Quando</label>
       <select className="select" value={fTrigger} onChange={e => setFTrigger(e.target.value)}>{['pagamento.confirmado', 'pagamento.pendente', 'acesso.negado', 'aulas.esgotadas', 'cliente.bloqueado'].map(v => <option key={v}>{v}</option>)}</select></div>
       <div style={{ flex: 1 }}><label className="form-label">Executar</label>
-      <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{['send_notification', 'create_task', 'update_customer_state', 'sync_to_cademi', 'sync_to_ovg'].map(v => <option key={v}>{v}</option>)}</select></div>
+      <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{['send_notification', 'create_task', 'update_customer_state', 'sync_to_cademi'].map(v => <option key={v}>{v}</option>)}</select></div>
     </div>
     {fMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{fMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
@@ -2841,7 +2838,7 @@ function SettingsPage() {
     <h3 style={{ marginBottom: '.5rem' }}>Política de retenção</h3>
     <div style={{ fontSize: '.78rem', display: 'grid', gap: '.5rem' }}>
       <p>Os registos de auditoria são mantidos durante <strong>90 dias</strong> e depois eliminados automaticamente.</p>
-      <p>Dados de acessos da catraca e sócios são mantidos enquanto a conta estiver ativa.</p>
+<p>Dados de clientes e subscrições são mantidos enquanto a conta estiver ativa.</p>
       <p>Pagamentos e faturas seguem o prazo legal contabilístico.</p>
     </div>
     <div style={{ display: 'flex', marginTop: '1rem' }}><button className="btn-secondary" onClick={() => setPolicyOpen(false)} style={{ flex: 1 }}>Fechar</button></div>
@@ -2893,130 +2890,6 @@ function ProtectedPortal({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function AccessPage() {
-  const [filter, setFilter] = useState(() => {
-    const f = new URLSearchParams(window.location.search).get('resultado');
-    return ['todos', 'autorizado', 'negado'].includes(f ?? '') ? f as string : 'todos';
-  });
-  const [dateFilter, setDateFilter] = useState(() => {
-    const d = new URLSearchParams(window.location.search).get('data');
-    return ['hoje', 'ontem', 'semana', 'mes', 'todos'].includes(d ?? '') ? d as string : 'hoje';
-  });
-  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
-  const [page, setPage] = useState(1);
-  const limit = 100;
-  const accessStats = useAccessStats();
-  const solveDashboard = useSolveAccessDashboard();
-  const solveTerminals = useSolveAccessTerminals();
-  const solveHealth = useSolveAccessHealth();
-  const unlockMutation = useUnlockTurnstile();
-  const qc = useQueryClient();
-  const [syncingAccess, setSyncingAccess] = useState(false);
-  const syncAccess = () => {
-    setSyncingAccess(true);
-    Promise.all([
-      qc.invalidateQueries({ queryKey: ['access-stats'] }),
-      qc.invalidateQueries({ queryKey: ['access-logs'] }),
-      qc.invalidateQueries({ queryKey: ['solve-access-dashboard'] }),
-      qc.invalidateQueries({ queryKey: ['solve-access-terminals'] }),
-      qc.invalidateQueries({ queryKey: ['customers-access'] }),
-      qc.invalidateQueries({ queryKey: ['customers-manual'] }),
-    ]).finally(() => setTimeout(() => setSyncingAccess(false), 800));
-  };
-  const access = accessStats.data?.data;
-  const solveData = solveDashboard.data?.data;
-  const terminals = solveTerminals.data?.data;
-  const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
-
-  const { connected, history } = useSolveAccessStream((event) => {
-    setRealtimeEvents(prev => [event, ...prev].slice(0, 100));
-  });
-
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-
-  const dateFrom = dateFilter === 'hoje' ? today : dateFilter === 'ontem' ? yesterday : dateFilter === 'semana' ? weekAgo : dateFilter === 'mes' ? monthAgo : undefined;
-  const dateTo = dateFilter === 'hoje' ? today : dateFilter === 'ontem' ? yesterday : undefined;
-
-  const accessLogsFiltered = useAccessLogs({ page, limit, date_from: dateFrom, date_to: dateTo, search: search || undefined });
-  const logsFiltered = accessLogsFiltered.data?.data ?? [];
-  const pagination = accessLogsFiltered.data?.pagination;
-
-  const filteredLogs = logsFiltered.filter(l => filter === 'todos' || l.resultado === filter);
-  const entradas = filteredLogs.filter(l => l.tipo_acesso === 'entrada');
-  const saidas = filteredLogs.filter(l => l.tipo_acesso === 'saida');
-  const isConnected = solveHealth.data?.success;
-
-  const handleUnlock = (tipo: 'entrada' | 'saida') => {
-    if (confirm(`Liberar catraca de ${tipo}?`)) {
-      unlockMutation.mutate(tipo);
-    }
-  };
-  const solveBanner = solveAtivo;
-
-  return <>{solveBanner && <div className="card" style={{ padding: '.7rem 1rem', display: 'flex', gap: '.8rem', alignItems: 'center', marginBottom: '.8rem' }}><img src="/solve-access-logo.png" alt="Solve Access" style={{ height: 38, width: 'auto', objectFit: 'contain' }} /><div style={{ fontWeight: 700, fontSize: '.85rem' }}>Solve Access</div></div>}<PageHeader eyebrow="Controlo de Acesso · Solve Access" title="Acesso Físico" subtitle={`Solve Access: ${isConnected ? 'Conectado' : 'Desconectado'} · ${solveHealth.data?.source ?? '—'}`} action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><Status tone={connected ? 'live' : 'danger'}>{connected ? '● Live' : '○ Offline'}</Status><button className="btn-secondary" onClick={syncAccess} disabled={syncingAccess}><RefreshCw size={14} className={syncingAccess ? 'animate-spin' : ''} /> {syncingAccess ? 'A sincronizar…' : 'Sincronizar'}</button></div>} />
-  <div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}>
-    <Metric label="Clientes activos" value={access?.clients.active?.toString() ?? '—'} note={`${access?.clients.total ?? 0} total`} />
-    <Metric label="Terminais online" value={terminals?.online ? '1' : '0'} note={terminals?.online ? (terminals.nome_terminal || 'Terminal') : 'Nenhum online'} />
-    <Metric label="Acessos hoje" value={access?.accesses.today?.toString() ?? '—'} note={`${access?.accesses.authorizedToday ?? 0} autorizados`} />
-  </div>
-  <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
-    <input type="text" placeholder="Pesquisar cliente..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ flex: '1 1 180px', padding: '.45rem .7rem', borderRadius: '.4rem', border: '1px solid hsl(var(--border))', background: 'hsl(var(--background))', fontSize: '.75rem', color: 'hsl(var(--foreground))' }} />
-    <div style={{ display: 'flex', gap: '.3rem' }}>
-      {[{ v: 'hoje', l: 'Hoje' }, { v: 'ontem', l: 'Ontem' }, { v: 'semana', l: '7 dias' }, { v: 'mes', l: '30 dias' }, { v: 'todos', l: 'Tudo' }].map(d => <button key={d.v} className={dateFilter === d.v ? 'btn-primary' : 'btn-quiet'} onClick={() => { setDateFilter(d.v); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{d.l}</button>)}
-    </div>
-    <div style={{ display: 'flex', gap: '.3rem' }}>
-      {[{ v: 'todos', l: 'Todos' }, { v: 'autorizado', l: 'Autorizado' }, { v: 'negado', l: 'Negado' }].map(f => <button key={f.v} className={filter === f.v ? 'btn-primary' : 'btn-quiet'} onClick={() => { setFilter(f.v); setPage(1); }} style={{ fontSize: '.68rem', padding: '.3rem .6rem' }}>{f.l}</button>)}
-    </div>
-  </div>
-  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}>
-    <Section title="Entradas" note={`${entradas.length} registos`}>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{entradas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
-    </Section>
-    <Section title="Saídas" note={`${saidas.length} registos`}>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>Cliente</th><th>Data</th><th>Hora</th><th>Resultado</th><th>Motivo</th></tr></thead><tbody>{saidas.map(l => <tr key={l.id_acesso}><td style={{ fontWeight: 600 }}>{l.cliente_nome || `#${l.cliente_id}`}</td><td>{l.data_acesso}</td><td className="mono" style={{ fontSize: '.72rem' }}>{l.hora_acesso?.slice(0, 8)}</td><td><Status tone={l.resultado === 'autorizado' ? 'good' : 'danger'}>{l.resultado}</Status></td><td style={{ fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>{l.motivo || '—'}</td></tr>)}</tbody></table></div>
-    </Section>
-  </div>
-  {pagination && pagination.totalPages > 1 && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '.5rem', marginTop: '.8rem', fontSize: '.75rem' }}>
-    <button className="btn-quiet" disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ padding: '.35rem .7rem' }}>Anterior</button>
-    <span style={{ color: 'hsl(var(--muted-foreground))' }}>Página {pagination.page} de {pagination.totalPages} ({pagination.total} registos)</span>
-    <button className="btn-quiet" disabled={page >= pagination.totalPages} onClick={() => setPage(p => p + 1)} style={{ padding: '.35rem .7rem' }}>Próxima</button>
-  </div>}
-  <div style={{ display: 'grid', gap: '.8rem', marginTop: '.8rem' }}>
-    <div style={{ display: 'grid', gap: '.8rem' }}>
-      <Section title="Terminal" note={terminals?.nome_terminal || 'A ligar…'}>
-        <div style={{ padding: '.7rem', background: 'hsl(var(--secondary) / .65)', borderRadius: '.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.5rem' }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: terminals?.online ? 'hsl(155 41% 43%)' : 'hsl(0 84% 60%)' }} />
-            <span style={{ fontSize: '.75rem', fontWeight: 600 }}>{terminals?.online ? 'Online' : 'Offline'}</span>
-          </div>
-          <div style={{ fontSize: '.68rem', color: 'hsl(var(--muted-foreground))' }}>
-            <div>IP: {terminals?.ip || '—'}</div>
-            <div>Porta: {terminals?.porta || '—'}</div>
-            <div>Modelo: {terminals?.modelo || 'Virtual'}</div>
-            <div>Tipo: {terminals?.tipo || '—'}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '.5rem', marginTop: '.7rem' }}>
-            <button className="btn-primary" onClick={() => handleUnlock('entrada')} disabled={unlockMutation.isPending} style={{ flex: 1 }}>
-              {unlockMutation.isPending ? 'A abrir…' : 'Liberar Entrada'}
-            </button>
-            <button className="btn-primary" onClick={() => handleUnlock('saida')} disabled={unlockMutation.isPending} style={{ flex: 1 }}>
-              {unlockMutation.isPending ? 'A abrir…' : 'Liberar Saída'}
-            </button>
-          </div>
-        </div>
-      </Section>
-      <Section title="Atividade por hora" note="Horas de pico (últimos 7 dias)">
-        <div style={{ display: 'grid', gap: '.4rem' }}>{(access?.peakHours ?? []).map(h => <div key={h.hour} style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}><span className="mono" style={{ fontSize: '.7rem', width: 35 }}>{String(h.hour).padStart(2, '0')}:00</span><div style={{ flex: 1, height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${Math.min((h.count / Math.max(...(access?.peakHours ?? []).map(x => x.count), 1)) * 100, 100)}%`, background: 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{h.count}</span></div>)}</div>
-      </Section>
-      <Section title="Clientes online" note="Presença actual no ginásio">
-        <div style={{ display: 'grid', gap: '.45rem' }}>{(access?.recentAccesses ?? []).filter(a => a.tipo_acesso === 'entrada' && a.resultado === 'autorizado').slice(0, 8).map(a => <div key={a.id_acesso} style={{ display: 'flex', alignItems: 'center', gap: '.55rem', padding: '.45rem .55rem', background: 'hsl(var(--secondary) / .5)', borderRadius: '.4rem' }}><div style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(155 41% 43%)' }} /><span style={{ fontSize: '.74rem', fontWeight: 500 }}>{a.cliente_nome}</span><span className="mono" style={{ fontSize: '.62rem', color: 'hsl(var(--muted-foreground))', marginLeft: 'auto' }}>{a.hora_acesso?.slice(0, 5)}</span></div>)}</div>
-      </Section>
-    </div>
-  </div></>;
-}
 function CRM() {
   const { user } = useAuth();
   const userName = user?.name || 'Utilizador';
@@ -3046,7 +2919,8 @@ function CRM() {
     return (customersQuery.data?.data ?? []).map(mapApiCustomer);
   }, [customersQuery.data]);
 
-  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin"><Dashboard leads={leads} customers={customers} userName={userName} /></Route><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso"><MeuProgressoPage leads={leads} userName={userName} /></Route><Route path="/admin/fit90-leads"><Fit90LeadsPage leads={leads} onChanged={reloadLeads} /></Route><Route path="/admin/pipeline"><PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} /></Route><Route path="/admin/clientes/:id"><CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} /></Route><Route path="/admin/clientes"><CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} /></Route><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/promocodes" component={PromoCodesPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa"><EquipaPage leads={leads} /></Route><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route path="/admin/acesso-fisico" component={AccessPage} /><Route><EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} /></Route></Switch></AppShell>;
+  return <AppShell userName={userName} auditCount={auditCount} userRole={userRole}><Switch><Route path="/admin"><Dashboard leads={leads} customers={customers} userName={userName} /></Route><Route path="/admin/leads/:etapa?"><LeadsPage leads={leads} userName={userName} onChanged={reloadLeads} loading={leadsQuery.isLoading} erro={leadsQuery.isError} onRetry={() => leadsQuery.refetch()} /></Route><Route path="/admin/meu-progresso"><MeuProgressoPage leads={leads} userName={userName} /></Route><Route path="/admin/fit90-leads"><Fit90LeadsPage leads={leads} onChanged={reloadLeads} /></Route><Route path="/admin/pipeline"><PipelinePage leads={leads} userName={userName} onChanged={reloadLeads} /></Route><Route path="/admin/clientes/:id"><CustomerDetail customers={customers} onChanged={() => customersQuery.refetch()} /></Route><Route path="/admin/clientes"><CustomersPage customers={customers} loading={customersQuery.isLoading} onChanged={() => { reloadLeads(); customersQuery.refetch(); }} /></Route><Route path="/admin/planos" component={PlansPage} /><Route path="/admin/promocodes" component={PromoCodesPage} /><Route path="/admin/pagamentos" component={PaymentsPage} /><Route path="/admin/integracoes" component={IntegrationsPage} /><Route path="/admin/academia" component={AcademiaPage} /><Route path="/admin/samorafit-studio" component={SamoraFitStudioPage} /><Route path="/admin/automacoes" component={AutomationsPage} /><Route path="/admin/api-webhooks" component={ApiPage} /><Route path="/admin/utilizadores" component={UsersPage} /><Route path="/admin/equipa"><EquipaPage leads={leads} /></Route><Route path="/admin/auditoria" component={AuditPage} /><Route path="/admin/definicoes" component={SettingsPage} /><Route><EmptyState title="Página não encontrada" text="O endereço solicitado não existe neste espaço." action={<Link href="/admin" className="btn-primary">Voltar ao dashboard</Link>} /></Route></Switch></AppShell>;
+
 }
 function LandingLoginPage() {
   return (

@@ -11,7 +11,6 @@ export interface Access {
   customerId?: string;
   platform?: string;
   status?: string;
-  ovgAccessId?: string;
   cademiAccessId?: string;
   activatedAt?: Date;
   expiresAt?: Date;

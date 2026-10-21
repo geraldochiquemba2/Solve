@@ -35,7 +35,6 @@ async function run() {
 
   // 2. Integrações
   const integrations = [
-    { name: 'ovg', status: 'operacional' },
     { name: 'pay4all', status: 'operacional' },
     { name: 'cademi', status: 'operacional' },
     { name: 'whatsapp', status: 'inativo' },

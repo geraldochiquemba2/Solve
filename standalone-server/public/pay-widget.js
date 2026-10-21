@@ -359,7 +359,7 @@
       if (email && !emailEl.value) { emailEl.value = email; report.push("página: email"); }
       if (name && !nameEl.value) { nameEl.value = name; nameEl.dataset.auto = "1"; report.push("página: nome"); }
       if (phone && phone.length === 9 && phoneEl && !phoneEl.value) { phoneEl.value = phone; report.push("página: telefone"); }
-      // Nome oficial: pergunta ao CRM (Cademi → CRM → OVG) pelo email.
+      // Nome oficial: pergunta ao CRM (Cademi → CRM) pelo email.
       // O oficial ganha sempre a valores adivinhados (memória/página).
       try {
         var em = (emailEl.value || "").trim();

@@ -14,8 +14,7 @@ export type AutomationEventType =
   | "payment_confirmed"
   | "payment_overdue"
   | "lead_created"
-  | "lead_no_activity"
-  | "ovg_lead_qualified";
+  | "lead_no_activity";
 
 interface AutomationContext {
   eventType: AutomationEventType;
@@ -24,7 +23,7 @@ interface AutomationContext {
 }
 
 interface AutomationAction {
-  type: "update_customer_state" | "create_task" | "send_notification" | "sync_to_ovg" | "sync_to_cademi";
+  type: "update_customer_state" | "create_task" | "send_notification" | "sync_to_cademi";
   params: Record<string, unknown>;
 }
 
@@ -126,9 +125,6 @@ async function executeAction(
     case "send_notification":
       await handleSendNotification(action.params, context);
       break;
-    case "sync_to_ovg":
-      await handleSyncToOVG(action.params, context);
-      break;
     case "sync_to_cademi":
       await handleSyncToCademi(action.params, context);
       break;
@@ -191,30 +187,6 @@ async function handleSendNotification(
     action: "notification_sent",
     details: { channel, message, recipients, eventType: context.eventType },
   });
-}
-
-async function handleSyncToOVG(
-  params: Record<string, unknown>,
-  context: AutomationContext,
-): Promise<void> {
-  const { ovgClient } = await import("./ovg");
-  const customerId = (params.customerId as string) || (context.data.customerId as string);
-
-  if (!customerId) {
-    logger.warn("Missing customerId for sync_to_ovg action");
-    return;
-  }
-
-  const customer = await db.query.customersTable.findFirst({
-    where: eq(customersTable.id, customerId),
-  });
-
-  if (!customer) {
-    logger.warn({ customerId }, "Customer not found for OVG sync");
-    return;
-  }
-
-  logger.info({ customerId, ovgId: customer.ovgId }, "Syncing customer to OVG");
 }
 
 async function handleSyncToCademi(

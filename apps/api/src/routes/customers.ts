@@ -18,7 +18,6 @@ const customerSchema = z.object({
   birthDate: z.string().optional(),
   state: z.enum(["activo", "inactivo", "em_atraso", "suspenso"]).default("activo"),
   leadId: z.string().uuid().optional(),
-  ovgId: z.string().optional(),
   cademiId: z.string().optional(),
   whatsappPhone: z.string().optional(),
 });

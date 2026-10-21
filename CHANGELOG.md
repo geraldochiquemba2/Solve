@@ -1,5 +1,19 @@
 # Changelog
 
+## Integração SamoraFit Studio (ginásio)
+- Ingestão autenticada por chave dedicada (`X-API-Key`/Bearer) em
+  `/api/v1/integrations/samorafit-studio` (`/sync`, `/events`, `/status`).
+- Tabelas `studio_*` para clientes, planos, subscrições, pagamentos, faturas,
+  reembolsos, alocações, chaves e log de sincronização (migração 0008).
+- Ligação automática de clientes/planos ao CRM e área no front
+  **Ecossistema → SamoraFit Studio**, com gestão de chaves e dados sincronizados.
+- Documentação de entrega em `docs/INTEGRACAO-SAMORAFIT-STUDIO.md`.
+
+## Remoção da integração do ginásio (Solve Access / OVG)
+- Removidas rotas, páginas, hooks, jobs e colunas OVG/catraca do standalone, apps/api e apps/web.
+- Nova migração packages/db/drizzle/0007_drop_gym.sql (DROP das tabelas e colunas legadas).
+- Portal do cliente mantém aulas via subscriptions.lessons_total/lessons_done.
+
 ## Segurança ronda 2 (resposta ao relatório externo 24/09/2026, 17 itens)
 - RBAC no standalone (`requireRole`): settings/planos/automações/import/syncs
   externas→gestor+; convites/toggle users→admin; cancelar pagamento→financeiro+;

@@ -9,6 +9,5 @@
 export interface CheckinInput {
   customerId: string;
   location?: string;
-  ovgCheckinId?: string;
   checkedInAt?: Date;
 }

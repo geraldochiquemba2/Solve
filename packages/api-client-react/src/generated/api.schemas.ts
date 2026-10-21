@@ -437,7 +437,6 @@ export interface Access {
   customerId?: string;
   platform?: string;
   status?: string;
-  ovgAccessId?: string;
   cademiAccessId?: string;
   activatedAt?: string;
   expiresAt?: string;
@@ -448,7 +447,6 @@ export interface AccessInput {
   customerId: string;
   platform: string;
   status: string;
-  ovgAccessId?: string;
   cademiAccessId?: string;
   activatedAt?: string;
   expiresAt?: string;
@@ -458,14 +456,12 @@ export interface Checkin {
   id?: string;
   customerId?: string;
   location?: string;
-  ovgCheckinId?: string;
   checkedInAt?: string;
 }
 
 export interface CheckinInput {
   customerId: string;
   location?: string;
-  ovgCheckinId?: string;
   checkedInAt?: string;
 }
 

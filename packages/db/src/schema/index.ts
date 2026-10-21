@@ -37,15 +37,14 @@ export const leadsTable = pgTable("leads", {
   owner_id: uuid("owner_id").references(() => usersTable.id),
   estimatedValue: integer("estimated_value"),
   notes: text("notes"),
-  ovgId: varchar("ovg_id", { length: 100 }),
   externalId: varchar("external_id", { length: 100 }),
   convertedAt: timestamp("converted_at"),
   whatsapp: varchar("whatsapp", { length: 50 }),
   produtoInteresse: varchar("produto_interesse", { length: 255 }),
   proximoContato: date("proximo_contato"),
-  // Data do último contacto. É a fonte única do que o gestor lê em "Último
-  // contacto": nasce do histórico (registo de contactos) mas passa a ser
-  // editável no calendário, sem inventar um contacto que não aconteceu.
+  // Data do Ãºltimo contacto. Ã‰ a fonte Ãºnica do que o gestor lÃª em "Ãšltimo
+  // contacto": nasce do histÃ³rico (registo de contactos) mas passa a ser
+  // editÃ¡vel no calendÃ¡rio, sem inventar um contacto que nÃ£o aconteceu.
   ultimoContatoAt: date("ultimo_contato_at"),
   motivoPerda: varchar("motivo_perda", { length: 255 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -65,10 +64,10 @@ export const leadContactsTable = pgTable("lead_contacts", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Uma pessoa pode demonstrar interesse em várias campanhas sem ser outros clientes:
-// a lead é única (identificada por email/whatsapp/telefone) e cada campanha/interesse
-// novo que volta da mesma pessoa é registado aqui, preservando o histórico.
-// `leads.source` continua a ser a campanha principal (a primeira). Não apagar leads:
+// Uma pessoa pode demonstrar interesse em vÃ¡rias campanhas sem ser outros clientes:
+// a lead Ã© Ãºnica (identificada por email/whatsapp/telefone) e cada campanha/interesse
+// novo que volta da mesma pessoa Ã© registado aqui, preservando o histÃ³rico.
+// `leads.source` continua a ser a campanha principal (a primeira). NÃ£o apagar leads:
 // mover entre campanhas/estados nunca remove o rasto.
 export const leadCampaignsTable = pgTable(
   "lead_campaigns",
@@ -83,9 +82,9 @@ export const leadCampaignsTable = pgTable(
   (t) => [unique().on(t.leadId, t.source)],
 );
 
-// Avisos internos da equipa (sino do CRM). Uma linha por destinatário: assim
+// Avisos internos da equipa (sino do CRM). Uma linha por destinatÃ¡rio: assim
 // cada pessoa marca a sua como lida sem afectar os restantes. `leadId` amarra o
-// aviso à lead para o clique abrir a ficha certa.
+// aviso Ã  lead para o clique abrir a ficha certa.
 export const notificationsTable = pgTable(
   "notifications",
   {
@@ -115,7 +114,6 @@ export const customersTable = pgTable("customers", {
   gender: varchar("gender", { length: 20 }),
   birthDate: timestamp("birth_date"),
   state: customerStateEnum("state").notNull().default("activo"),
-  ovgId: varchar("ovg_id", { length: 100 }),
   cademiId: varchar("cademi_id", { length: 100 }),
   whatsappPhone: varchar("whatsapp_phone", { length: 50 }),
   leadId: uuid("lead_id").references(() => leadsTable.id),
@@ -132,7 +130,6 @@ export const plansTable = pgTable("plans", {
   periodicity: planPeriodicityEnum("periodicity").notNull().default("mensal"),
   duration: integer("duration"),
   active: boolean("active").notNull().default(true),
-  ovgPlanId: varchar("ovg_plan_id", { length: 100 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -144,7 +141,8 @@ export const subscriptionsTable = pgTable("subscriptions", {
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   active: boolean("active").notNull().default(true),
-  ovgSynced: boolean("ovg_synced").notNull().default(false),
+  lessonsTotal: integer("lessons_total"),
+  lessonsDone: integer("lessons_done").default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -174,7 +172,6 @@ export const accessTable = pgTable("access", {
   customerId: uuid("customer_id").notNull().references(() => customersTable.id),
   platform: varchar("platform", { length: 50 }).notNull(),
   status: varchar("status", { length: 50 }).notNull(),
-  ovgAccessId: varchar("ovg_access_id", { length: 100 }),
   cademiAccessId: varchar("cademi_access_id", { length: 100 }),
   activatedAt: timestamp("activated_at"),
   expiresAt: timestamp("expires_at"),
@@ -186,7 +183,6 @@ export const checkinsTable = pgTable("checkins", {
   id: uuid("id").primaryKey().defaultRandom(),
   customerId: uuid("customer_id").notNull().references(() => customersTable.id),
   location: varchar("location", { length: 255 }),
-  ovgCheckinId: varchar("ovg_checkin_id", { length: 100 }),
   checkedInAt: timestamp("checked_in_at").notNull().defaultNow(),
 });
 
@@ -282,21 +278,8 @@ export const apiKeysTable = pgTable("api_keys", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// ─── Solve Access: logs de acesso sincronizados da catraca ───────────────────
-export const solveAccessLogsTable = pgTable("solve_access_logs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  remoteId: integer("remote_id").notNull().unique(),
-  customerId: integer("customer_id").notNull(),
-  customerName: varchar("customer_name", { length: 255 }),
-  accessDate: varchar("access_date", { length: 10 }).notNull(),
-  accessTime: varchar("access_time", { length: 20 }).notNull(),
-  accessType: varchar("access_type", { length: 20 }).notNull(),
-  result: varchar("result", { length: 20 }).notNull(),
-  reason: text("reason"),
-  syncedAt: timestamp("synced_at").notNull().defaultNow(),
-});
 
-// ─── Portal do Cliente: OTPs de login via WhatsApp ──────────────────────────
+// â”€â”€â”€ Portal do Cliente: OTPs de login via WhatsApp â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const portalOtpsTable = pgTable("portal_otps", {
   id: uuid("id").primaryKey().defaultRandom(),
   phone: varchar("phone", { length: 50 }).notNull(),
@@ -307,7 +290,223 @@ export const portalOtpsTable = pgTable("portal_otps", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ─── Relations ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Relations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── SamoraFit Studio (ginásio) — espelho da modelagem Django ────────────────
+// Os dados entram por ingestão (API Key dedicada) e ficam isolados do CRM.
+// `externalId` é sempre o id estável do Studio; `crm*Id` liga ao registo CRM
+// correspondente quando existe correspondência segura.
+export const studioCustomersTable = pgTable(
+  "studio_customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    customerNumber: varchar("customer_number", { length: 20 }),
+    legacyId: varchar("legacy_id", { length: 50 }),
+    cardNumber: varchar("card_number", { length: 50 }),
+    fullName: varchar("full_name", { length: 200 }).notNull(),
+    photoUrl: text("photo_url"),
+    birthDate: date("birth_date"),
+    gender: varchar("gender", { length: 10 }),
+    nif: varchar("nif", { length: 30 }),
+    phone: varchar("phone", { length: 30 }),
+    email: varchar("email", { length: 255 }),
+    status: varchar("status", { length: 20 }).notNull().default("ACTIVE"),
+    notes: text("notes"),
+    enrollmentPaidAt: date("enrollment_paid_at"),
+    crmCustomerId: uuid("crm_customer_id").references(() => customersTable.id, { onDelete: "set null" }),
+    sourceCreatedAt: timestamp("source_created_at"),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("studio_customers_name_idx").on(t.fullName),
+    index("studio_customers_phone_idx").on(t.phone),
+    index("studio_customers_nif_idx").on(t.nif),
+    index("studio_customers_status_idx").on(t.status),
+  ],
+);
+
+export const studioPlansTable = pgTable(
+  "studio_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    name: varchar("name", { length: 100 }).notNull(),
+    price: decimal("price", { precision: 12, scale: 2 }).notNull().default("0"),
+    enrollmentFee: decimal("enrollment_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    renewalFee: decimal("renewal_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    planType: varchar("plan_type", { length: 20 }),
+    classesQuantity: integer("classes_quantity"),
+    calculationMode: varchar("calculation_mode", { length: 20 }),
+    validityDays: integer("validity_days"),
+    validityMonths: integer("validity_months").notNull().default(1),
+    rules: text("rules"),
+    isActive: boolean("is_active").notNull().default(true),
+    crmPlanId: uuid("crm_plan_id").references(() => plansTable.id, { onDelete: "set null" }),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("studio_plans_active_idx").on(t.isActive)],
+);
+
+export const studioSubscriptionsTable = pgTable(
+  "studio_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    customerExternalId: varchar("customer_external_id", { length: 100 }).notNull(),
+    planExternalId: varchar("plan_external_id", { length: 100 }).notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    price: decimal("price", { precision: 12, scale: 2 }).notNull().default("0"),
+    classesQuantity: integer("classes_quantity"),
+    status: varchar("status", { length: 20 }).notNull().default("ACTIVE"),
+    sourceCreatedAt: timestamp("source_created_at"),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("studio_subscriptions_customer_idx").on(t.customerExternalId),
+    index("studio_subscriptions_status_idx").on(t.status),
+  ],
+);
+
+export const studioPaymentsTable = pgTable(
+  "studio_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    customerExternalId: varchar("customer_external_id", { length: 100 }),
+    amount: decimal("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    kind: varchar("kind", { length: 20 }),
+    paymentDate: date("payment_date"),
+    paymentMethod: varchar("payment_method", { length: 20 }),
+    status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+    reference: varchar("reference", { length: 100 }),
+    notes: text("notes"),
+    unallocatedAmount: decimal("unallocated_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    enrollmentAmount: decimal("enrollment_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    reactivationAmount: decimal("reactivation_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+    discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    registeredByExternalId: varchar("registered_by_external_id", { length: 100 }),
+    raw: jsonb("raw"),
+    sourceCreatedAt: timestamp("source_created_at"),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("studio_payments_customer_idx").on(t.customerExternalId),
+    index("studio_payments_status_idx").on(t.status),
+    index("studio_payments_date_idx").on(t.paymentDate),
+  ],
+);
+
+export const studioInvoicesTable = pgTable(
+  "studio_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    customerExternalId: varchar("customer_external_id", { length: 100 }).notNull(),
+    subscriptionExternalId: varchar("subscription_external_id", { length: 100 }),
+    year: integer("year"),
+    month: integer("month"),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    amountDue: decimal("amount_due", { precision: 12, scale: 2 }).notNull().default("0"),
+    amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
+    amountReleased: decimal("amount_released", { precision: 12, scale: 2 }).notNull().default("0"),
+    amountRemaining: decimal("amount_remaining", { precision: 12, scale: 2 }).notNull().default("0"),
+    status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+    dueDate: date("due_date"),
+    paidAt: timestamp("paid_at"),
+    isPartial: boolean("is_partial").notNull().default(false),
+    notes: text("notes"),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("studio_invoices_customer_idx").on(t.customerExternalId),
+    index("studio_invoices_status_idx").on(t.status),
+    index("studio_invoices_period_idx").on(t.periodStart),
+  ],
+);
+
+export const studioRefundsTable = pgTable(
+  "studio_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    paymentExternalId: varchar("payment_external_id", { length: 100 }),
+    customerExternalId: varchar("customer_external_id", { length: 100 }),
+    amount: decimal("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    reason: text("reason"),
+    status: varchar("status", { length: 20 }).notNull().default("CONFIRMED"),
+    refundedAt: timestamp("refunded_at"),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("studio_refunds_payment_idx").on(t.paymentExternalId)],
+);
+
+export const studioPaymentAllocationsTable = pgTable(
+  "studio_payment_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+    paymentExternalId: varchar("payment_external_id", { length: 100 }).notNull(),
+    invoiceExternalId: varchar("invoice_external_id", { length: 100 }).notNull(),
+    amount: decimal("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    raw: jsonb("raw"),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("studio_allocations_payment_idx").on(t.paymentExternalId)],
+);
+
+export const studioApiKeysTable = pgTable("studio_api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull(),
+  keyHash: varchar("key_hash", { length: 128 }).notNull().unique(),
+  keyPrefix: varchar("key_prefix", { length: 16 }).notNull(),
+  active: boolean("active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const studioSyncLogTable = pgTable(
+  "studio_sync_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    event: varchar("event", { length: 50 }).notNull(),
+    entity: varchar("entity", { length: 50 }),
+    receivedCount: integer("received_count").notNull().default(0),
+    upsertedCount: integer("upserted_count").notNull().default(0),
+    errorCount: integer("error_count").notNull().default(0),
+    status: varchar("status", { length: 20 }).notNull().default("ok"),
+    message: text("message"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (t) => [index("studio_sync_log_started_idx").on(t.startedAt)],
+);
+
 export const paymentsRelations = relations(paymentsTable, ({ one }) => ({
   customer: one(customersTable, {
     fields: [paymentsTable.customerId],
@@ -352,9 +551,9 @@ export const promoCodesTable = pgTable("promo_codes", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// `userKey` é a identidade estável do utilizador que usou o código
-// (email normalizado > telefone normalizado). É por aqui que se garante o uso
-// único por utilizador — `email`/`phone` ficam como evidência legível.
+// `userKey` Ã© a identidade estÃ¡vel do utilizador que usou o cÃ³digo
+// (email normalizado > telefone normalizado). Ã‰ por aqui que se garante o uso
+// Ãºnico por utilizador â€” `email`/`phone` ficam como evidÃªncia legÃ­vel.
 export const promoUsagesTable = pgTable("promo_usages", {
   id: uuid("id").primaryKey().defaultRandom(),
   promoId: uuid("promo_id").notNull().references(() => promoCodesTable.id, { onDelete: "cascade" }),

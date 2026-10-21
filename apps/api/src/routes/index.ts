@@ -12,15 +12,12 @@ import webhooksRouter from "./webhooks";
 import dashboardRouter from "./dashboard";
 import usersRouter from "./users";
 import cademiRouter from "./cademi";
-import ovgRouter from "./ovg";
 import whatsappRouter from "./whatsapp";
 import automationsRouter from "./automations";
 import auditLogsRouter from "./audit-logs";
 import settingsRouter from "./settings";
 import apiKeysRouter from "./api-keys";
-import accessRouter from "./access";
 import checkinsRouter from "./checkins";
-import solveAccessRouter from "./solve-access";
 import portalRouter from "./portal";
 import promosRouter from "./promos";
 import notificationsRouter from "./notifications";
@@ -47,16 +44,13 @@ router.use(dashboardRouter);
 router.use(usersRouter);
 router.use(cademiRouter);
 router.use(whatsappRouter);
-router.use(ovgRouter);
 router.use(automationsRouter);
 router.use(auditLogsRouter);
 router.use(settingsRouter);
 router.use(apiKeysRouter);
-router.use(accessRouter);
 router.use(checkinsRouter);
-router.use('/solve-access', solveAccessRouter);
 router.use(portalRouter);
-// O promosRouter já declara os caminhos completos (/promos, /promos/validate, …).
+// O promosRouter jÃ¡ declara os caminhos completos (/promos, /promos/validate, â€¦).
 router.use(promosRouter);
 router.use(notificationsRouter);
 

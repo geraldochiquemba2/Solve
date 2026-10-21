@@ -16,7 +16,6 @@ const planSchema = z.object({
   periodicity: z.enum(["mensal", "trimestral", "semestral", "anual"]).default("mensal"),
   duration: z.number().int().optional(),
   active: z.boolean().default(true),
-  ovgPlanId: z.string().optional(),
 });
 
 const planUpdateSchema = planSchema.partial();

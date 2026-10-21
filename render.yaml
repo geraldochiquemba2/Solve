@@ -33,17 +33,11 @@ services:
         sync: false
       - key: API_KEY
         sync: false
+      - key: STUDIO_API_KEY
+        sync: false
       # FRONTEND_URL e CORS_ORIGIN: intencionalmente ausentes — o backend usa
       # RENDER_EXTERNAL_URL (injectado pelo Render) como fallback, por isso o
       # mesmo render.yaml funciona em qualquer conta sem ajustes.
-      - key: OVG_API_URL
-        value: https://samorafitstudio.onvirtualgym.com
-      - key: OVG_USERNAME
-        sync: false
-      - key: OVG_PASSWORD
-        sync: false
-      - key: OVG_CLUB_CODE
-        value: LUA
       - key: EKWANZA_CLIENT_ID
         sync: false
       - key: EKWANZA_CLIENT_SECRET

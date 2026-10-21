@@ -9,22 +9,22 @@ import { AppError } from "../middlewares/error";
 
 const router = Router();
 
-// ─── Responsável e visibilidade das leads ────────────────────────────────────
+// â”€â”€â”€ ResponsÃ¡vel e visibilidade das leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Regras do funil:
-//  1. O comercial que muda a etapa fica responsável pela lead (assume-a).
-//  2. Uma lead com responsável só é vista pelo responsável e pela gestão
-//     (administrador/gestor). Os restantes comerciais não a veem nem a abrem.
-//  3. Uma lead sem responsável é o "balcão": visível por toda a equipa.
+//  1. O comercial que muda a etapa fica responsÃ¡vel pela lead (assume-a).
+//  2. Uma lead com responsÃ¡vel sÃ³ Ã© vista pelo responsÃ¡vel e pela gestÃ£o
+//     (administrador/gestor). Os restantes comerciais nÃ£o a veem nem a abrem.
+//  3. Uma lead sem responsÃ¡vel Ã© o "balcÃ£o": visÃ­vel por toda a equipa.
 const GESTAO = new Set(["administrador", "gestor"]);
 const isGestao = (req: any) => GESTAO.has(String(req.user?.role || ""));
 
-// Identidade do utilizador autenticado (a chave de máquina entra como gestão).
+// Identidade do utilizador autenticado (a chave de mÃ¡quina entra como gestÃ£o).
 function uidDe(req: any): string | null {
   const uid = req.user?.userId;
   return uid && uid !== "api-key" ? String(uid) : null;
 }
 
-// Condição SQL de visibilidade. undefined = sem restrição (gestão/máquina).
+// CondiÃ§Ã£o SQL de visibilidade. undefined = sem restriÃ§Ã£o (gestÃ£o/mÃ¡quina).
 function visibilidadeLeads(req: any) {
   if (isGestao(req)) return undefined;
   const uid = uidDe(req);
@@ -40,8 +40,8 @@ function podeVerLead(req: any, lead: any): boolean {
   return String(lead.owner_id) === uid;
 }
 
-// Quem fica com a lead quando um comercial mexe nela. A gestão não fica com a
-// lead por mexer nela — distribui o trabalho no campo "Responsável".
+// Quem fica com a lead quando um comercial mexe nela. A gestÃ£o nÃ£o fica com a
+// lead por mexer nela â€” distribui o trabalho no campo "ResponsÃ¡vel".
 function donoPorEtapa(req: any, lead: any): string | null {
   if (isGestao(req)) return null;
   if (String(req.user?.role || "") !== "comercial") return null;
@@ -51,7 +51,7 @@ function donoPorEtapa(req: any, lead: any): string | null {
   return uid;
 }
 
-// Sino do CRM: uma linha por destinatário, para cada um marcar a sua como lida.
+// Sino do CRM: uma linha por destinatÃ¡rio, para cada um marcar a sua como lida.
 const NOTIF_EQUIPA = ["administrador", "gestor", "comercial"] as const;
 
 async function notificarLeadNova(lead: any, opts: { excludeUserId?: string } = {}) {
@@ -86,7 +86,7 @@ async function notificarLeadAssumida(lead: any, ownerId?: string | null) {
     await db.insert(notificationsTable).values({
       userId: ownerId,
       type: "lead_assumida",
-      title: `Ficaste responsável pela lead: ${lead.name}`,
+      title: `Ficaste responsÃ¡vel pela lead: ${lead.name}`,
       body: lead.company || lead.email || lead.phone || null,
       leadId: lead.id,
     });
@@ -96,27 +96,27 @@ async function notificarLeadAssumida(lead: any, ownerId?: string | null) {
 }
 
 const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"] as const;
-// ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
+// â”€â”€â”€ Etapas (MÃ³dulo 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Existem 4 etapas: nova_lead, qualificado, convertido, perdido.
-// "Proposta", "Negociação" e "Contactada" deixaram de ser etapas: quem já foi
-// contactado está em acompanhamento. O enum do PostgreSQL mantém os valores
-// antigos (migração não destrutiva), mas a API nunca os volta a gravar nem a os
-// conta à parte — quem chega com um valor antigo é normalizado para qualificado.
-//Leitura: "em acompanhamento" = já foi contactada e está a ser trabalhada.
-// Inclui `contacto` porque a migração ainda pode não ter corrido em todas as
-// bases; `canonStatus` garante que a partir de agora nada é gravado assim.
+// "Proposta", "NegociaÃ§Ã£o" e "Contactada" deixaram de ser etapas: quem jÃ¡ foi
+// contactado estÃ¡ em acompanhamento. O enum do PostgreSQL mantÃ©m os valores
+// antigos (migraÃ§Ã£o nÃ£o destrutiva), mas a API nunca os volta a gravar nem a os
+// conta Ã  parte â€” quem chega com um valor antigo Ã© normalizado para qualificado.
+//Leitura: "em acompanhamento" = jÃ¡ foi contactada e estÃ¡ a ser trabalhada.
+// Inclui `contacto` porque a migraÃ§Ã£o ainda pode nÃ£o ter corrido em todas as
+// bases; `canonStatus` garante que a partir de agora nada Ã© gravado assim.
 const ETAPAS_EM_ACOMPANHAMENTO = ["qualificado", "proposta", "negociacao", "contacto"] as const;
-// "Contactada" deixou de ser uma etapa: quem já foi contactado está em
-// acompanhamento. O que já vinha gravado continua aceite na leitura, mas passa a
+// "Contactada" deixou de ser uma etapa: quem jÃ¡ foi contactado estÃ¡ em
+// acompanhamento. O que jÃ¡ vinha gravado continua aceite na leitura, mas passa a
 // "Em acompanhamento", para que as 4 etapas existam em todo o lado.
 const canonStatus = (s: unknown): any => (s === "proposta" || s === "negociacao" || s === "contacto" ? "qualificado" : s);
-// "Nova" é um ponto de entrada, não um destino: depois de sair, não se volta atrás.
-const REGRA_SEM_RETORNO = "Uma lead que já saiu de \"Nova\" não pode voltar a \"Nova\". Registe o contacto em vez de recomeçar.";
+// "Nova" Ã© um ponto de entrada, nÃ£o um destino: depois de sair, nÃ£o se volta atrÃ¡s.
+const REGRA_SEM_RETORNO = "Uma lead que jÃ¡ saiu de \"Nova\" nÃ£o pode voltar a \"Nova\". Registe o contacto em vez de recomeÃ§ar.";
 
-// Selects fixos — funcionário seleciona, não digita (paridade standalone-server + App.tsx)
+// Selects fixos â€” funcionÃ¡rio seleciona, nÃ£o digita (paridade standalone-server + App.tsx)
 export const LEAD_CANAIS = ["WhatsApp", "Telefone", "SMS", "Presencial", "E-mail", "Sistema"] as const;
-export const LEAD_RESULTADOS = ["Não respondeu", "Interessado", "Pediu mais informações", "Pediu para contactar depois", "Não tem interesse", "Converteu", "Número inválido", "Mudança de etapa"] as const;
-export const LEAD_PASSOS = ["Contactar amanhã", "Contactar em 3 dias", "Contactar em 7 dias", "Sem próximo contacto", "Agendar visita"] as const;
+export const LEAD_RESULTADOS = ["NÃ£o respondeu", "Interessado", "Pediu mais informaÃ§Ãµes", "Pediu para contactar depois", "NÃ£o tem interesse", "Converteu", "NÃºmero invÃ¡lido", "MudanÃ§a de etapa"] as const;
+export const LEAD_PASSOS = ["Contactar amanhÃ£", "Contactar em 3 dias", "Contactar em 7 dias", "Sem prÃ³ximo contacto", "Agendar visita"] as const;
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve ser YYYY-MM-DD");
 
@@ -130,7 +130,6 @@ const leadSchema = z.object({
   ownerId: z.string().uuid().nullish(),
   estimatedValue: z.number().int().optional(),
   notes: z.string().optional(),
-  ovgId: z.string().optional(),
   externalId: z.string().optional(),
   whatsapp: z.string().max(50).nullish(),
   produtoInteresse: z.string().max(255).nullish(),
@@ -153,7 +152,7 @@ const contactSchema = z.object({
 
 function passoParaData(passo?: string | null): string | null {
   const d = new Date();
-  if (passo === "Contactar amanhã") d.setDate(d.getDate() + 1);
+  if (passo === "Contactar amanhÃ£") d.setDate(d.getDate() + 1);
   else if (passo === "Contactar em 3 dias") d.setDate(d.getDate() + 3);
   else if (passo === "Contactar em 7 dias") d.setDate(d.getDate() + 7);
   else return null;
@@ -174,8 +173,8 @@ async function withStats(lead: any) {
     return {
       ...lead,
       contactosTotal: contactos.length,
-      // Fonte única do "último contacto": a coluna editável no calendário; só quando
-      // nunca foi preenchida (lead antiga) se recorre ao último registo do histórico.
+      // Fonte Ãºnica do "Ãºltimo contacto": a coluna editÃ¡vel no calendÃ¡rio; sÃ³ quando
+      // nunca foi preenchida (lead antiga) se recorre ao Ãºltimo registo do histÃ³rico.
       ultimoContactoAt: (lead as any).ultimoContatoAt ?? ultimo?.createdAt ?? null,
       ultimoResultado: ultimo?.resultado ?? null,
       ultimoStaff,
@@ -185,13 +184,13 @@ async function withStats(lead: any) {
   }
 }
 
-// ─── Identidade de cliente (deduplicação) ────────────────────────────────────
-// Uma pessoa é a MESMA em várias campanhas se partilhar um identificador forte:
-// email (normalizado) OU whatsapp/telefone (dígitos, com e sem +244). O nome
-// NUNCA é usado para fundir — duas pessoas com o mesmo nome e identificadores
+// â”€â”€â”€ Identidade de cliente (deduplicaÃ§Ã£o) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Uma pessoa Ã© a MESMA em vÃ¡rias campanhas se partilhar um identificador forte:
+// email (normalizado) OU whatsapp/telefone (dÃ­gitos, com e sem +244). O nome
+// NUNCA Ã© usado para fundir â€” duas pessoas com o mesmo nome e identificadores
 // diferentes continuam pessoas distintas (nunca se fundem incorretamente).
-// Sem nenhum identificador, cria-se uma lead nova de cada vez (impossível provar
-// que é a mesma pessoa).
+// Sem nenhum identificador, cria-se uma lead nova de cada vez (impossÃ­vel provar
+// que Ã© a mesma pessoa).
 const normEmail = (e?: string | null) => (e ?? "").trim().toLowerCase() || undefined;
 const contactKeys = (w?: string | null, p?: string | null): string[] => {
   const raw = String(w || p || "").replace(/\D+/g, "");
@@ -214,7 +213,7 @@ async function findLeadByIdentity(body: { email?: string; phone?: string; whatsa
   return db.query.leadsTable.findFirst({ where: or(...conds) });
 }
 
-// Campanhas/interesses secundários de cada lead (a principal é `lead.source`).
+// Campanhas/interesses secundÃ¡rios de cada lead (a principal Ã© `lead.source`).
 async function withCampanhas(leads: any[]): Promise<any[]> {
   if (!leads.length) return leads;
   const byLead = new Map<string, any[]>();
@@ -225,18 +224,18 @@ async function withCampanhas(leads: any[]): Promise<any[]> {
       arr.push({ source: r.source, produtoInteresse: r.produtoInteresse, externalId: r.externalId, createdAt: r.createdAt });
       byLead.set(r.leadId, arr);
     }
-  } catch { /* mocks/base indisponível */ }
+  } catch { /* mocks/base indisponÃ­vel */ }
   return leads.map((l) => ({ ...l, campanhas: byLead.get(l.id) ?? [] }));
 }
 
-// List all leads with filters — enriquecida com contactosTotal + último contacto (quem/quando/resultado)
+// List all leads with filters â€” enriquecida com contactosTotal + Ãºltimo contacto (quem/quando/resultado)
 router.get("/leads", authenticate, async (req, res, next) => {
   try {
     const { search, status, source, owner } = req.query;
 
     const conditions = [];
 
-    // Cada um só vê o seu funil + o balcão (leads sem responsável).
+    // Cada um sÃ³ vÃª o seu funil + o balcÃ£o (leads sem responsÃ¡vel).
     const vis = visibilidadeLeads(req);
     if (vis) conditions.push(vis);
 
@@ -254,8 +253,8 @@ router.get("/leads", authenticate, async (req, res, next) => {
     }
 
     if (status && typeof status === "string" && status !== "Todos") {
-      // "Em acompanhamento" traz também as linhas ainda marcadas com as etapas
-      // antigas, para o filtro nunca esconder uma lead que o gestor vê no funil.
+      // "Em acompanhamento" traz tambÃ©m as linhas ainda marcadas com as etapas
+      // antigas, para o filtro nunca esconder uma lead que o gestor vÃª no funil.
       if (status === "qualificado") conditions.push(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]) as any);
       else conditions.push(eq(leadsTable.status, canonStatus(status) as any));
     }
@@ -284,11 +283,11 @@ router.get("/leads", authenticate, async (req, res, next) => {
   }
 });
 
-// ─── KPIs organizados: total, contactadas (com %), convertidas, perdidas ───
-// IMPORTANTE: antes de /:id para não colidir
+// â”€â”€â”€ KPIs organizados: total, contactadas (com %), convertidas, perdidas â”€â”€â”€
+// IMPORTANTE: antes de /:id para nÃ£o colidir
 router.get("/leads/resumo", authenticate, async (req, res, next) => {
   try {
-    // Os KPIs respeitam o mesmo âmbito da lista (comercial vê o seu + balcão).
+    // Os KPIs respeitam o mesmo Ã¢mbito da lista (comercial vÃª o seu + balcÃ£o).
     const vis = visibilidadeLeads(req);
     const total = await db.$count(leadsTable, vis as any);
     const countBy = async (cond: any) => {
@@ -299,7 +298,7 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
     const convertidas = await countBy(eq(leadsTable.status, "convertido"));
     const perdidas = await countBy(eq(leadsTable.status, "perdido"));
     const emAcompanhamento = await countBy(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]));
-    // contactadas = têm ≥1 registo em lead_contacts
+    // contactadas = tÃªm â‰¥1 registo em lead_contacts
     const contactadasRows = await db
       .select({ leadId: leadContactsTable.leadId })
       .from(leadContactsTable)
@@ -313,7 +312,7 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
   }
 });
 
-// ─── Follow-ups de hoje: proximo_contato = hoje e status <> convertido ───
+// â”€â”€â”€ Follow-ups de hoje: proximo_contato = hoje e status <> convertido â”€â”€â”€
 router.get("/leads/followups/hoje", authenticate, async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
@@ -328,13 +327,13 @@ router.get("/leads/followups/hoje", authenticate, async (req, res, next) => {
   }
 });
 
-// ─── Histórico: quem contactou, quando, canal, resultado ───
+// â”€â”€â”€ HistÃ³rico: quem contactou, quando, canal, resultado â”€â”€â”€
 router.get("/leads/:id/contacts", authenticate, async (req, res, next) => {
   try {
     const lead = await db.query.leadsTable.findFirst({ where: eq(leadsTable.id, req.params.id as string) });
-    // Uma lead de outro responsável não se abre: responde 404 para não revelar
+    // Uma lead de outro responsÃ¡vel nÃ£o se abre: responde 404 para nÃ£o revelar
     // que ela existe.
-    if (!lead || !podeVerLead(req, lead)) throw new AppError(404, "Lead não encontrado");
+    if (!lead || !podeVerLead(req, lead)) throw new AppError(404, "Lead nÃ£o encontrado");
     const contactos = await db.select().from(leadContactsTable).where(eq(leadContactsTable.leadId, req.params.id as string)).orderBy(leadContactsTable.createdAt);
     const data: any[] = [];
     for (const c of contactos) {
@@ -355,17 +354,17 @@ router.get("/leads/:id/contacts", authenticate, async (req, res, next) => {
   }
 });
 
-// Registar contacto — funcionário seleciona canal/resultado/passo (sem digitar); staff = JWT auto
+// Registar contacto â€” funcionÃ¡rio seleciona canal/resultado/passo (sem digitar); staff = JWT auto
 router.post("/leads/:id/contacts", authenticate, authorize("administrador", "gestor", "comercial"), validate(contactSchema), async (req, res, next) => {
   try {
     const lead = await db.query.leadsTable.findFirst({ where: eq(leadsTable.id, req.params.id as string) });
-    if (!lead) throw new AppError(404, "Lead não encontrado");
-    if (!podeVerLead(req, lead)) throw new AppError(403, "Esta lead tem outro responsável.");
+    if (!lead) throw new AppError(404, "Lead nÃ£o encontrado");
+    if (!podeVerLead(req, lead)) throw new AppError(403, "Esta lead tem outro responsÃ¡vel.");
     const passo = req.body.proximo_passo ?? req.body.proximoPasso ?? null;
     let proxData: string | null = (req.body.proximo_contato ?? req.body.proximoContato ?? null) as any;
-    if (!proxData && passo && passo !== "Sem próximo contacto" && passo !== "Agendar visita") proxData = passoParaData(passo);
+    if (!proxData && passo && passo !== "Sem prÃ³ximo contacto" && passo !== "Agendar visita") proxData = passoParaData(passo);
     if (passo === "Agendar visita" && !proxData) throw new AppError(400, "Agendar visita precisa de data");
-    if (passo === "Sem próximo contacto") proxData = null;
+    if (passo === "Sem prÃ³ximo contacto") proxData = null;
 
     let staffId: string | null = null;
     let staffName: string | null = null;
@@ -386,12 +385,12 @@ router.post("/leads/:id/contacts", authenticate, authorize("administrador", "ges
       update.status = "convertido";
       update.convertedAt = new Date();
     } else if ((lead as any).status === "novo_lead") {
-      // Estado nunca diverge do histórico: o 1º contacto regista a entrada em
-      // acompanhamento. Não volta a "Nova" — essa é a regra de sentido único.
+      // Estado nunca diverge do histÃ³rico: o 1Âº contacto regista a entrada em
+      // acompanhamento. NÃ£o volta a "Nova" â€” essa Ã© a regra de sentido Ãºnico.
       update.status = "qualificado";
     }
-    // Mexer na lead é assumi-la (regra do funil: o comercial que a trabalha
-    // fica responsável). A gestão não muda de dono ao registar contactos.
+    // Mexer na lead Ã© assumi-la (regra do funil: o comercial que a trabalha
+    // fica responsÃ¡vel). A gestÃ£o nÃ£o muda de dono ao registar contactos.
     const dono = donoPorEtapa(req, lead);
     if (dono) update.owner_id = dono;
     const [leadUpd] = await db.update(leadsTable).set(update).where(eq(leadsTable.id, req.params.id as string)).returning();
@@ -410,7 +409,7 @@ router.get("/leads/:id", authenticate, async (req, res, next) => {
     });
 
     if (!lead || !podeVerLead(req, lead)) {
-      throw new AppError(404, "Lead não encontrado");
+      throw new AppError(404, "Lead nÃ£o encontrado");
     }
 
     res.json({ data: (await withCampanhas([await withStats(lead)]))[0] });
@@ -422,14 +421,14 @@ router.get("/leads/:id", authenticate, async (req, res, next) => {
 // Create lead
 router.post("/leads", authenticate, authorize("administrador", "gestor", "comercial"), validate(leadSchema), async (req, res, next) => {
   try {
-    // Idempotência: integrações externas (ex.: Supabase/Fit 90) reenviam o mesmo external_id.
+    // IdempotÃªncia: integraÃ§Ãµes externas (ex.: Supabase/Fit 90) reenviam o mesmo external_id.
     const externalId = req.body.externalId ? String(req.body.externalId).trim() : undefined;
     if (externalId) {
       const existing = await db.query.leadsTable.findFirst({
         where: eq(leadsTable.externalId, externalId),
       });
       if (existing) {
-        // Campos escritos com notação literal de propósito: usar req.body como
+        // Campos escritos com notaÃ§Ã£o literal de propÃ³sito: usar req.body como
         // chave de objeto permitiria escrever em __proto__/constructor/prototype
         // (remote property injection). A lista vem do schema Zod, nunca do body.
         const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -450,10 +449,10 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
       }
     }
 
-    // Deduplicação por identidade (Módulo 3): a MESMA pessoa noutra campanha não
-    // é outra lead. Se partilha email OU whatsapp OU telefone, reaproveita a lead:
-    // regista a nova campanha/interesse e preserva todo o histórico (contactos,
-    // observações, etapa, enquanto continuar em Leads Totais).
+    // DeduplicaÃ§Ã£o por identidade (MÃ³dulo 3): a MESMA pessoa noutra campanha nÃ£o
+    // Ã© outra lead. Se partilha email OU whatsapp OU telefone, reaproveita a lead:
+    // regista a nova campanha/interesse e preserva todo o histÃ³rico (contactos,
+    // observaÃ§Ãµes, etapa, enquanto continuar em Leads Totais).
     const existingByIdentity = await findLeadByIdentity(req.body as any);
     if (existingByIdentity) {
       const novoInteresse: any = {
@@ -468,7 +467,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
             .insert(leadCampaignsTable)
             .values(novoInteresse)
             .onConflictDoNothing({ target: [leadCampaignsTable.leadId, leadCampaignsTable.source] });
-        } catch { /* corrida: o índice único garante que não duplica */ }
+        } catch { /* corrida: o Ã­ndice Ãºnico garante que nÃ£o duplica */ }
       }
       // Atualiza unicamente os identificadores para o valor mais recente.
       const refresh: Record<string, unknown> = { updatedAt: new Date() };
@@ -490,8 +489,8 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
     const count = await db.$count(leadsTable);
     const code = `LED-${String(1000 + count + 1).padStart(4, "0")}`;
 
-    // Quem entra a lead fica com ela: o comercial que a registou é o
-    // responsável. Sem dono, a lead fica no balcão, visível para toda a equipa.
+    // Quem entra a lead fica com ela: o comercial que a registou Ã© o
+    // responsÃ¡vel. Sem dono, a lead fica no balcÃ£o, visÃ­vel para toda a equipa.
     const uidCriador = uidDe(req);
     const podeAssumir = String(req.user?.role || "") === "comercial" && uidCriador;
     const donoInicial = isGestao(req) ? (req.body.ownerId ?? null) : (podeAssumir ? uidCriador : null);
@@ -508,7 +507,6 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         owner_id: donoInicial,
         estimatedValue: req.body.estimatedValue ?? 0,
         notes: req.body.notes ?? null,
-        ovgId: req.body.ovgId ?? null,
         externalId,
         whatsapp: req.body.whatsapp ?? null,
         produtoInteresse: req.body.produtoInteresse ?? null,
@@ -519,7 +517,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
       } as any)
       .returning();
 
-    // Lead nova: a equipa é avisada no sino (quem a registou não recebe eco).
+    // Lead nova: a equipa Ã© avisada no sino (quem a registou nÃ£o recebe eco).
     await notificarLeadNova(lead, { excludeUserId: uidCriador ?? undefined });
 
     res.status(201).json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: false });
@@ -536,27 +534,27 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
     });
 
     if (!existing) {
-      throw new AppError(404, "Lead não encontrado");
+      throw new AppError(404, "Lead nÃ£o encontrado");
     }
     if (!podeVerLead(req, existing)) {
-      throw new AppError(403, "Esta lead tem outro responsável.");
+      throw new AppError(403, "Esta lead tem outro responsÃ¡vel.");
     }
 
-    // Motivo obrigatório ao marcar perdida — evita perder rasto sem explicação
+    // Motivo obrigatÃ³rio ao marcar perdida â€” evita perder rasto sem explicaÃ§Ã£o
     const nextStatus = canonStatus(req.body.status ?? (existing as any).status);
     if (nextStatus === "perdido" && !req.body.motivoPerda && !(existing as any).motivoPerda) {
-      throw new AppError(400, "Motivo da perda é obrigatório (selecione o motivo)");
+      throw new AppError(400, "Motivo da perda Ã© obrigatÃ³rio (selecione o motivo)");
     }
-    // "Nova" é sentido único: registar que uma lead já contactada voltou a zero
-    // apagaria a etapa que ela percorreu. A regra é do servidor, não do ecrã.
+    // "Nova" Ã© sentido Ãºnico: registar que uma lead jÃ¡ contactada voltou a zero
+    // apagaria a etapa que ela percorreu. A regra Ã© do servidor, nÃ£o do ecrÃ£.
     if (req.body.status === "novo_lead" && canonStatus((existing as any).status) !== "novo_lead") {
       throw new AppError(400, REGRA_SEM_RETORNO);
     }
     const patch: any = { updatedAt: new Date() };
     for (const [k, v] of Object.entries(req.body as any)) {
       if (v === undefined) continue;
-      // Atribuir responsável é decisão da gestão. O comercial assume a lead
-      // mexendo na etapa, não escolhendo o dono.
+      // Atribuir responsÃ¡vel Ã© decisÃ£o da gestÃ£o. O comercial assume a lead
+      // mexendo na etapa, nÃ£o escolhendo o dono.
       if (k === "ownerId") { if (isGestao(req)) patch.owner_id = v; }
       else if (k === "ultimoContactoAt") patch.ultimoContatoAt = v;
       else if (k === "status") patch.status = canonStatus(v);
@@ -567,8 +565,8 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
     const dono = mudouEtapa ? donoPorEtapa(req, existing) : null;
     if (dono) patch.owner_id = dono;
     // Entrar em Convertida marca a data. A etapa muda-se na tabela, sem passar por um
-    // contacto com resultado "Converteu", e o rasto não pode depender de o gestor ter
-    // registado esse contacto. Sair da etapa desfaz a data, para não deixar uma conversão
+    // contacto com resultado "Converteu", e o rasto nÃ£o pode depender de o gestor ter
+    // registado esse contacto. Sair da etapa desfaz a data, para nÃ£o deixar uma conversÃ£o
     // antiga em cima de uma lead que voltou ao funil.
     if (patch.status === "convertido" && canonStatus((existing as any).status) !== "convertido") patch.convertedAt = new Date();
     else if (canonStatus((existing as any).status) === "convertido") patch.convertedAt = null;
@@ -579,7 +577,7 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
       .where(eq(leadsTable.id, req.params.id as string))
       .returning();
 
-    // Rasto de quem/quando: mudança de etapa entra no histórico (canal Sistema)
+    // Rasto de quem/quando: mudanÃ§a de etapa entra no histÃ³rico (canal Sistema)
     if (req.body.status && req.body.status !== (existing as any).status) {
       try {
         let staffId: string | null = null;
@@ -589,19 +587,19 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
           const u = await db.query.usersTable.findFirst({ where: eq(usersTable.id, uid) });
           if (u) { staffId = u.id; staffName = u.name; }
         }
-        const obs = `Etapa: ${(existing as any).status} → ${req.body.status}` +
+        const obs = `Etapa: ${(existing as any).status} â†’ ${req.body.status}` +
           (req.body.status === "perdido" && (req.body.motivoPerda ?? (lead as any).motivoPerda)
-            ? ` · Motivo: ${req.body.motivoPerda ?? (lead as any).motivoPerda}` : "");
+            ? ` Â· Motivo: ${req.body.motivoPerda ?? (lead as any).motivoPerda}` : "");
         await db.insert(leadContactsTable).values({
           leadId: req.params.id as string, staffId, staffName,
-          canal: "Sistema", resultado: "Mudança de etapa",
+          canal: "Sistema", resultado: "MudanÃ§a de etapa",
           proximoPasso: null, proximoContato: (lead as any).proximoContato ?? null,
           observacao: obs,
         } as any);
-      } catch { /* histórico nunca bloqueia o PATCH */ }
+      } catch { /* histÃ³rico nunca bloqueia o PATCH */ }
     }
 
-    // Avisos: quem ficou com a lead é avisado (assumiu ou recebeu a atribuição).
+    // Avisos: quem ficou com a lead Ã© avisado (assumiu ou recebeu a atribuiÃ§Ã£o).
     const donoFinal = (lead as any).owner_id;
     const donoNovo = donoFinal && String(donoFinal) !== String((existing as any).owner_id || "") ? String(donoFinal) : null;
     if (donoNovo) await notificarLeadAssumida(lead, donoNovo);
@@ -612,11 +610,11 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
   }
 });
 
-// Leads NUNCA desaparecem: DELETE físico removido.
-// Para tirar do funil use PATCH status=perdido + motivoPerda (reutilizável noutra campanha/produto).
+// Leads NUNCA desaparecem: DELETE fÃ­sico removido.
+// Para tirar do funil use PATCH status=perdido + motivoPerda (reutilizÃ¡vel noutra campanha/produto).
 router.delete("/leads/:id", authenticate, authorize("administrador", "gestor"), async (_req, res) => {
   res.status(410).json({
-    error: "Leads não podem ser apagadas — marque como Perdida com motivo para reutilizar noutra campanha/produto.",
+    error: "Leads nÃ£o podem ser apagadas â€” marque como Perdida com motivo para reutilizar noutra campanha/produto.",
   });
 });
 
@@ -628,20 +626,20 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
     });
 
     if (!lead) {
-      throw new AppError(404, "Lead não encontrado");
+      throw new AppError(404, "Lead nÃ£o encontrado");
     }
     if (!podeVerLead(req, lead)) {
-      throw new AppError(403, "Esta lead tem outro responsável.");
+      throw new AppError(403, "Esta lead tem outro responsÃ¡vel.");
     }
     // Quem converte a lead assume-a (regra do funil).
     const dono = donoPorEtapa(req, lead);
 
     if (lead.status === "convertido") {
-      throw new AppError(400, "Lead já foi convertido");
+      throw new AppError(400, "Lead jÃ¡ foi convertido");
     }
 
-    // Cliente único (Módulo 3): se já existe um cliente com o mesmo email,
-    // whatsapp ou telefone, associa a lead a esse cliente — nunca cria um
+    // Cliente Ãºnico (MÃ³dulo 3): se jÃ¡ existe um cliente com o mesmo email,
+    // whatsapp ou telefone, associa a lead a esse cliente â€” nunca cria um
     // segundo cliente para a mesma pessoa, mesmo vinda de outra campanha.
     const email = normEmail((lead as any).email);
     const keys = contactKeys((lead as any).whatsapp, (lead as any).phone);
@@ -669,7 +667,7 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
           .where(eq(leadsTable.id, lead.id));
         if (dono) await notificarLeadAssumida(lead, dono);
         res.json({
-          message: "Cliente já existente — lead associada ao cliente atual",
+          message: "Cliente jÃ¡ existente â€” lead associada ao cliente atual",
           data: { lead: { ...lead, status: "convertido" }, customer, duplicado: true },
         });
         return;
@@ -691,7 +689,6 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
         company: (lead as any).company,
         nif: null,
         state: "activo",
-        ovgId: (lead as any).ovgId,
         whatsappPhone: (lead as any).whatsapp ?? (lead as any).phone ?? null,
         leadId: (lead as any).id,
       })

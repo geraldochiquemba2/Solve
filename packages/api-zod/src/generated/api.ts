@@ -1118,7 +1118,6 @@ export const ListAccessResponse = zod.object({
   "customerId": zod.string().uuid().optional(),
   "platform": zod.string().optional(),
   "status": zod.string().optional(),
-  "ovgAccessId": zod.string().optional(),
   "cademiAccessId": zod.string().optional(),
   "activatedAt": zod.coerce.date().optional(),
   "expiresAt": zod.coerce.date().optional(),
@@ -1135,7 +1134,6 @@ export const CreateAccessBody = zod.object({
   "customerId": zod.string().uuid(),
   "platform": zod.string(),
   "status": zod.string(),
-  "ovgAccessId": zod.string().optional(),
   "cademiAccessId": zod.string().optional(),
   "activatedAt": zod.coerce.date().optional(),
   "expiresAt": zod.coerce.date().optional()
@@ -1165,7 +1163,6 @@ export const UpdateAccessBody = zod.object({
   "customerId": zod.string().uuid(),
   "platform": zod.string(),
   "status": zod.string(),
-  "ovgAccessId": zod.string().optional(),
   "cademiAccessId": zod.string().optional(),
   "activatedAt": zod.coerce.date().optional(),
   "expiresAt": zod.coerce.date().optional()
@@ -1196,7 +1193,6 @@ export const ListCheckinsResponse = zod.object({
   "id": zod.string().uuid().optional(),
   "customerId": zod.string().uuid().optional(),
   "location": zod.string().optional(),
-  "ovgCheckinId": zod.string().optional(),
   "checkedInAt": zod.coerce.date().optional()
 })).optional(),
   "total": zod.number().int().optional()
@@ -1209,7 +1205,6 @@ export const ListCheckinsResponse = zod.object({
 export const CreateCheckinBody = zod.object({
   "customerId": zod.string().uuid(),
   "location": zod.string().optional(),
-  "ovgCheckinId": zod.string().optional(),
   "checkedInAt": zod.coerce.date().optional()
 })
 

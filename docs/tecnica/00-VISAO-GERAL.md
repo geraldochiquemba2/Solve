@@ -1,5 +1,7 @@
 # Solve Corporate CRM — Visão Geral (cliente final)
 
+> **Nota (2026):** a integração com o ginásio (Solve Access / OVG / catraca) foi removida. Referências históricas nestes documentos estão obsoletas.
+
 Sistema de gestão da **SamoraFit** (ginásio, Luanda): sócios, acessos da catraca,
 cobranças **Multicaixa Express / Referência** via É-kwanza (Pay4All), cursos na
 **Cademi** e portal do cliente.
@@ -36,7 +38,6 @@ cobranças **Multicaixa Express / Referência** via É-kwanza (Pay4All), cursos 
 - `02-PAGAMENTOS.md` — estados, regras, erros, reconciliação.
 - `03-ACADEMIA-CADEMI.md` — cursos, entregas, acesso automático, widget.
 - `04-PORTAL-CLIENTE.md` — conta, pagar, recibos.
-- `05-ACESSO-FISICO.md` — catraca, Solve Access, PC do ginásio.
 - `06-DEPLOY-OPERACAO.md` — deploy, variáveis, jobs, problemas comuns.
 - `07-BASE-DADOS.md` — tabelas, estados, queries úteis.
 - `08-WHATSAPP.md` — estado atual e o que falta.

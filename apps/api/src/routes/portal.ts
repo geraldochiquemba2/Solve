@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { customersTable, plansTable, subscriptionsTable, paymentsTable } from "@workspace/db/schema";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { authenticatePortal } from "../middlewares/portal-auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
@@ -15,17 +15,17 @@ const router = Router();
 
 const phoneNumberSchema = z
   .string()
-  .min(9, "Número de telemóvel inválido")
-  .max(16, "Número de telemóvel inválido")
-  .regex(/^\+?[0-9\s\-().]{9,16}$/, "Número de telemóvel inválido");
+  .min(9, "NÃºmero de telemÃ³vel invÃ¡lido")
+  .max(16, "NÃºmero de telemÃ³vel invÃ¡lido")
+  .regex(/^\+?[0-9\s\-().]{9,16}$/, "NÃºmero de telemÃ³vel invÃ¡lido");
 
 const pagarSchema = z.object({
   method: z.enum(["express", "referencia"]),
-  subscriptionId: z.string().uuid("Subscrição inválida").optional(),
-  // Express pode ser pago a partir de QUALQUER número (ex: familiar paga pelo
-  // cliente). Se omitido, usa o número da conta.
+  subscriptionId: z.string().uuid("SubscriÃ§Ã£o invÃ¡lida").optional(),
+  // Express pode ser pago a partir de QUALQUER nÃºmero (ex: familiar paga pelo
+  // cliente). Se omitido, usa o nÃºmero da conta.
   phoneNumber: phoneNumberSchema.optional(),
-  // Código promocional opcional — o desconto é recalculado no servidor.
+  // CÃ³digo promocional opcional â€” o desconto Ã© recalculado no servidor.
   promoCode: z.string().trim().min(1).max(50).optional(),
 });
 
@@ -34,24 +34,17 @@ const pagamentosQuerySchema = z.object({
 });
 
 const reciboParamsSchema = z.object({
-  id: z.string().uuid("Recibo inválido"),
+  id: z.string().uuid("Recibo invÃ¡lido"),
 });
 
 function requireCustomerId(req: Request): string {
   if (!req.customerId) {
-    throw new AppError(401, "Token de cliente necessário");
+    throw new AppError(401, "Token de cliente necessÃ¡rio");
   }
   return req.customerId;
 }
 
-function toDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-// ─── GET /portal/minha-conta ─────────────────────────────────────────────────
+// â”€â”€â”€ GET /portal/minha-conta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => {
   try {
@@ -61,7 +54,7 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
       where: eq(customersTable.id, customerId),
     });
     if (!customer) {
-      throw new AppError(404, "Cliente não encontrado");
+      throw new AppError(404, "Cliente nÃ£o encontrado");
     }
 
     const subs = await db.query.subscriptionsTable.findMany({
@@ -74,24 +67,10 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
       ? await db.query.plansTable.findFirst({ where: eq(plansTable.id, sub.planId) })
       : null;
 
-    // Aulas: mesma fonte das stats de staff (solve_access_logs, ver routes/access.ts
-    // e routes/solve-access.ts). solve_access_logs.customer_id é o id remoto
-    // (OVG); a ponte é customers.ovgId. Sem ovgId não há como mapear → usadas=0.
-    // limite = plans.duration (nº de sessões do plano); restantes = limite - usadas.
-    let usadas = 0;
-    const ovgNumericId = customer.ovgId != null ? Number(customer.ovgId) : NaN;
-    if (Number.isInteger(ovgNumericId)) {
-      const startStr = sub?.startDate ? toDateStr(new Date(sub.startDate)) : null;
-      const countRes = startStr
-        ? await db.execute(
-            sql`SELECT COUNT(*)::int AS cnt FROM solve_access_logs WHERE customer_id = ${ovgNumericId} AND result = 'Autorizado' AND access_date >= ${startStr}`,
-          )
-        : await db.execute(
-            sql`SELECT COUNT(*)::int AS cnt FROM solve_access_logs WHERE customer_id = ${ovgNumericId} AND result = 'Autorizado'`,
-          );
-      usadas = Number((countRes.rows as Array<{ cnt: number | string }>)[0]?.cnt ?? 0);
-    }
-    const limite = plan?.duration ?? null;
+    // Aulas: progresso guardado na subscriÃ§Ã£o (lessons_done / lessons_total).
+    // limite cai para a duraÃ§Ã£o do plano quando a subscriÃ§Ã£o nÃ£o tem total.
+    const usadas = sub?.lessonsDone ?? 0;
+    const limite = sub?.lessonsTotal ?? plan?.duration ?? null;
     const restantes = limite != null ? Math.max(0, limite - usadas) : null;
 
     res.json({
@@ -114,7 +93,7 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
               active: sub.active,
             }
           : null,
-        aulas: { usadas, limite, restantes, fonte: "solve-access" as const },
+        aulas: { usadas, limite, restantes, fonte: "crm" as const },
         proximaMensalidade:
           sub && plan && sub.endDate
             ? { amount: plan.price, dueDate: sub.endDate }
@@ -126,9 +105,9 @@ router.get("/portal/minha-conta", authenticatePortal, async (req, res, next) => 
   }
 });
 
-// ─── POST /portal/pagar ──────────────────────────────────────────────────────
-// Cria payment pendente (code SC…, expiresAt +24h) e, se method=express,
-// dispara cobrança Multicaixa Express via ekwanzaClient.createGPOCharge
+// â”€â”€â”€ POST /portal/pagar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Cria payment pendente (code SCâ€¦, expiresAt +24h) e, se method=express,
+// dispara cobranÃ§a Multicaixa Express via ekwanzaClient.createGPOCharge
 // (mesmo fluxo do staff em routes/payments-ekwanza.ts).
 
 router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (req, res, next) => {
@@ -145,7 +124,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       where: eq(customersTable.id, customerId),
     });
     if (!customer) {
-      throw new AppError(404, "Cliente não encontrado");
+      throw new AppError(404, "Cliente nÃ£o encontrado");
     }
 
     let sub;
@@ -155,7 +134,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
           where: and(eq(subscriptionsTable.id, subscriptionId), eq(subscriptionsTable.customerId, customerId)),
         })) ?? null;
       if (!sub) {
-        throw new AppError(404, "Subscrição não encontrada");
+        throw new AppError(404, "SubscriÃ§Ã£o nÃ£o encontrada");
       }
     } else {
       const subs = await db.query.subscriptionsTable.findMany({
@@ -165,7 +144,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       });
       sub = subs[0] ?? null;
       if (!sub) {
-        throw new AppError(404, "Sem subscrição activa para pagar");
+        throw new AppError(404, "Sem subscriÃ§Ã£o activa para pagar");
       }
     }
 
@@ -173,7 +152,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       where: eq(plansTable.id, sub.planId),
     });
     if (!plan) {
-      throw new AppError(404, "Plano não encontrado");
+      throw new AppError(404, "Plano nÃ£o encontrado");
     }
     const originalAmount = plan.price;
     let amount = originalAmount;
@@ -186,7 +165,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       type: "percent" | "fixed";
       value: number;
     } | null = null;
-    // Código que cobre a totalidade: confirma sem gateway e entrega já o acesso.
+    // CÃ³digo que cobre a totalidade: confirma sem gateway e entrega jÃ¡ o acesso.
     let autoConfirm = false;
 
     if (promoCode) {
@@ -214,7 +193,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       }
     }
 
-    // Mesmo padrão de código do staff (payments-ekwanza.ts)
+    // Mesmo padrÃ£o de cÃ³digo do staff (payments-ekwanza.ts)
     const count = await db.$count(paymentsTable);
     const code = `SC${String(81000 + count + 1).padStart(5, "0")}`;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -235,7 +214,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
       })
       .returning();
 
-    // Registo de uso do código (ligado a este pagamento; conta para o limite).
+    // Registo de uso do cÃ³digo (ligado a este pagamento; conta para o limite).
     if (promoApplied) {
       await registerPromoUsage({
         promo: { id: promoApplied.codeId },
@@ -253,16 +232,16 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
     let referencia: { entity: string | null; reference: string; expiresAt: Date } | null = null;
 
     if (autoConfirm) {
-      // Promo 100%: sem cobrança — entrega o acesso na Cademi em background.
+      // Promo 100%: sem cobranÃ§a â€” entrega o acesso na Cademi em background.
       deliverInBackground(code);
     } else if (method === "express") {
-      // Qualquer número pode pagar via Express (ex: familiar). Valida formato AO:
-      // 9XXXXXXXX local — normaliza removendo +244/244/espaços para o GPO.
+      // Qualquer nÃºmero pode pagar via Express (ex: familiar). Valida formato AO:
+      // 9XXXXXXXX local â€” normaliza removendo +244/244/espaÃ§os para o GPO.
       const rawPhone = (phoneNumber?.trim() ? phoneNumber : customer.phone || customer.whatsappPhone) || "";
       const digits = rawPhone.replace(/\D/g, "");
       const local = digits.startsWith("244") ? digits.slice(3) : digits;
       if (!/^9\d{8}$/.test(local)) {
-        throw new AppError(400, "Número de telemóvel inválido para Multicaixa Express (usa 9XXXXXXXX)");
+        throw new AppError(400, "NÃºmero de telemÃ³vel invÃ¡lido para Multicaixa Express (usa 9XXXXXXXX)");
       }
       // Strip +244/244 para o Multicaixa Express (igual ao staff)
       const cleanPhone = local;
@@ -277,10 +256,10 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
 
         logger.info({ code, customerId, amount, phoneNumber: cleanPhone }, "Portal GPO charge initiated");
 
-        // Guarda o número Express usado (pode não ser o da conta) para
-        // auditoria — merge com dueDate/referência EMIS abaixo.
+        // Guarda o nÃºmero Express usado (pode nÃ£o ser o da conta) para
+        // auditoria â€” merge com dueDate/referÃªncia EMIS abaixo.
 
-        // Extrai referência EMIS da resposta (igual ao staff)
+        // Extrai referÃªncia EMIS da resposta (igual ao staff)
         const gpoData = result as Record<string, unknown>;
         const respStatus = (gpoData.responseStatus as Record<string, unknown>) || {};
         const refData = (respStatus.reference as Record<string, unknown>) || null;
@@ -306,7 +285,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
           };
         }
 
-        // Estado síncrono da resposta GPO (igual ao staff)
+        // Estado sÃ­ncrono da resposta GPO (igual ao staff)
         const gpoStatus = respStatus.status as string | undefined;
         const gpoSuccessful = respStatus.successful as boolean | undefined;
         const gpoProviderTxId = (respStatus.gpo as Record<string, unknown>)?.providerTransactionId as
@@ -334,9 +313,9 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
 
         express = { initiated: true };
       } catch (err) {
-        // O payment fica pendente e visível em /portal/pagamentos para retry.
+        // O payment fica pendente e visÃ­vel em /portal/pagamentos para retry.
         if (err instanceof EkwanzaError) {
-          return next(new AppError(err.status || 502, `É-kwanza: ${err.message}`));
+          return next(new AppError(err.status || 502, `Ã‰-kwanza: ${err.message}`));
         }
         throw err;
       }
@@ -364,7 +343,7 @@ router.post("/portal/pagar", authenticatePortal, validate(pagarSchema), async (r
   }
 });
 
-// ─── GET /portal/pagamentos ──────────────────────────────────────────────────
+// â”€â”€â”€ GET /portal/pagamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.get("/portal/pagamentos", authenticatePortal, validate(pagamentosQuerySchema, "query"), async (req, res, next) => {
   try {
@@ -383,7 +362,7 @@ router.get("/portal/pagamentos", authenticatePortal, validate(pagamentosQuerySch
   }
 });
 
-// ─── GET /portal/recibos/:id ─────────────────────────────────────────────────
+// â”€â”€â”€ GET /portal/recibos/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Detalhe para recibo. O filtro por customerId impede um cliente de ver
 // recibos de outro cliente.
 
@@ -396,7 +375,7 @@ router.get("/portal/recibos/:id", authenticatePortal, validate(reciboParamsSchem
       where: and(eq(paymentsTable.id, id), eq(paymentsTable.customerId, customerId)),
     });
     if (!payment) {
-      throw new AppError(404, "Recibo não encontrado");
+      throw new AppError(404, "Recibo nÃ£o encontrado");
     }
 
     const customer = await db.query.customersTable.findFirst({
