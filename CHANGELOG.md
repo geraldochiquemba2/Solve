@@ -8,7 +8,7 @@
 - Ligação automática de clientes/planos ao CRM e área no front
   **Ecossistema → SamoraFit Studio**, com dados sincronizados, filtros,
   exportação para Excel e ligações profundas por vista. A gestão de chaves
-  passou para a API de administração.
+  fica na mesma página, restrita a administradores.
 - Documentação de entrega em `docs/INTEGRACAO-SAMORAFIT-STUDIO.md`.
 
 ## Remoção da integração do ginásio (Solve Access / OVG)

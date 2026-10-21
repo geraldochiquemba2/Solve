@@ -519,3 +519,34 @@ export function useStudioOverview(options?: OpcoesQuery) {
   });
 }
 
+export interface StudioKey {
+  id: string; name: string; prefix: string; active: boolean;
+  lastUsedAt: string | null; createdAt: string;
+}
+
+export function useStudioKeys(options?: OpcoesQuery) {
+  return useQuery({
+    queryKey: ['studio-keys'],
+    queryFn: () => apiGet<{ data: StudioKey[]; total: number }>('/api/v1/integrations/samorafit-studio/keys'),
+    ...options,
+  });
+}
+
+export function useCreateStudioKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiPost<{ data: { id: string; name: string; key: string; prefix: string; createdAt: string } }>(
+        '/api/v1/integrations/samorafit-studio/keys', { name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['studio-keys'] }),
+  });
+}
+
+export function useRevokeStudioKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiMutate<void>(`/api/v1/integrations/samorafit-studio/keys/${id}`, 'DELETE'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['studio-keys'] }),
+  });
+}
+

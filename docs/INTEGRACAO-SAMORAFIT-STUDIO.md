@@ -11,10 +11,10 @@ autenticar e como validar a sincronização.
 
 ## 1. Credenciais
 
-A chave é criada por um utilizador com perfil **administrador**, através da API de
-gestão (`POST /keys`) com a sessão autenticada no CRM. É mostrada **uma única
-vez**; guarde-a no cofre de segredos do Studio. A área **SamoraFit Studio** mostra
-apenas o URL e a documentação da ligação — não gere nem revela chaves.
+A chave é criada por um utilizador com perfil **administrador**, na área
+**SamoraFit Studio** → **Ligação da API** → **Gerar chave**. Também pode ser
+criada pela API de gestão (`POST /keys`) com a sessão autenticada no CRM. É
+mostrada **uma única vez**; guarde-a no cofre de segredos do Studio.
 
 | Item | Valor |
 | --- | --- |

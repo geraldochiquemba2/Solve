@@ -31,7 +31,7 @@ import MinhaConta from '@/portal/MinhaConta';
 import PortalPagamentos from '@/portal/Pagamentos';
 import PortalRecibo from '@/portal/Recibo';
 import PortalShell from '@/portal/PortalShell';
-import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, useStudioSnapshot, useStudioOverview, type PromoCode, type PromoValidation } from '@/hooks/use-api';
+import { useListAutomations, useCreateAutomation, useToggleAutomation, useDeleteAutomation, useListAuditLogs, useGetSettings, useUpdateSettings, useListUsersAll, useToggleUser, useCademiHealth, useCademiSync, usePay4AllHealth, useSaveSettings, useListCustomersManual, usePaymentStream, useListPromos, useCreatePromo, useUpdatePromo, useTogglePromo, useDeletePromo, usePromoUsages, validatePromoCode, useStudioSnapshot, useStudioOverview, useStudioKeys, useCreateStudioKey, useRevokeStudioKey, type PromoCode, type PromoValidation } from '@/hooks/use-api';
 import {
   useListLeads,
   useGetDashboardStats,
@@ -2196,8 +2196,13 @@ const STUDIO_VIEWS = ['clientes', 'planos', 'subscricoes', 'pagamentos', 'fatura
 type StudioView = typeof STUDIO_VIEWS[number];
 
 function SamoraFitStudioPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrador';
   const snapshot = useStudioSnapshot();
   const overview = useStudioOverview();
+  const keys = useStudioKeys({ enabled: isAdmin });
+  const createKey = useCreateStudioKey();
+  const revokeKey = useRevokeStudioKey();
   const [params, setParams] = useSearchParams();
   const vistaUrl = params.get('vista');
   const tab: StudioView = STUDIO_VIEWS.includes(vistaUrl as StudioView) ? vistaUrl as StudioView : 'clientes';
@@ -2209,6 +2214,8 @@ function SamoraFitStudioPage() {
   const [search, setSearch] = useState('');
   const [estado, setEstado] = useState('todos');
   const [copied, setCopied] = useState('');
+  const [keyName, setKeyName] = useState('SamoraFit Studio');
+  const [newKey, setNewKey] = useState<string | null>(null);
   const d = snapshot.data?.data;
   const o = overview.data?.data;
   const apiUrl = `${API_BASE_URL || window.location.origin}/api/v1/integrations/samorafit-studio`;
@@ -2325,6 +2332,34 @@ function SamoraFitStudioPage() {
         <div style={{ fontSize: '.74rem', color: 'hsl(var(--muted-foreground))' }}>
           Autenticação: <strong>X-API-Key</strong> (ou Bearer). Ingestão: <code>POST {apiUrl}/sync</code> (lote) ou <code>POST {apiUrl}/events</code> (evento). Estado: <code>GET {apiUrl}/status</code>. Documentação: <code>docs/INTEGRACAO-SAMORAFIT-STUDIO.md</code>.
         </div>
+        {isAdmin && <div style={{ display: 'grid', gap: '.55rem', paddingTop: '.7rem', borderTop: '1px solid hsl(var(--border))' }}>
+          <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label style={{ flex: '1 1 240px' }}>
+              <span className="form-label">Nome da chave</span>
+              <input className="input" value={keyName} onChange={e => setKeyName(e.target.value)} placeholder="Ex.: SamoraFit Studio" />
+            </label>
+            <button className="btn-primary" disabled={createKey.isPending || !keyName.trim()} onClick={() => createKey.mutate(keyName.trim(), { onSuccess: (r) => setNewKey(r?.data?.key || null) })}>
+              <KeyRound size={14} /> {createKey.isPending ? 'A gerar…' : 'Gerar chave'}
+            </button>
+          </div>
+          {createKey.isError && <div className="section-note" style={{ color: 'hsl(var(--destructive))' }}>Não foi possível gerar a chave. Confirma que a tua sessão é de administrador.</div>}
+          {newKey && <div style={{ padding: '.7rem', borderRadius: '.45rem', background: 'hsl(142 70% 45% / .12)', border: '1px solid hsl(142 70% 45% / .35)' }}>
+            <div className="eyebrow">Guarda agora — não volta a ser mostrada</div>
+            <code style={{ display: 'block', marginTop: '.35rem', fontSize: '.74rem', wordBreak: 'break-all' }}>{newKey}</code>
+            <div style={{ marginTop: '.5rem', display: 'flex', gap: '.45rem', flexWrap: 'wrap' }}>
+              <button className="btn-secondary" onClick={() => copy(newKey, 'studio-key')}>{copied === 'studio-key' ? <><Check size={13} /> Copiada</> : 'Copiar chave'}</button>
+              <button className="btn-quiet" onClick={() => setNewKey(null)}>Fechar</button>
+            </div>
+          </div>}
+          <div>
+            <div className="eyebrow" style={{ marginBottom: '.35rem' }}>Chaves activas</div>
+            {keys.isLoading ? <div className="section-note">A carregar chaves…</div> : keys.isError ? <div className="section-note" style={{ color: 'hsl(var(--destructive))' }}>Não foi possível carregar as chaves. <button className="btn-quiet" onClick={() => keys.refetch()}>Tentar novamente</button></div> : (keys.data?.data ?? []).filter(k => k.active).length === 0 ? <div className="section-note">Ainda não há chaves activas. Gera uma e entrega-a por canal seguro.</div> : <div style={{ display: 'grid', gap: '.35rem' }}>{(keys.data?.data ?? []).filter(k => k.active).map(k => <div key={k.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap', fontSize: '.75rem' }}>
+              <span><KeyRound size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /><strong>{k.name}</strong> · {k.prefix}… · criada {fmtRel(k.createdAt)}{k.lastUsedAt ? ` · usada ${fmtRel(k.lastUsedAt)}` : ' · ainda não usada'}</span>
+              <button className="btn-quiet" onClick={() => revokeKey.mutate(k.id)} disabled={revokeKey.isPending}><Trash2 size={13} /> Revogar</button>
+            </div>)}</div>}
+            <div className="section-note" style={{ marginTop: '.4rem' }}>Uma chave revogada deixa de funcionar imediatamente.</div>
+          </div>
+        </div>}
       </div>
     </Section>
   </>;
