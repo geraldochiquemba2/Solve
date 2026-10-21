@@ -1,13 +1,99 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { leadsTable, leadContactsTable, leadCampaignsTable, usersTable, customersTable } from "@workspace/db/schema";
-import { eq, like, or, desc, and, sql, inArray } from "drizzle-orm";
+import { leadsTable, leadContactsTable, leadCampaignsTable, usersTable, customersTable, notificationsTable } from "@workspace/db/schema";
+import { eq, like, or, desc, and, sql, inArray, isNull } from "drizzle-orm";
 import { authenticate, authorize } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
 
 const router = Router();
+
+// ─── Responsável e visibilidade das leads ────────────────────────────────────
+// Regras do funil:
+//  1. O comercial que muda a etapa fica responsável pela lead (assume-a).
+//  2. Uma lead com responsável só é vista pelo responsável e pela gestão
+//     (administrador/gestor). Os restantes comerciais não a veem nem a abrem.
+//  3. Uma lead sem responsável é o "balcão": visível por toda a equipa.
+const GESTAO = new Set(["administrador", "gestor"]);
+const isGestao = (req: any) => GESTAO.has(String(req.user?.role || ""));
+
+// Identidade do utilizador autenticado (a chave de máquina entra como gestão).
+function uidDe(req: any): string | null {
+  const uid = req.user?.userId;
+  return uid && uid !== "api-key" ? String(uid) : null;
+}
+
+// Condição SQL de visibilidade. undefined = sem restrição (gestão/máquina).
+function visibilidadeLeads(req: any) {
+  if (isGestao(req)) return undefined;
+  const uid = uidDe(req);
+  if (!uid) return undefined;
+  return or(isNull(leadsTable.owner_id), eq(leadsTable.owner_id, uid));
+}
+
+function podeVerLead(req: any, lead: any): boolean {
+  if (!lead) return false;
+  if (isGestao(req)) return true;
+  const uid = uidDe(req);
+  if (!lead.owner_id || !uid) return true;
+  return String(lead.owner_id) === uid;
+}
+
+// Quem fica com a lead quando um comercial mexe nela. A gestão não fica com a
+// lead por mexer nela — distribui o trabalho no campo "Responsável".
+function donoPorEtapa(req: any, lead: any): string | null {
+  if (isGestao(req)) return null;
+  if (String(req.user?.role || "") !== "comercial") return null;
+  const uid = uidDe(req);
+  if (!uid) return null;
+  if (lead?.owner_id && String(lead.owner_id) === uid) return null;
+  return uid;
+}
+
+// Sino do CRM: uma linha por destinatário, para cada um marcar a sua como lida.
+const NOTIF_EQUIPA = ["administrador", "gestor", "comercial"] as const;
+
+async function notificarLeadNova(lead: any, opts: { excludeUserId?: string } = {}) {
+  try {
+    const alvo = lead.owner_id
+      ? or(eq(usersTable.id, lead.owner_id), inArray(usersTable.role, ["administrador", "gestor"]))
+      : inArray(usersTable.role, [...NOTIF_EQUIPA]);
+    const rec = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.active, true), alvo as any));
+    const ids = rec.map((u) => u.id).filter((id) => String(id) !== String(opts.excludeUserId || ""));
+    if (!ids.length) return;
+    const origem = lead.source ? ` (${lead.source})` : "";
+    await db.insert(notificationsTable).values(
+      ids.map((uid) => ({
+        userId: uid,
+        type: "lead_nova",
+        title: `Nova lead: ${lead.name}`,
+        body: `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`,
+        leadId: lead.id,
+      })),
+    );
+  } catch (e: any) {
+    console.error("[NOTIF] lead nova:", e?.message || e);
+  }
+}
+
+async function notificarLeadAssumida(lead: any, ownerId?: string | null) {
+  try {
+    if (!ownerId) return;
+    await db.insert(notificationsTable).values({
+      userId: ownerId,
+      type: "lead_assumida",
+      title: `Ficaste responsável pela lead: ${lead.name}`,
+      body: lead.company || lead.email || lead.phone || null,
+      leadId: lead.id,
+    });
+  } catch (e: any) {
+    console.error("[NOTIF] lead assumida:", e?.message || e);
+  }
+}
 
 const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"] as const;
 // ─── Etapas (Módulo 6) ────────────────────────────────────────────────────────
@@ -150,6 +236,10 @@ router.get("/leads", authenticate, async (req, res, next) => {
 
     const conditions = [];
 
+    // Cada um só vê o seu funil + o balcão (leads sem responsável).
+    const vis = visibilidadeLeads(req);
+    if (vis) conditions.push(vis);
+
     if (search && typeof search === "string") {
       const pattern = `%${search}%`;
       conditions.push(
@@ -198,9 +288,11 @@ router.get("/leads", authenticate, async (req, res, next) => {
 // IMPORTANTE: antes de /:id para não colidir
 router.get("/leads/resumo", authenticate, async (req, res, next) => {
   try {
-    const total = await db.$count(leadsTable);
+    // Os KPIs respeitam o mesmo âmbito da lista (comercial vê o seu + balcão).
+    const vis = visibilidadeLeads(req);
+    const total = await db.$count(leadsTable, vis as any);
     const countBy = async (cond: any) => {
-      const rows = await db.select().from(leadsTable).where(cond);
+      const rows = await db.select().from(leadsTable).where(vis ? and(vis, cond) : cond);
       return rows.length;
     };
     const novas = await countBy(eq(leadsTable.status, "novo_lead"));
@@ -208,7 +300,12 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
     const perdidas = await countBy(eq(leadsTable.status, "perdido"));
     const emAcompanhamento = await countBy(inArray(leadsTable.status, [...ETAPAS_EM_ACOMPANHAMENTO]));
     // contactadas = têm ≥1 registo em lead_contacts
-    const contactadasRows = await db.select({ leadId: leadContactsTable.leadId }).from(leadContactsTable).groupBy(leadContactsTable.leadId);
+    const contactadasRows = await db
+      .select({ leadId: leadContactsTable.leadId })
+      .from(leadContactsTable)
+      .innerJoin(leadsTable, eq(leadContactsTable.leadId, leadsTable.id))
+      .where(vis ?? sql`true`)
+      .groupBy(leadContactsTable.leadId);
     const contactadas = contactadasRows.length;
     res.json({ data: { total, novas, contactadas, emAcompanhamento, convertidas, perdidas } });
   } catch (err) {
@@ -220,7 +317,9 @@ router.get("/leads/resumo", authenticate, async (req, res, next) => {
 router.get("/leads/followups/hoje", authenticate, async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const rows = await db.select().from(leadsTable).where(and(eq(leadsTable.proximoContato, today as any)));
+    const hoje = eq(leadsTable.proximoContato, today as any);
+    const vis = visibilidadeLeads(req);
+    const rows = await db.select().from(leadsTable).where(vis ? and(hoje, vis) : hoje);
     const filtered = rows.filter((l: any) => l.status !== "convertido");
     const enriched = await Promise.all(filtered.map(withStats));
     res.json({ data: enriched, total: enriched.length });
@@ -233,7 +332,9 @@ router.get("/leads/followups/hoje", authenticate, async (req, res, next) => {
 router.get("/leads/:id/contacts", authenticate, async (req, res, next) => {
   try {
     const lead = await db.query.leadsTable.findFirst({ where: eq(leadsTable.id, req.params.id as string) });
-    if (!lead) throw new AppError(404, "Lead não encontrado");
+    // Uma lead de outro responsável não se abre: responde 404 para não revelar
+    // que ela existe.
+    if (!lead || !podeVerLead(req, lead)) throw new AppError(404, "Lead não encontrado");
     const contactos = await db.select().from(leadContactsTable).where(eq(leadContactsTable.leadId, req.params.id as string)).orderBy(leadContactsTable.createdAt);
     const data: any[] = [];
     for (const c of contactos) {
@@ -259,6 +360,7 @@ router.post("/leads/:id/contacts", authenticate, authorize("administrador", "ges
   try {
     const lead = await db.query.leadsTable.findFirst({ where: eq(leadsTable.id, req.params.id as string) });
     if (!lead) throw new AppError(404, "Lead não encontrado");
+    if (!podeVerLead(req, lead)) throw new AppError(403, "Esta lead tem outro responsável.");
     const passo = req.body.proximo_passo ?? req.body.proximoPasso ?? null;
     let proxData: string | null = (req.body.proximo_contato ?? req.body.proximoContato ?? null) as any;
     if (!proxData && passo && passo !== "Sem próximo contacto" && passo !== "Agendar visita") proxData = passoParaData(passo);
@@ -288,7 +390,12 @@ router.post("/leads/:id/contacts", authenticate, authorize("administrador", "ges
       // acompanhamento. Não volta a "Nova" — essa é a regra de sentido único.
       update.status = "qualificado";
     }
+    // Mexer na lead é assumi-la (regra do funil: o comercial que a trabalha
+    // fica responsável). A gestão não muda de dono ao registar contactos.
+    const dono = donoPorEtapa(req, lead);
+    if (dono) update.owner_id = dono;
     const [leadUpd] = await db.update(leadsTable).set(update).where(eq(leadsTable.id, req.params.id as string)).returning();
+    if (dono) await notificarLeadAssumida(leadUpd, dono);
     res.status(201).json({ data: c, lead: await withStats(leadUpd) });
   } catch (err) {
     next(err);
@@ -302,7 +409,7 @@ router.get("/leads/:id", authenticate, async (req, res, next) => {
       where: eq(leadsTable.id, req.params.id as string),
     });
 
-    if (!lead) {
+    if (!lead || !podeVerLead(req, lead)) {
       throw new AppError(404, "Lead não encontrado");
     }
 
@@ -383,6 +490,12 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
     const count = await db.$count(leadsTable);
     const code = `LED-${String(1000 + count + 1).padStart(4, "0")}`;
 
+    // Quem entra a lead fica com ela: o comercial que a registou é o
+    // responsável. Sem dono, a lead fica no balcão, visível para toda a equipa.
+    const uidCriador = uidDe(req);
+    const podeAssumir = String(req.user?.role || "") === "comercial" && uidCriador;
+    const donoInicial = isGestao(req) ? (req.body.ownerId ?? null) : (podeAssumir ? uidCriador : null);
+
     const [lead] = await db
       .insert(leadsTable)
       .values({
@@ -392,7 +505,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         company: req.body.company ?? null,
         source: req.body.source ?? null,
         status: canonStatus(req.body.status ?? "novo_lead"),
-        owner_id: req.body.ownerId ?? null,
+        owner_id: donoInicial,
         estimatedValue: req.body.estimatedValue ?? 0,
         notes: req.body.notes ?? null,
         ovgId: req.body.ovgId ?? null,
@@ -405,6 +518,9 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         code,
       } as any)
       .returning();
+
+    // Lead nova: a equipa é avisada no sino (quem a registou não recebe eco).
+    await notificarLeadNova(lead, { excludeUserId: uidCriador ?? undefined });
 
     res.status(201).json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: false });
   } catch (err) {
@@ -422,6 +538,9 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
     if (!existing) {
       throw new AppError(404, "Lead não encontrado");
     }
+    if (!podeVerLead(req, existing)) {
+      throw new AppError(403, "Esta lead tem outro responsável.");
+    }
 
     // Motivo obrigatório ao marcar perdida — evita perder rasto sem explicação
     const nextStatus = canonStatus(req.body.status ?? (existing as any).status);
@@ -436,11 +555,17 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
     const patch: any = { updatedAt: new Date() };
     for (const [k, v] of Object.entries(req.body as any)) {
       if (v === undefined) continue;
-      if (k === "ownerId") patch.owner_id = v;
+      // Atribuir responsável é decisão da gestão. O comercial assume a lead
+      // mexendo na etapa, não escolhendo o dono.
+      if (k === "ownerId") { if (isGestao(req)) patch.owner_id = v; }
       else if (k === "ultimoContactoAt") patch.ultimoContatoAt = v;
       else if (k === "status") patch.status = canonStatus(v);
       else patch[k] = v;
     }
+    // Regra do funil: o comercial que muda a etapa fica com a lead.
+    const mudouEtapa = req.body.status !== undefined && canonStatus(req.body.status) !== canonStatus((existing as any).status);
+    const dono = mudouEtapa ? donoPorEtapa(req, existing) : null;
+    if (dono) patch.owner_id = dono;
     // Entrar em Convertida marca a data. A etapa muda-se na tabela, sem passar por um
     // contacto com resultado "Converteu", e o rasto não pode depender de o gestor ter
     // registado esse contacto. Sair da etapa desfaz a data, para não deixar uma conversão
@@ -476,6 +601,11 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
       } catch { /* histórico nunca bloqueia o PATCH */ }
     }
 
+    // Avisos: quem ficou com a lead é avisado (assumiu ou recebeu a atribuição).
+    const donoFinal = (lead as any).owner_id;
+    const donoNovo = donoFinal && String(donoFinal) !== String((existing as any).owner_id || "") ? String(donoFinal) : null;
+    if (donoNovo) await notificarLeadAssumida(lead, donoNovo);
+
     res.json({ data: await withStats(lead) });
   } catch (err) {
     next(err);
@@ -500,6 +630,11 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
     if (!lead) {
       throw new AppError(404, "Lead não encontrado");
     }
+    if (!podeVerLead(req, lead)) {
+      throw new AppError(403, "Esta lead tem outro responsável.");
+    }
+    // Quem converte a lead assume-a (regra do funil).
+    const dono = donoPorEtapa(req, lead);
 
     if (lead.status === "convertido") {
       throw new AppError(400, "Lead já foi convertido");
@@ -530,8 +665,9 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
           .returning();
         await db
           .update(leadsTable)
-          .set({ status: "convertido", convertedAt: new Date(), updatedAt: new Date() })
+          .set({ status: "convertido", convertedAt: new Date(), updatedAt: new Date(), ...(dono ? { owner_id: dono } : {}) })
           .where(eq(leadsTable.id, lead.id));
+        if (dono) await notificarLeadAssumida(lead, dono);
         res.json({
           message: "Cliente já existente — lead associada ao cliente atual",
           data: { lead: { ...lead, status: "convertido" }, customer, duplicado: true },
@@ -568,8 +704,10 @@ router.post("/leads/:id/convert", authenticate, authorize("administrador", "gest
         status: "convertido",
         convertedAt: new Date(),
         updatedAt: new Date(),
+        ...(dono ? { owner_id: dono } : {}),
       })
       .where(eq(leadsTable.id, lead.id));
+    if (dono) await notificarLeadAssumida(lead, dono);
 
     res.json({
       message: "Lead convertido com sucesso",

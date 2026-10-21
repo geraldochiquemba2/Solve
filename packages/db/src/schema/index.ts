@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, unique, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
 export const leadStatusEnum = pgEnum("lead_status", ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"]);
@@ -81,6 +81,27 @@ export const leadCampaignsTable = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [unique().on(t.leadId, t.source)],
+);
+
+// Avisos internos da equipa (sino do CRM). Uma linha por destinatário: assim
+// cada pessoa marca a sua como lida sem afectar os restantes. `leadId` amarra o
+// aviso à lead para o clique abrir a ficha certa.
+export const notificationsTable = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 50 }).notNull(),
+    title: varchar("title", { length: 200 }).notNull(),
+    body: text("body"),
+    leadId: uuid("lead_id").references(() => leadsTable.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    index("notifications_unread_idx").on(t.userId).where(sql`${t.readAt} IS NULL`),
+  ],
 );
 
 export const customersTable = pgTable("customers", {

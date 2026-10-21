@@ -43,6 +43,13 @@
                         "when":  1791464776006,
                         "version":  "7",
                         "tag":  "0005_promo_usages_user_key"
+                    },
+                    {
+                        "idx":  6,
+                        "breakpoints":  true,
+                        "when":  1792540800000,
+                        "version":  "7",
+                        "tag":  "0006_notifications"
                     }
                 ]
 }

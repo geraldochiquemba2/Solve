@@ -12,6 +12,33 @@ Atalhos aceitam `?filtro=`, `?resultado=`, `?data=`, `?search=`.
 Kanban de oportunidades (6 colunas), valores e conversão; tabela de leads com busca,
 filtros de estado/origem/responsável e modal criar/editar. `Novo cliente` cria lead de balcão.
 
+### Responsável e visibilidade
+- **Balcão**: lead sem responsável é visível por toda a equipa (comercial, gestor,
+  administrador) e pode ser pega por quem a trabalhar.
+- **Assumir**: quando um **comercial** muda a etapa (na tabela, no kanban, na ficha
+  ou ao registar um contacto), fica automaticamente responsável por essa lead.
+  A gestão não fica com a lead por mexer nela.
+- **Visibilidade**: lead com responsável só é vista pelo próprio e pela gestão
+  (`administrador`/`gestor`). Os restantes comerciais não a vêem nem a abrem.
+  Lista, resumo (KPIs), follow-ups de hoje, ficha e histórico respeitam a regra.
+- **Atribuir**: só a gestão altera o campo "Responsável" (select na tabela/ficha).
+  O servidor ignora `ownerId` de um comercial.
+- **Criar**: uma lead criada por um comercial fica logo com esse comercial como
+  responsável; a gestão pode atribuí-la a outra pessoa no mesmo formulário.
+
+### Notificações (sino)
+- Ícone de sino no topo com badge de por ler, lista (30s de polling) e toast para
+  avisos novos.
+- `lead_nova`: quando entra uma lead (balcão, landing Fit90, API). Sem responsável,
+  avisa toda a equipa (`administrador`, `gestor`, `comercial`); com responsável,
+  avisa o responsável + gestão. Quem criou a lead não recebe eco.
+- `lead_assumida`: quando o utilizador fica responsável por uma lead.
+- API: `GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`,
+  `POST /api/v1/notifications/:id/read`, `POST /api/v1/notifications/read-all`.
+- Tabela `notifications` (uma linha por destinatário) criada pela migração
+  `packages/db/drizzle/0006_notifications.sql` e pelo DDL de arranque do
+  `standalone-server`.
+
 ## Clientes (`/admin/clientes`, `/admin/clientes/:id`)
 Registos únicos (espelho OVG + catraca). Filtros: Todos/Activo/Inactivo/Bloqueado/
 Em atraso/Esgotadas. Importar CSV (`code,ovg_id,name,joined_at`). Perfil 360º: conta,

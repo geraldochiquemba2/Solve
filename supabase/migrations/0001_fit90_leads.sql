@@ -63,3 +63,11 @@ CREATE POLICY "fit90_leads_service_all"
   TO service_role
   USING (true)
   WITH CHECK (true);
+
+-- Privilégios de tabela. As policies de RLS só decidem *o que* a role pode ver
+-- depois de ter o privilégio: sem GRANT, o anon recebia
+-- "permission denied for table fit90_leads" (42501) e a landing não conseguia
+-- gravar nada, mesmo com a policy de INSERT criada. Os default privileges do
+-- Supabase não chegam a tabelas criadas fora do fluxo normal de migrations.
+GRANT INSERT ON public.fit90_leads TO anon;
+GRANT ALL ON public.fit90_leads TO service_role;

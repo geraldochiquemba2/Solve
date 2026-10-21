@@ -88,7 +88,9 @@ const _DB_SRC = process.env.CRM_DATABASE_URL ? "CRM_DATABASE_URL" : (process.env
 const _DB_HOST = ((_DB_SRC === "CRM_DATABASE_URL" ? process.env.CRM_DATABASE_URL : process.env.DATABASE_URL) || "").replace(/\?.*$/, "").split("@")[1]?.split(/[/:]/)[0] || "?";
 console.log(`[boot] NODE_ENV=${process.env.NODE_ENV || "?"}` +
   ` API_KEY=${API_KEY ? "ok" : "EM FALTA"} JWT_SECRET=${JWT_SECRET ? "ok" : "EM FALTA"}` +
-  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"} DB=${_DB_SRC}@${_DB_HOST}`);
+  ` EDGE_API_KEY=${EDGE_API_KEY ? "ok" : "EM FALTA"} DB=${_DB_SRC}@${_DB_HOST}` +
+  // Fit90 (landing -> CRM): sem chave de serviço o varrimento fica desligado.
+  ` SUPABASE=${process.env.SUPABASE_SERVICE_KEY ? "ok" : "varrimento OFF"}`);
 
 // Cademi (plataforma de cursos) — defaults; editável em Integrações > Configurar
 const CADEMI_API_URL = (process.env.CADEMI_API_URL || "https://brunosamora.cademi.com.br/api/v1").replace(/\/$/, "");
@@ -597,6 +599,20 @@ pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`).ca
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS produto_interesse VARCHAR(255)`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
+// Responsável pela lead (owner_id): uma lead com responsável só é vista por ele
+// e pela gestão. A coluna vem da migration 0000; recriamos por segurança.
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id)`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS leads_owner_id_idx ON leads (owner_id)`).catch(() => {});
+// Avisos internos (sino do CRM): uma linha por destinatário, para cada um poder
+// marcar a sua como lida. `lead_id` liga o aviso à lead.
+pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL, title VARCHAR(200) NOT NULL, body TEXT,
+  lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications (user_id, created_at DESC)`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS notifications_unread_idx ON notifications (user_id) WHERE read_at IS NULL`).catch(() => {});
 // Equipa: contador de acessos por utilizador (quem acedeu mais)
 pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0`).catch(() => {});
 // Subscricoes: aulas incluídas/consumidas (ausentes das migrations antigas; a BD
@@ -606,6 +622,10 @@ pool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_done INTE
 // Clientes: data de entrada no ginásio + género (também ausentes das migrations).
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS joined_at TIMESTAMP`).catch(() => {});
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`).catch(() => {});
+// Pagamentos: validade do pendente (expiração) + entidade da referência
+// (ambas existiam na BD antiga via ALTER manual; faltavam nas migrations).
+pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`).catch(() => {});
+pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS entity VARCHAR(50)`).catch(() => {});
 // Leads da landing são permanentes — passam a viver no funil; sem cleanup.
 // Settings table (definições do workspace)
 pool.query(`CREATE TABLE IF NOT EXISTS settings (
@@ -3956,6 +3976,9 @@ app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
 // ─── Leads ──────────────────────────────────────────────────────────────────
 
 const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negociacao", "convertido", "perdido"];
+// Ids de lead são UUID. Validar antes de consultar evita 500 em rotas
+// estáticas (/leads/fit90-pendentes) que caem no handler de /leads/:id.
+const LEAD_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const mapLead = (r) => ({
   id: r.id, code: r.code, name: r.name, email: r.email, phone: r.phone,
@@ -3979,6 +4002,102 @@ const LEAD_WITH_STATS = `l.*,
     WHERE c.lead_id = l.id ORDER BY c.created_at DESC LIMIT 1
   ) lc ON true`;
 
+// ─── Responsável pela lead e visibilidade ────────────────────────────────────
+// Regras do funil comercial:
+//  1. Assim que um comercial mexe numa lead (muda de etapa), essa lead passa a
+//     ser responsabilidade dele.
+//  2. Uma lead com responsável só é vista pelo responsável e pela gestão
+//     (administrador/gestor). Os restantes comerciais não a veem nem a podem
+//     abrir — cada um trabalha o seu funil, sem duplicar trabalho.
+//  3. Uma lead ainda sem responsável é visível por toda a equipa: é o "balcão"
+//     que alguém tem de pegar.
+//
+// A gestão vê tudo; a máquina (X-API-Key) entra como gestão.
+const GESTAO_PAPEIS = new Set(["administrador", "gestor"]);
+const isGestao = (req) => GESTAO_PAPEIS.has(String(req.user?.role || ""));
+
+// Restringe a listagem de leads ao que o utilizador pode ver.
+// Devolve a condição SQL ("" quando não há restrição) e empurra o parametro.
+function leadVisibilidade(req, params, coluna = "owner_id") {
+  if (isGestao(req)) return "";
+  const uid = req.user?.userId;
+  if (!uid || uid === "api-key") return "";
+  params.push(uid);
+  return `(${coluna} IS NULL OR ${coluna} = $${params.length})`;
+}
+
+// Uma lead é visível para quem a pode abrir? (leitura → 404; escrita → 403)
+async function leadVisivel(req, id) {
+  if (!LEAD_UUID_RE.test(String(id))) return { ok: false, motivo: "ausente" };
+  const r = await pool.query("SELECT * FROM leads WHERE id = $1", [id]);
+  const lead = r.rows[0];
+  if (!lead) return { ok: false, motivo: "ausente" };
+  if (isGestao(req)) return { ok: true, lead };
+  const uid = req.user?.userId;
+  if (!lead.owner_id || !uid || uid === "api-key" || String(lead.owner_id) === String(uid)) return { ok: true, lead };
+  return { ok: false, motivo: "de_outro" };
+}
+
+// Quem fica com a lead quando um comercial mexe nela (muda de etapa).
+// A gestão não fica com a lead por mexer nela — quem distribui o trabalho é o
+// gestor, no campo "Responsável". O comercial que pegou na lead é que a assume.
+function donoPorEtapa(req, lead) {
+  if (isGestao(req)) return null;
+  if (String(req.user?.role || "") !== "comercial") return null;
+  const uid = req.user?.userId;
+  if (!uid || uid === "api-key") return null;
+  if (lead?.owner_id && String(lead.owner_id) === String(uid)) return null; // já é dele
+  return uid;
+}
+
+// Notificações internas (sino do CRM): uma linha por destinatário, para cada um
+// poder marcar a sua como lida sem afectar os restantes.
+const NOTIF_EQUIPA_PAPEIS = ["administrador", "gestor", "comercial"];
+async function notificarLeadNova(lead, { excludeUserId } = {}) {
+  try {
+    let ids;
+    if (lead.owner_id) {
+      // Lead já atribuída: avisamos o responsável e a gestão.
+      const rec = await pool.query(
+        `SELECT id FROM users WHERE active = true AND (id = $1 OR role::text = ANY($2::text[]))`,
+        [lead.owner_id, ["administrador", "gestor"]]
+      );
+      ids = rec.rows.map((u) => u.id);
+    } else {
+      // Lead sem responsável: é o balcão — toda a equipa é avisada.
+      const rec = await pool.query(
+        `SELECT id FROM users WHERE active = true AND role::text = ANY($1::text[])`, [NOTIF_EQUIPA_PAPEIS]
+      );
+      ids = rec.rows.map((u) => u.id);
+    }
+    ids = ids.filter((id) => String(id) !== String(excludeUserId || ""));
+    if (!ids.length) return;
+    const origem = lead.source ? ` (${lead.source})` : "";
+    for (const uid of ids) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, body, lead_id)
+         VALUES ($1, 'lead_nova', $2, $3, $4)`,
+        [uid, `Nova lead: ${lead.name}`, `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`, lead.id]
+      );
+    }
+  } catch (e) {
+    console.error("[NOTIF] lead nova:", e.message);
+  }
+}
+
+async function notificarLeadAssumida(lead, ownerId) {
+  try {
+    if (!ownerId) return;
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, lead_id)
+       VALUES ($1, 'lead_assumida', $2, $3, $4)`,
+      [ownerId, `Ficaste responsável pela lead: ${lead.name}`, lead.company || lead.email || lead.phone || null, lead.id]
+    );
+  } catch (e) {
+    console.error("[NOTIF] lead assumida:", e.message);
+  }
+}
+
 app.get("/api/v1/leads", requireAuth, async (req, res) => {
   try {
     const where = [];
@@ -3990,6 +4109,8 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
       params.push(q, q, q);
     }
     if (req.query.source) { where.push("source = $" + (params.length + 1)); params.push(req.query.source); }
+    const vis = leadVisibilidade(req, params, "l.owner_id");
+    if (vis) where.push(vis);
     const wc = where.length ? "WHERE " + where.join(" AND ") : "";
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS} ${wc} ORDER BY l.updated_at DESC LIMIT 500`, params);
     res.json({ data: r.rows.map(mapLead), total: r.rows.length });
@@ -4019,12 +4140,20 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
       }
     }
     const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
+    // Quem entra a lead fica com ela: o comercial que a registou é o responsável
+    // (a gestão pode atribuir a outro no campo "Responsável"). Sem dono, a lead
+    // fica no balcão, visível para toda a equipa.
+    const uidCriador = req.user?.userId;
+    const podeAssumir = String(req.user?.role || "") === "comercial" && uidCriador && uidCriador !== "api-key";
+    const donoInicial = isGestao(req) ? (ownerId || null) : (podeAssumir ? uidCriador : null);
     const r = await pool.query(
       `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes, external_id, whatsapp, produto_interesse, motivo_perda)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [code, name.trim(), email || null, phone || null, company || null, source || null, st, ownerId || null, estimatedValue || 0, notes || null, extId,
+      [code, name.trim(), email || null, phone || null, company || null, source || null, st, donoInicial, estimatedValue || 0, notes || null, extId,
        whatsapp || null, produtoInteresse || null, motivoPerda || null]
     );
+    // Lead nova: a equipa é avisada (sino do CRM).
+    await notificarLeadNova(r.rows[0], { excludeUserId: req.user?.userId });
     res.status(201).json({ data: mapLead(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -4035,13 +4164,16 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
 
 app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
   try {
+    const params = [];
+    const vis = leadVisibilidade(req, params, "owner_id");
+    const wc = vis ? ` WHERE ${vis}` : "";
     const r = await pool.query(`SELECT COUNT(*) AS total,
       COUNT(*) FILTER (WHERE status = 'novo_lead') AS novas,
       COUNT(*) FILTER (WHERE status = 'qualificado') AS em_acompanhamento,
       COUNT(*) FILTER (WHERE status = 'convertido') AS convertidas,
       COUNT(*) FILTER (WHERE status = 'perdido') AS perdidas,
       COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM lead_contacts c WHERE c.lead_id = leads.id)) AS contactadas
-      FROM leads`);
+      FROM leads${wc}`, params);
     const row = r.rows[0] || {};
     const num = (v) => Number(v ?? 0);
     res.json({ data: {
@@ -4056,9 +4188,11 @@ app.get("/api/v1/leads/resumo", requireAuth, async (req, res) => {
 
 app.get("/api/v1/leads/followups/hoje", requireAuth, async (req, res) => {
   try {
+    const params = [];
+    const vis = leadVisibilidade(req, params, "l.owner_id");
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS}
-      WHERE l.proximo_contato = CURRENT_DATE AND l.status <> 'convertido'
-      ORDER BY l.updated_at DESC LIMIT 200`);
+      WHERE l.proximo_contato = CURRENT_DATE AND l.status <> 'convertido'${vis ? ` AND ${vis}` : ""}
+      ORDER BY l.updated_at DESC LIMIT 200`, params);
     const owners = await pool.query("SELECT id, name FROM users").catch(() => ({ rows: [] }));
     const byId = Object.fromEntries(owners.rows.map((u) => [u.id, u.name]));
     res.json({ data: r.rows.map((x) => ({ ...mapLead(x), ownerNome: byId[x.owner_id] || null })), total: r.rows.length });
@@ -4069,8 +4203,8 @@ app.get("/api/v1/leads/followups/hoje", requireAuth, async (req, res) => {
 
 app.get("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
   try {
-    const lead = await pool.query("SELECT id FROM leads WHERE id = $1", [req.params.id]);
-    if (!lead.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    const vis = await leadVisivel(req, req.params.id);
+    if (!vis.ok) return res.status(404).json({ error: "Lead não encontrada" });
     const r = await pool.query(
       `SELECT c.id, c.canal, c.resultado, c.proximo_passo, c.proximo_contato, c.observacao, c.created_at,
               COALESCE(u.name, c.staff_name) AS staff_nome
@@ -4097,8 +4231,12 @@ const isDateStr = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) 
 
 app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
   try {
-    const lead = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
-    if (!lead.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    const vis = await leadVisivel(req, req.params.id);
+    if (!vis.ok) {
+      if (vis.motivo === "de_outro") return res.status(403).json({ error: "Esta lead tem outro responsável." });
+      return res.status(404).json({ error: "Lead não encontrada" });
+    }
+    const lead = { rows: [vis.lead] };
     const { canal, resultado, proximo_passo, proximo_contato, observacao, staff_id } = req.body || {};
     if (!LEAD_CANAIS.includes(canal)) return res.status(400).json({ error: "Canal inválido" });
     if (!LEAD_RESULTADOS.includes(resultado)) return res.status(400).json({ error: "Resultado inválido" });
@@ -4125,15 +4263,22 @@ app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
     );
     let upd = "UPDATE leads SET proximo_contato = $1, updated_at = NOW()";
     const up = [proxData];
+    let estagioMudou = false;
     if (resultado === "Converteu" && lead.rows[0].status !== "convertido") {
       upd += ", status = 'convertido', converted_at = NOW()";
+      estagioMudou = true;
     } else if (lead.rows[0].status === "novo_lead") {
       // Estado nunca diverge do histórico: 1º contacto registado ⇒ Contactada
       upd += ", status = 'contacto'";
+      estagioMudou = true;
     }
+    // Regra do funil: o comercial que pegou na lead fica com ela.
+    const dono = estagioMudou ? donoPorEtapa(req, lead.rows[0]) : null;
+    if (dono) { upd += `, owner_id = $${up.length + 1}`; up.push(dono); }
     upd += " WHERE id = $" + (up.length + 1) + " RETURNING *";
     up.push(req.params.id);
     const lr = await pool.query(upd, up);
+    if (dono) await notificarLeadAssumida(mapLead(lr.rows[0]), dono);
     const c = ins.rows[0];
     res.status(201).json({ data: {
       id: c.id, canal: c.canal, resultado: c.resultado, proximoPasso: c.proximo_passo,
@@ -4145,8 +4290,13 @@ app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
+app.get("/api/v1/leads/:id", requireAuth, async (req, res, next) => {
   try {
+    // Rota estática /leads/fit90-pendentes é registada depois desta: deixa
+    // passar o que não é UUID para o handler certo.
+    if (!LEAD_UUID_RE.test(req.params.id)) return next();
+    const vis = await leadVisivel(req, req.params.id);
+    if (!vis.ok) return res.status(404).json({ error: "Lead não encontrada" });
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS} WHERE l.id = $1`, [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     res.json({ data: mapLead(r.rows[0]) });
@@ -4157,8 +4307,12 @@ app.get("/api/v1/leads/:id", requireAuth, async (req, res) => {
 
 app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
   try {
-    const cur = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.id]);
-    if (!cur.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    const vis = await leadVisivel(req, req.params.id);
+    if (!vis.ok) {
+      if (vis.motivo === "de_outro") return res.status(403).json({ error: "Esta lead tem outro responsável." });
+      return res.status(404).json({ error: "Lead não encontrada" });
+    }
+    const cur = { rows: [vis.lead] };
     const fields = [];
     const params = [];
     for (const k of ["name", "email", "phone", "company", "source", "notes"]) {
@@ -4168,9 +4322,11 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     for (const [ck, col] of Object.entries(camelMap)) {
       if (req.body[ck] !== undefined) { fields.push(`${col} = $${params.length + 1}`); params.push(req.body[ck] || null); }
     }
+    let estagioMudou = false;
     if (req.body.status !== undefined) {
       if (!LEAD_STATUS.includes(req.body.status)) return res.status(400).json({ error: "Status inválido" });
       fields.push(`status = $${params.length + 1}`); params.push(req.body.status);
+      estagioMudou = req.body.status !== cur.rows[0].status;
       // Entrar em Convertida marca a data. A etapa muda-se na tabela, sem passar por
       // um contacto com resultado "Converteu", e o rasto não pode depender de o gestor
       // ter registado esse contacto. Sair da etapa desfaz a data, para não ficar uma
@@ -4179,14 +4335,22 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
       else if (cur.rows[0].status === "convertido") fields.push("converted_at = NULL");
     }
     if (req.body.estimatedValue !== undefined) { fields.push(`estimated_value = $${params.length + 1}`); params.push(req.body.estimatedValue); }
-    if (req.body.ownerId !== undefined) { fields.push(`owner_id = $${params.length + 1}`); params.push(req.body.ownerId); }
+    // Atribuir responsável é decisão da gestão. O comercial não reassigna: ou pega
+    // na lead (mexendo na etapa) ou fica a ver as do balcão.
+    const podeAtribuir = isGestao(req);
+    if (req.body.ownerId !== undefined && podeAtribuir) {
+      fields.push(`owner_id = $${params.length + 1}`); params.push(req.body.ownerId || null);
+    }
+    // Regra do funil: o comercial que muda a etapa fica com a lead.
+    const dono = estagioMudou ? donoPorEtapa(req, cur.rows[0]) : null;
+    if (dono) { fields.push(`owner_id = $${params.length + 1}`); params.push(dono); }
     if (!fields.length) return res.status(400).json({ error: "Nada para atualizar" });
     fields.push("updated_at = NOW()");
     params.push(req.params.id);
     const r = await pool.query(`UPDATE leads SET ${fields.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
     // Rasto de quem/quando: mudança de etapa entra no histórico (canal Sistema)
-    if (req.body.status !== undefined && req.body.status !== cur.rows[0].status) {
+    if (estagioMudou) {
       try {
         let staffId = null, staffName = null;
         const tryIds = [req.user?.userId].filter(Boolean);
@@ -4206,6 +4370,10 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
         );
       } catch {}
     }
+    // Avisos: quem ficou com a lead é avisado (assumiu ou recebeu a atribuição).
+    const donoFinal = r.rows[0].owner_id || null;
+    const donoNovo = donoFinal && String(donoFinal) !== String(cur.rows[0].owner_id || "") ? String(donoFinal) : null;
+    if (donoNovo) await notificarLeadAssumida(mapLead(r.rows[0]), donoNovo);
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -4224,11 +4392,18 @@ app.delete("/api/v1/leads/:id", requireAuth, requireManager, async (req, res) =>
 
 app.post("/api/v1/leads/:id/convert", requireAuth, async (req, res) => {
   try {
+    const vis = await leadVisivel(req, req.params.id);
+    if (!vis.ok) {
+      if (vis.motivo === "de_outro") return res.status(403).json({ error: "Esta lead tem outro responsável." });
+      return res.status(404).json({ error: "Lead não encontrada" });
+    }
+    const dono = donoPorEtapa(req, vis.lead);
     const r = await pool.query(
-      "UPDATE leads SET status = 'convertido', converted_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *",
-      [req.params.id]
+      `UPDATE leads SET status = 'convertido', converted_at = NOW(), updated_at = NOW()${dono ? ", owner_id = $2" : ""} WHERE id = $1 RETURNING *`,
+      dono ? [req.params.id, dono] : [req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
+    if (dono) await notificarLeadAssumida(mapLead(r.rows[0]), dono);
     res.json({ data: mapLead(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -4592,13 +4767,81 @@ app.post("/api/v1/leads/fit90-hook", rateLimit(60), async (req, res) => {
     const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
     const r = await pool.query(
       `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
-       VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING *`,
       [code, name, rec.email || null, rec.phone || null, rec.company || null,
        rec.source || "fit90_landing", 0, rec.notes || null, extId || null]);
     console.log(`[FIT90-HOOK] ${name} -> lead ${r.rows[0].id}`);
+    // Lead vinda da landing: a equipa comercial é avisada no sino do CRM.
+    await notificarLeadNova(r.rows[0]);
     res.status(201).json({ ok: true, id: r.rows[0].id, code });
   } catch (err) {
     console.error("[FIT90-HOOK]", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+// ─── Notificações (sino do CRM) ──────────────────────────────────────────────
+// Avisos internos da equipa: lead nova, lead atribuída, etc.
+// Uma linha por destinatário — cada um marca a sua como lida.
+// TEM de ficar antes do 404 catch-all abaixo.
+const mapNotif = (r) => ({
+  id: r.id, type: r.type, title: r.title, body: r.body || null,
+  leadId: r.lead_id || null, read: !!r.read_at, createdAt: r.created_at,
+});
+
+app.get("/api/v1/notifications", requireAuth, async (req, res) => {
+  try {
+    const uid = req.user?.userId;
+    if (!uid || uid === "api-key") return res.json({ data: [], unread: 0 });
+    const limite = Math.min(Number(req.query.limit) || 30, 100);
+    const r = await pool.query(
+      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, [uid, limite]);
+    const u = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`, [uid]);
+    res.json({ data: r.rows.map(mapNotif), unread: u.rows[0]?.n || 0 });
+  } catch (err) {
+    console.error("[NOTIF] list:", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+app.get("/api/v1/notifications/unread-count", requireAuth, async (req, res) => {
+  try {
+    const uid = req.user?.userId;
+    if (!uid || uid === "api-key") return res.json({ data: { unread: 0 } });
+    const u = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`, [uid]);
+    res.json({ data: { unread: u.rows[0]?.n || 0 } });
+  } catch (err) {
+    console.error("[NOTIF] count:", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+app.post("/api/v1/notifications/read-all", requireAuth, async (req, res) => {
+  try {
+    const uid = req.user?.userId;
+    if (!uid || uid === "api-key") return res.json({ data: { unread: 0 } });
+    const r = await pool.query(
+      `UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL`, [uid]);
+    res.json({ data: { marked: r.rowCount || 0, unread: 0 } });
+  } catch (err) {
+    console.error("[NOTIF] read-all:", err?.message || err);
+    res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+app.post("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
+  try {
+    const uid = req.user?.userId;
+    if (!uid || uid === "api-key") return res.status(404).json({ error: "Notificação não encontrada" });
+    const r = await pool.query(
+      `UPDATE notifications SET read_at = COALESCE(read_at, NOW()) WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [req.params.id, uid]);
+    if (!r.rows.length) return res.status(404).json({ error: "Notificação não encontrada" });
+    res.json({ data: mapNotif(r.rows[0]) });
+  } catch (err) {
+    console.error("[NOTIF] read:", err?.message || err);
     res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
 });
@@ -4786,10 +5029,12 @@ async function syncFit90Leads() {
         const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
         const r = await pool.query(
           `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
-           VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING id`,
+           VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING *`,
           [code, name, row.email || null, row.phone || null, row.company || null,
            row.source || "fit90_landing", 0, row.notes || null, extId]);
         cid = r.rows[0].id;
+        // Lead vinda da landing: a equipa comercial é avisada no sino do CRM.
+        await notificarLeadNova(r.rows[0]);
       }
       await patch(`fit90_leads?id=eq.${row.id}`, { pushed: true, pushed_at: new Date().toISOString(), crm_lead_id: String(cid) });
       pushed++;
