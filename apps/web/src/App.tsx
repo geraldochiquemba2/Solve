@@ -2632,11 +2632,84 @@ const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: stri
     { key: 'ekwanza_client_secret', label: 'Client Secret', type: 'password' },
     { key: 'ekwanza_resource', label: 'Resource' },
   ],
+  WhatsApp: [
+    { key: 'whatsapp_token', label: 'Token permanente', type: 'password' },
+    { key: 'whatsapp_phone_number_id', label: 'Phone Number ID' },
+    { key: 'whatsapp_verify_token', label: 'Verify Token', type: 'password' },
+    { key: 'whatsapp_app_secret', label: 'App Secret', type: 'password' },
+    { key: 'whatsapp_api_version', label: 'Versão da API', placeholder: 'v23.0' },
+    { key: 'whatsapp_display_name', label: 'Nome no perfil', placeholder: 'SamoraFit' },
+    { key: 'whatsapp_otp_template', label: 'Template OTP', placeholder: 'otp_login' },
+    { key: 'whatsapp_otp_language', label: 'Idioma do template', placeholder: 'pt_PT' },
+  ],
 };
+
+const TRIGGER_LABELS: Record<string, string> = {
+  payment_confirmed: 'Pagamento confirmado',
+  payment_pending: 'Pagamento pendente',
+  payment_overdue: 'Pagamento em atraso',
+  payment_rejected: 'Pagamento recusado',
+  payment_failed: 'Pagamento falhado',
+  lead_created: 'Nova lead',
+  lead_converted: 'Lead convertida',
+  lead_no_activity: 'Lead sem atividade',
+  customer_created: 'Novo cliente',
+  client_blocked: 'Cliente bloqueado',
+  client_inactive: 'Cliente inativo',
+  access_denied: 'Acesso negado',
+  access_granted: 'Acesso concedido',
+  course_access_granted: 'Acesso a curso concedido',
+  lessons_exhausted: 'Aulas esgotadas',
+  subscription_activated: 'Subscrição ativada',
+  subscription_renewed: 'Subscrição renovada',
+  subscription_expiring: 'Subscrição a expirar',
+  subscription_expired: 'Subscrição expirada',
+  customer_birthday: 'Aniversário do cliente',
+  nps_requested: 'Pedido de NPS',
+};
+
+const LEGACY_TRIGGERS: Record<string, string> = {
+  'pagamento.confirmado': 'payment_confirmed',
+  'pagamento.pendente': 'payment_pending',
+  'pagamento.em_atraso': 'payment_overdue',
+  'pagamento.recusado': 'payment_rejected',
+  'lead.criado': 'lead_created',
+  'lead.sem_atividade': 'lead_no_activity',
+  'cliente.bloqueado': 'client_blocked',
+  'cliente.inativo': 'client_inactive',
+  'acesso.negado': 'access_denied',
+  'aulas.esgotadas': 'lessons_exhausted',
+  'subscricao.expirada': 'subscription_expired',
+  'aniversario.cliente': 'customer_birthday',
+};
+
+function triggerLabel(raw: string): string {
+  return TRIGGER_LABELS[raw] || TRIGGER_LABELS[LEGACY_TRIGGERS[raw]] || raw;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  send_notification: 'Aviso interno',
+  send_whatsapp: 'Mensagem WhatsApp',
+  send_whatsapp_template: 'Template WhatsApp',
+  create_task: 'Criar tarefa',
+  update_customer_state: 'Atualizar estado do cliente',
+  sync_to_cademi: 'Sincronizar Cademi',
+};
+
+function describeAction(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    return list.map((item: any) => ACTION_LABELS[item?.type] || item?.type || '—').join(' + ');
+  } catch {
+    return ACTION_LABELS[raw] || raw;
+  }
+}
 
 const INTEGRATION_HEALTH_URL: Record<string, string> = {
   'SamoraFit Workout': '/api/v1/cademi/health',
   Pay4All: '/api/v1/pay4all/health',
+  WhatsApp: '/api/v1/whatsapp/health',
 };
 
 function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () => void }) {
@@ -2672,7 +2745,11 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
       const res = await fetch(`${base}${url}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const json = await res.json();
       const d = json.data || json;
-      setTestMsg((d.connected ? 'OK · ' : 'FALHA · ') + (d.message || ''));
+      const status = d.status ? ` [${d.status}]` : '';
+      const extras = name === 'WhatsApp' && d.connected === false && d.configured
+        ? ` (webhook ${d.webhookConfigured ? 'ok' : 'incompleto'}, OTP ${d.otpTemplateConfigured ? 'template' : 'texto'})`
+        : '';
+      setTestMsg((d.connected ? 'OK · ' : 'FALHA · ') + (d.message || '') + status + extras);
     } catch (e: any) { setTestMsg('Erro: ' + e.message); }
     setTesting(false);
   };
@@ -2707,18 +2784,47 @@ function AutomationsPage() {
   const createMut = useCreateAutomation();
   const [open, setOpen] = useState(false);
   const [fName, setFName] = useState('');
-  const [fTrigger, setFTrigger] = useState('pagamento.confirmado');
+  const [fTrigger, setFTrigger] = useState('payment_confirmed');
   const [fAction, setFAction] = useState('send_notification');
+  const [fMessage, setFMessage] = useState('');
+  const [fTemplate, setFTemplate] = useState('');
+  const [fLanguage, setFLanguage] = useState('pt_PT');
   const [fMsg, setFMsg] = useState('');
+  const [events, setEvents] = useState<any[]>([]);
+  const triggers = Object.keys(TRIGGER_LABELS);
+  const actions = Object.keys(ACTION_LABELS);
   const rules = data?.data ?? [];
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const base = import.meta.env.VITE_API_URL || '';
+        const res = await fetch(`${base}/api/v1/automations/events?limit=10`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (active) setEvents(Array.isArray(json.data) ? json.data : []);
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [data]);
   const save = () => {
     if (!fName.trim()) { setFMsg('Nome é obrigatório'); return; }
-    createMut.mutate({ name: fName.trim(), trigger: fTrigger, action: fAction }, {
-      onSuccess: () => { setOpen(false); setFName(''); setFMsg(''); refetch(); },
+    if (fAction === 'send_whatsapp_template' && !fTemplate.trim()) { setFMsg('Indica o nome do template aprovado'); return; }
+    const action = fAction === 'send_whatsapp'
+      ? JSON.stringify({ type: 'send_whatsapp', params: { message: fMessage.trim() || 'Olá {{customerName}}!' } })
+      : fAction === 'send_whatsapp_template'
+        ? JSON.stringify({ type: 'send_whatsapp_template', params: { template: fTemplate.trim(), language: fLanguage.trim() || 'pt_PT' } })
+        : fAction;
+    createMut.mutate({ name: fName.trim(), trigger: fTrigger, action }, {
+      onSuccess: () => { setOpen(false); setFName(''); setFMsg(''); setFTemplate(''); setFMessage(''); refetch(); },
       onError: (e: any) => setFMsg('Erro: ' + (e.message || 'desconhecido')),
     });
   };
-  return <><PageHeader eyebrow="Ecossistema · Orquestração" title="Automações" subtitle="Regras orientadas a eventos, com execução auditável." action={<button className="btn-primary" onClick={() => { setFMsg(''); setOpen(true); }}><Plus size={14} /> Nova automação</button>} /><Section title="Regras activas" note={`${rules.filter((x: any) => x.active).length} de ${rules.length} activas`}><div style={{ display: 'grid', gap: '.55rem' }}>{rules.map((r: any, i: number) => <div key={r.id} className="card" style={{ boxShadow: 'none', padding: '.8rem', display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr auto', gap: '.8rem', alignItems: 'center' }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}><div style={{ width: 29, height: 29, borderRadius: 7, display: 'grid', placeItems: 'center', background: r.active ? 'hsl(var(--accent) / .25)' : 'hsl(var(--muted))', color: r.active ? 'hsl(38 60% 35%)' : 'hsl(var(--muted-foreground))' }}><Zap size={14} /></div><div><div style={{ fontWeight: 700, fontSize: '.75rem' }}>{r.name}</div><div className="section-note">Regra {String(i + 1).padStart(2, '0')}</div></div></div><div><div className="eyebrow">Quando</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{r.trigger}</div></div><div><div className="eyebrow">Executar</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{r.action}</div></div><div style={{ textAlign: 'right' }}><button className="btn-quiet" onClick={() => toggleMut.mutate(r.id)}>{r.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />} {r.active ? 'Activo' : 'Inactivo'}</button><button className="btn-quiet" onClick={() => { if (confirm('Eliminar automação?')) deleteMut.mutate(r.id); }}><Trash2 size={14} /></button></div></div>)}</div></Section>
+  return <><PageHeader eyebrow="Ecossistema · Orquestração" title="Automações" subtitle="Regras orientadas a eventos, com execução auditável." action={<button className="btn-primary" onClick={() => { setFMsg(''); setOpen(true); }}><Plus size={14} /> Nova automação</button>} /><Section title="Regras activas" note={`${rules.filter((x: any) => x.active).length} de ${rules.length} activas`}><div style={{ display: 'grid', gap: '.55rem' }}>{rules.map((r: any, i: number) => <div key={r.id} className="card" style={{ boxShadow: 'none', padding: '.8rem', display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr auto', gap: '.8rem', alignItems: 'center' }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}><div style={{ width: 29, height: 29, borderRadius: 7, display: 'grid', placeItems: 'center', background: r.active ? 'hsl(var(--accent) / .25)' : 'hsl(var(--muted))', color: r.active ? 'hsl(38 60% 35%)' : 'hsl(var(--muted-foreground))' }}><Zap size={14} /></div><div><div style={{ fontWeight: 700, fontSize: '.75rem' }}>{r.name}</div><div className="section-note">Regra {String(i + 1).padStart(2, '0')} · {r.runCount || 0} execuções</div></div></div><div><div className="eyebrow">Quando</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{triggerLabel(r.trigger)}</div></div><div><div className="eyebrow">Executar</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{describeAction(r.action)}</div><div className="section-note">{r.lastRunAt ? `Última: ${new Date(r.lastRunAt).toLocaleString('pt-PT')}` : 'Ainda não executou'}</div></div><div style={{ textAlign: 'right' }}><button className="btn-quiet" onClick={() => toggleMut.mutate(r.id)}>{r.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />} {r.active ? 'Activo' : 'Inactivo'}</button><button className="btn-quiet" onClick={() => { if (confirm('Eliminar automação?')) deleteMut.mutate(r.id); }}><Trash2 size={14} /></button></div></div>)}</div></Section>
+  <Section title="Últimas execuções" note="Eventos processados pelo motor (mais recentes primeiro)">
+    {events.length === 0 ? <div className="section-note">Sem eventos registados.</div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Evento</th><th>Estado</th><th>Tentativas</th><th>Criado</th><th>Erro</th></tr></thead><tbody>{events.map((e: any) => <tr key={e.id}><td>{triggerLabel(e.event_type)}</td><td>{e.status}</td><td>{e.attempts ?? 0}</td><td>{e.created_at ? new Date(e.created_at).toLocaleString('pt-PT') : '—'}</td><td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.last_error || '—'}</td></tr>)}</tbody></table></div>}
+  </Section>
   {open && <div className="modal-backdrop" onClick={() => setOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Nova automação</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regra guardada como ativa. A execução agenda-se no motor.</div>
@@ -2726,10 +2832,15 @@ function AutomationsPage() {
     <input className="input" value={fName} onChange={e => setFName(e.target.value)} placeholder="Ex: Alertar aulas esgotadas" style={{ width: '100%' }} />
     <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
       <div style={{ flex: 1 }}><label className="form-label">Quando</label>
-      <select className="select" value={fTrigger} onChange={e => setFTrigger(e.target.value)}>{['pagamento.confirmado', 'pagamento.pendente', 'acesso.negado', 'aulas.esgotadas', 'cliente.bloqueado'].map(v => <option key={v}>{v}</option>)}</select></div>
+      <select className="select" value={fTrigger} onChange={e => setFTrigger(e.target.value)}>{triggers.map(v => <option key={v} value={v}>{TRIGGER_LABELS[v]}</option>)}</select></div>
       <div style={{ flex: 1 }}><label className="form-label">Executar</label>
-      <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{['send_notification', 'create_task', 'update_customer_state', 'sync_to_cademi'].map(v => <option key={v}>{v}</option>)}</select></div>
+      <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{actions.map(v => <option key={v} value={v}>{ACTION_LABELS[v]}</option>)}</select></div>
     </div>
+    {fAction === 'send_whatsapp' && <div style={{ marginTop: '.6rem' }}><label className="form-label">Mensagem WhatsApp</label><textarea className="input" rows={3} value={fMessage} onChange={e => setFMessage(e.target.value)} placeholder="Olá {{customerName}}, ..." style={{ width: '100%', resize: 'vertical' }} /></div>}
+    {fAction === 'send_whatsapp_template' && <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
+      <div style={{ flex: 1 }}><label className="form-label">Template aprovado *</label><input className="input" value={fTemplate} onChange={e => setFTemplate(e.target.value)} placeholder="ex: renovacao_plano" /></div>
+      <div style={{ flex: 1 }}><label className="form-label">Idioma</label><input className="input" value={fLanguage} onChange={e => setFLanguage(e.target.value)} placeholder="pt_PT" /></div>
+    </div>}
     {fMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{fMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
       <button className="btn-secondary" onClick={() => setOpen(false)} style={{ flex: 1 }}>Cancelar</button>

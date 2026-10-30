@@ -7,6 +7,9 @@ import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { registerStudioIntegration } from "./studio-integration.js";
+import { createWhatsAppService } from "./whatsapp.js";
+import { createAutomationEngine } from "./automation.js";
+import { createPortalRoutes } from "./portal.js";
 
 const { Pool } = pg;
 
@@ -477,6 +480,18 @@ function emailRef(email) {
   return crypto.createHash("sha256").update(String(email).trim().toLowerCase()).digest("hex").slice(0, 16);
 }
 
+function contactPhoneKeys(...values) {
+  const keys = new Set();
+  for (const value of values) {
+    const raw = String(value || "").replace(/\D+/g, "");
+    if (!raw) continue;
+    keys.add(raw);
+    const noCc = raw.replace(/^(00244|0024|0244|244)/, "");
+    if (noCc && noCc !== raw) keys.add(noCc);
+  }
+  return [...keys];
+}
+
 // Origem do próprio host via RENDER_EXTERNAL_URL (injectado pelo Render em
 // qualquer conta) — sem hardcoded de domínio, o CORS funciona num deploy novo.
 const CORS_ORIGIN = process.env.CORS_ORIGIN || process.env.APP_URL ||
@@ -488,8 +503,18 @@ app.use(cors({
 app.use(express.json({ limit: "100kb",
   // Guarda o corpo raw para verificação HMAC do webhook WiPay (a doc exige
   // assinar o payload raw, não o JSON re-serializado).
-  verify: (req, _res, buf) => { if (req.path === "/webhooks/wipay") req.rawBody = buf; },
+  verify: (req, _res, buf) => {
+    if (req.path === "/webhooks/wipay" || req.path === "/webhooks/whatsapp" || req.path === "/api/v1/webhooks/whatsapp" || req.path === "/api/v1/whatsapp/webhook") req.rawBody = buf;
+  },
 }));
+
+const whatsapp = createWhatsAppService({ pool, cfg, env: process.env });
+const automation = createAutomationEngine({
+  pool,
+  whatsapp,
+  onSyncCademi: (code) => sendCademiDelivery(code, true),
+  getSetting: (key) => cfg(key, ""),
+});
 app.use(rateLimit(200));
 
 // Integração SamoraFit Studio: ingestão autenticada por chave dedicada + leitura no CRM.
@@ -532,6 +557,7 @@ pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`).ca
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS produto_interesse VARCHAR(255)`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS proximo_contato DATE`).catch(() => {});
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS motivo_perda VARCHAR(255)`).catch(() => {});
+pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS ultimo_contato_at DATE`).catch(() => {});
 // Responsável pela lead (owner_id): uma lead com responsável só é vista por ele
 // e pela gestão. A coluna vem da migration 0000; recriamos por segurança.
 pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id)`).catch(() => {});
@@ -555,6 +581,8 @@ pool.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS lessons_done INTE
 // Clientes: data de entrada no ginásio + género (também ausentes das migrations).
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS joined_at TIMESTAMP`).catch(() => {});
 pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`).catch(() => {});
+// Consentimento de comunicações: campanhas e automações só enviam para TRUE.
+pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS whatsapp_opt_in BOOLEAN DEFAULT FALSE`).catch(() => {});
 // Pagamentos: validade do pendente (expiração) + entidade da referência
 // (ambas existiam na BD antiga via ALTER manual; faltavam nas migrations).
 pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`).catch(() => {});
@@ -797,6 +825,27 @@ function ensurePromoSchema() {
   return promoSchemaReady;
 }
 ensurePromoSchema().catch(() => {});
+
+whatsapp.ensureSchema().catch((err) => console.error("[WHATSAPP] schema:", err.message));
+automation.ensureSchema().catch((err) => console.error("[AUTOMATION] schema:", err.message));
+const portalRoutes = createPortalRoutes({
+  app,
+  pool,
+  jwt,
+  jwtSecret: JWT_SECRET,
+  whatsapp,
+  automation,
+  rateLimit,
+  rateLimitBy,
+  ensurePromoSchema,
+  validatePromo,
+  promoUserKey,
+  fireEkwanzaCharge,
+  kickCademiDelivery,
+  cfg,
+  audit,
+});
+portalRoutes.ensureSchema().catch((err) => console.error("[PORTAL] schema:", err.message));
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -1235,6 +1284,24 @@ app.post("/webhooks/ekwanza", rateLimit(60), async (req, res) => {
         `UPDATE payments SET status = $1, ekwanza_operation_code = $2, updated_at = NOW() WHERE code = $3`,
         [mappedStatus, ekwanzaTransactionId || null, merchantTransactionId]
       );
+      try {
+        const pr = await pool.query("SELECT id, customer_id, amount, metadata FROM payments WHERE code = $1", [merchantTransactionId]);
+        const pay = pr.rows[0];
+        const pm = (pay && pay.metadata) || {};
+        await automation.enqueue("payment_rejected", {
+          paymentId: pay?.id || null,
+          code: merchantTransactionId,
+          customerId: pay?.customer_id || null,
+          customerName: pm.name || null,
+          email: pm.email || null,
+          phone: pm.phone || null,
+          amount: pay?.amount ?? null,
+          method: "ekwanza",
+          reason: "operation_not_successful",
+        }, { dedupeKey: `payment_rejected:${merchantTransactionId}` });
+      } catch (e) {
+        console.error("[AUTOMATION] payment_rejected:", e.message);
+      }
     }
     broadcastPaymentUpdate({ type: "payment_updated", code: merchantTransactionId, status: mappedStatus });
     if (mappedStatus === "confirmado") kickCademiDelivery(merchantTransactionId);
@@ -1310,10 +1377,36 @@ async function applyWipayConfirm(code, wipayId) {
   const j = await r.json().catch(() => null);
   const mapped = mapWipayStatus(j?.status);
   if (!mapped) return j?.status || null;
+  let pay = null;
   if (mapped === "confirmado") {
-    await pool.query("UPDATE payments SET status='confirmado', paid_at=NOW(), reconciled_at=NOW(), updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+    const upd = await pool.query(
+      "UPDATE payments SET status='confirmado', paid_at=NOW(), reconciled_at=NOW(), updated_at=NOW() WHERE code=$1 AND status='pendente' RETURNING id, customer_id, amount, metadata",
+      [code]
+    );
+    pay = upd.rows[0] || null;
   } else {
-    await pool.query("UPDATE payments SET status='rejeitado', updated_at=NOW() WHERE code=$1 AND status='pendente'", [code]);
+    const upd = await pool.query(
+      "UPDATE payments SET status='rejeitado', updated_at=NOW() WHERE code=$1 AND status='pendente' RETURNING id, customer_id, amount, metadata",
+      [code]
+    );
+    pay = upd.rows[0] || null;
+    if (pay) {
+      let pm = {};
+      try { pm = typeof pay.metadata === "string" ? JSON.parse(pay.metadata) : (pay.metadata || {}); } catch {}
+      await automation.enqueue("payment_rejected", {
+        paymentId: pay.id,
+        code,
+        customerId: pay.customer_id || null,
+        customerName: pm.name || null,
+        email: pm.email || null,
+        phone: pm.phone || null,
+        amount: pay.amount ?? null,
+        method: "wipay",
+        reason: String(j?.status || "rejeitado").slice(0, 80),
+      }, { dedupeKey: `payment_rejected:${code}` }).catch((e) => {
+        console.error("[AUTOMATION] payment_rejected (wipay):", e.message);
+      });
+    }
   }
   broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
   console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${j?.status})`);
@@ -2031,6 +2124,23 @@ app.post("/api/v1/payments", rateLimit(30), async (req, res) => {
     broadcastPaymentUpdate({ type: "payment_created", code, status: initialStatus });
     res.status(201).json({ data: payment });
 
+    if (!autoConfirm) {
+      automation.enqueue(
+        "payment_pending",
+        {
+          paymentId: payment.id,
+          code,
+          customerId: linkedId,
+          customerName: customer_name || null,
+          email: customer_email || null,
+          phone: customer_phone || null,
+          amount: amt,
+          product: cademi_produto || description || null,
+        },
+        { dedupeKey: `payment_pending:${code}` }
+      ).catch(() => {});
+    }
+
     // Promo que cobre a totalidade: confirma sem gateway e entrega já o conteúdo.
     if (autoConfirm) {
       kickCademiDelivery(code);
@@ -2479,6 +2589,7 @@ app.post("/api/v1/cademi/sync", requireAuth, requireManager, async (req, res) =>
         if (!email) continue;
         const cr = await pool.query("SELECT id FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1", [email]);
         let customerId;
+        let criadoAgora = false;
         if (cr.rows.length > 0) {
           customerId = cr.rows[0].id;
           await pool.query(
@@ -2494,7 +2605,18 @@ app.post("/api/v1/cademi/sync", requireAuth, requireManager, async (req, res) =>
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), NOW(), NOW()) RETURNING id`,
             [code, u.nome || "Aluno Cademi", email, u.celular || null, String(u.id), u.ultimo_acesso_em ? "activo" : "inactivo", joinedReal]);
           customerId = ins.rows[0].id;
+          criadoAgora = true;
           created++;
+        }
+        if (criadoAgora) {
+          automation.enqueue("customer_created", {
+            customerId,
+            customerName: u.nome || "Aluno Cademi",
+            email,
+            phone: u.celular || null,
+            whatsapp: u.celular || null,
+            source: "cademi",
+          }, { dedupeKey: `customer_created:${customerId}` }).catch(() => {});
         }
         // Acessos ativos na Cademi = pagantes -> subscription + payment confirmado
         let acessos = [];
@@ -2663,6 +2785,7 @@ function kickCademiDelivery(code) {
   code = String(code || "").trim();
   if (!code || _cademiKick.has(code)) return;
   _cademiKick.add(code);
+  automation.applyPaymentConfirmed(code).catch((err) => console.error("[AUTOMATION] payment confirmation:", err.message));
   const steps = [0, 15000, 45000, 90000]; // a 0s, 15s, 45s e 90s
   let i = 0;
   const run = async () => {
@@ -2855,6 +2978,93 @@ app.post("/api/v1/payments/:code/cademi-sync", rateLimit(30), async (req, res) =
   }
 });
 
+app.get("/api/v1/whatsapp/health", requireAuth, requireManager, async (_req, res) => {
+  try {
+    res.json({ data: await whatsapp.health() });
+  } catch (err) {
+    console.error("[WHATSAPP] health:", err.message);
+    res.status(500).json({ error: "Erro ao consultar o WhatsApp" });
+  }
+});
+
+app.get("/api/v1/whatsapp/messages", requireAuth, requireManager, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
+    const direction = req.query.direction === "inbound" || req.query.direction === "outbound" ? req.query.direction : null;
+    const r = await pool.query(
+      `SELECT id, direction, phone, type, template_name, body, status, provider_message_id, error,
+              error_code, customer_id, lead_id, payment_code, idempotency_key, source_event,
+              created_at, sent_at, delivered_at, read_at, updated_at
+         FROM whatsapp_messages
+        ${direction ? "WHERE direction = $2" : ""}
+        ORDER BY created_at DESC LIMIT $1`,
+      direction ? [limit, direction] : [limit]
+    );
+    res.json({ data: r.rows, total: r.rows.length });
+  } catch (err) {
+    console.error("[WHATSAPP] messages:", err.message);
+    res.status(500).json({ error: "Erro ao listar mensagens" });
+  }
+});
+
+app.post("/api/v1/whatsapp/send-text", rateLimit(30), requireAuth, requireManager, async (req, res) => {
+  try {
+    const to = req.body?.to || req.body?.phone;
+    const body = String(req.body?.body || req.body?.message || "").trim();
+    if (!to || !body) return res.status(400).json({ error: "to e body são obrigatórios" });
+    const result = await whatsapp.sendText(to, body, {
+      customerId: req.body?.customerId || null,
+      leadId: req.body?.leadId || null,
+      paymentCode: req.body?.paymentCode || null,
+      metadata: { sentBy: req.user?.userId || null },
+    });
+    if (!result.ok) return res.status(502).json({ error: result.error || "Falha no envio" });
+    res.status(201).json({ data: result });
+  } catch (err) {
+    console.error("[WHATSAPP] send-text:", err.message);
+    res.status(500).json({ error: "Erro ao enviar mensagem" });
+  }
+});
+
+app.post("/api/v1/whatsapp/send-template", rateLimit(30), requireAuth, requireManager, async (req, res) => {
+  try {
+    const { to, template, language, components } = req.body || {};
+    if (!to || !template) return res.status(400).json({ error: "to e template são obrigatórios" });
+    const result = await whatsapp.sendTemplate(to, template, language, components, { metadata: { sentBy: req.user?.userId || null } });
+    if (!result.ok) return res.status(502).json({ error: result.error || "Falha no envio" });
+    res.status(201).json({ data: result });
+  } catch (err) {
+    console.error("[WHATSAPP] send-template:", err.message);
+    res.status(500).json({ error: "Erro ao enviar template" });
+  }
+});
+
+app.get(["/webhooks/whatsapp", "/api/v1/webhooks/whatsapp", "/api/v1/whatsapp/webhook"], async (req, res) => {
+  try {
+    const ok = await whatsapp.verifyChallenge(String(req.query["hub.mode"] || ""), String(req.query["hub.verify_token"] || ""));
+    if (!ok) return res.status(403).send("forbidden");
+    return res.status(200).send(String(req.query["hub.challenge"] || ""));
+  } catch {
+    return res.status(403).send("forbidden");
+  }
+});
+
+app.post(["/webhooks/whatsapp", "/api/v1/webhooks/whatsapp", "/api/v1/whatsapp/webhook"], rateLimit(120), async (req, res) => {
+  try {
+    const signature = req.headers["x-hub-signature-256"];
+    const valid = await whatsapp.verifySignature(req.rawBody, signature);
+    if (!valid) {
+      audit(req, "whatsapp.webhook_rejected", { details: { motivo: "assinatura_invalida" } });
+      return res.status(401).json({ error: "Assinatura inválida" });
+    }
+    res.status(200).json({ received: true });
+    setImmediate(() => whatsapp.processWebhook(req.body).catch((err) => console.error("[WHATSAPP] webhook:", err.message)));
+  } catch (err) {
+    console.error("[WHATSAPP] webhook:", err.message);
+    if (!res.headersSent) res.status(200).json({ received: true });
+  }
+});
+
 // Webhook recetor (configurar URL no painel Cademi: /api/v1/webhooks/cademi)
 app.post("/api/v1/webhooks/cademi", rateLimit(60), async (req, res) => {
   try {
@@ -2902,18 +3112,26 @@ async function qNum(sql, params = [], fallback = 0) {
 }
 
 async function getIntegrationsLive() {
-  const [payCount, paySync, leadCount, cademi, cademiKey] = await Promise.all([
+  const [payCount, paySync, leadCount, cademi, cademiKey, wa] = await Promise.all([
     qNum("SELECT COUNT(*) as cnt FROM payments"),
     (async () => { try { const r = await pool.query("SELECT MAX(created_at) as m FROM payments"); return r.rows[0]?.m || null; } catch { return null; } })(),
     qNum("SELECT COUNT(*) as cnt FROM leads"),
     getCademiStatus(),
     cfg("cademi_api_key", CADEMI_API_KEY),
+    whatsapp.health().catch(() => ({ status: "inativo", lastSyncAt: null, failed: 0 })),
   ]);
   const now = new Date().toISOString();
+  const waStatus = wa.status === "operacional"
+    ? "operacional"
+    : ["nao_configurado", "inativo"].includes(wa.status)
+      ? "inativo"
+      : ["erro_autenticacao", "erro_meta"].includes(wa.status)
+        ? "erro"
+        : "atencao";
   return [
     { id: "pay4all", name: "Pay4All", status: payCount > 0 ? "operacional" : "atencao", lastSyncAt: paySync, errorCount: 0, createdAt: now, updatedAt: now },
     { id: "cademi", name: "Cademi", status: !cademiKey ? "inativo" : (cademi.connected ? "operacional" : "atencao"), lastSyncAt: cademi.connected ? now : null, errorCount: 0, createdAt: now, updatedAt: now },
-    { id: "whatsapp", name: "WhatsApp", status: "inativo", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
+    { id: "whatsapp", name: "WhatsApp", status: waStatus, healthStatus: wa.status || "inativo", message: wa.message || null, lastSyncAt: wa.lastSyncAt || null, lastError: wa.lastError || null, errorCount: Number(wa.failed || 0), createdAt: now, updatedAt: now },
     { id: "website", name: "Website", status: leadCount > 0 ? "operacional" : "atencao", lastSyncAt: null, errorCount: 0, createdAt: now, updatedAt: now },
   ];
 }
@@ -3036,10 +3254,10 @@ app.get("/api/v1/automations", requireAuth, async (req, res) => {
 app.post("/api/v1/automations", requireAuth, requireManager, async (req, res) => {
   try {
     const { name, trigger, action } = req.body;
-    if (!name || !trigger || !action) return res.status(400).json({ error: "name, trigger e action são obrigatórios" });
+    if (!name || !trigger || !action) return res.status(400).json({ error: "name, trigger e action s?o obrigat?rios" });
     const r = await pool.query(
       "INSERT INTO automations (name, trigger, action) VALUES ($1, $2, $3) RETURNING *",
-      [name, trigger, action]
+      [name, automation.canonicalTrigger(trigger), action]
     );
     res.status(201).json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
@@ -3052,7 +3270,10 @@ app.patch("/api/v1/automations/:id", requireAuth, requireManager, async (req, re
     const fields = [];
     const params = [];
     for (const k of ["name", "trigger", "action", "active"]) {
-      if (req.body[k] !== undefined) { fields.push(`${k} = $${params.length + 1}`); params.push(req.body[k]); }
+      if (req.body[k] !== undefined) {
+        fields.push(`${k} = $${params.length + 1}`);
+        params.push(k === "trigger" ? automation.canonicalTrigger(req.body[k]) : req.body[k]);
+      }
     }
     if (fields.length === 0) return res.status(400).json({ error: "Nada para atualizar" });
     fields.push("updated_at = NOW()");
@@ -3082,6 +3303,38 @@ app.patch("/api/v1/automations/:id/toggle", requireAuth, requireManager, async (
     res.json({ data: mapAutomation(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
+  }
+});
+
+app.get("/api/v1/automations/events", requireAuth, requireManager, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
+    const status = ["pending", "processing", "processed", "failed"].includes(String(req.query.status))
+      ? String(req.query.status)
+      : null;
+    const eventType = req.query.eventType ? automation.canonicalTrigger(req.query.eventType) : null;
+    const params = [];
+    const where = [];
+    if (status) {
+      params.push(status);
+      where.push(`status = $${params.length}`);
+    }
+    if (eventType) {
+      params.push(eventType);
+      where.push(`event_type = $${params.length}`);
+    }
+    params.push(limit);
+    const r = await pool.query(
+      `SELECT id, event_type, payload, status, attempts, available_at, processed_at, last_error, result, created_at, updated_at
+         FROM automation_events
+        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+        ORDER BY created_at DESC LIMIT $${params.length}`,
+      params
+    );
+    res.json({ data: r.rows, total: r.rows.length });
+  } catch (err) {
+    console.error("[AUTOMATION] events:", err.message);
+    res.status(500).json({ error: "Erro ao listar eventos de automação" });
   }
 });
 
@@ -3208,11 +3461,41 @@ app.patch("/api/v1/customers/:id", requireAuth, async (req, res) => {
       cfields.push("gender = NULLIF($" + (cparams.length + 1) + ", '')");
       cparams.push(g);
     }
-    if (cfields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email, genero)" });
+    const optIn = req.body.whatsapp_opt_in !== undefined ? req.body.whatsapp_opt_in : req.body.whatsappOptIn;
+    if (optIn !== undefined) {
+      if (typeof optIn !== "boolean") return res.status(400).json({ error: "whatsapp_opt_in deve ser booleano" });
+      cfields.push("whatsapp_opt_in = $" + (cparams.length + 1));
+      cparams.push(optIn);
+    }
+    const novoEstado = req.body.state !== undefined ? req.body.state : req.body.estado;
+    if (novoEstado !== undefined) {
+      const estado = String(novoEstado || "").trim();
+      if (!["activo", "inactivo", "em_atraso", "suspenso"].includes(estado)) {
+        return res.status(400).json({ error: "Estado inválido" });
+      }
+      cfields.push("state = $" + (cparams.length + 1));
+      cparams.push(estado);
+    }
+    if (cfields.length === 0) return res.status(400).json({ error: "Nada para atualizar (nome, telefone, email, genero, whatsapp_opt_in)" });
     cparams.push(id);
-    const r2 = await pool.query(`UPDATE customers SET ${cfields.join(", ")}, updated_at = NOW() WHERE id::text = $${cparams.length} RETURNING id::text AS id, name, email, phone, gender`, cparams);
+    const r2 = await pool.query(`UPDATE customers SET ${cfields.join(", ")}, updated_at = NOW() WHERE id::text = $${cparams.length} RETURNING id::text AS id, name, email, phone, gender, state, whatsapp_phone, whatsapp_opt_in`, cparams);
     if (r2.rows.length === 0) return res.status(404).json({ error: "Cliente não encontrado" });
-    res.json({ data: r2.rows[0] });
+    const clienteAtualizado = r2.rows[0];
+    if (["suspenso", "inactivo"].includes(clienteAtualizado.state)) {
+      automation.enqueue(
+        "client_blocked",
+        {
+          customerId: clienteAtualizado.id,
+          customerName: clienteAtualizado.name,
+          email: clienteAtualizado.email,
+          phone: clienteAtualizado.phone,
+          whatsapp: clienteAtualizado.whatsapp_phone || clienteAtualizado.phone,
+          state: clienteAtualizado.state,
+        },
+        { dedupeKey: `client_blocked:${clienteAtualizado.id}:${clienteAtualizado.state}:${new Date().toISOString().slice(0, 10)}` }
+      ).catch(() => {});
+    }
+    res.json({ data: clienteAtualizado });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -3399,6 +3682,20 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
     );
     // Lead nova: a equipa é avisada (sino do CRM).
     await notificarLeadNova(r.rows[0], { excludeUserId: req.user?.userId });
+    automation.enqueue(
+      "lead_created",
+      {
+        leadId: r.rows[0].id,
+        leadName: r.rows[0].name,
+        customerName: r.rows[0].name,
+        email: r.rows[0].email,
+        phone: r.rows[0].phone,
+        whatsapp: r.rows[0].whatsapp,
+        source: r.rows[0].source,
+        ownerId: r.rows[0].owner_id,
+      },
+      { dedupeKey: `lead_created:${r.rows[0].id}` }
+    ).catch(() => {});
     res.status(201).json({ data: mapLead(r.rows[0]) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -3643,13 +3940,129 @@ app.post("/api/v1/leads/:id/convert", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "Lead não encontrada" });
     }
     const dono = donoPorEtapa(req, vis.lead);
-    const r = await pool.query(
-      `UPDATE leads SET status = 'convertido', converted_at = NOW(), updated_at = NOW()${dono ? ", owner_id = $2" : ""} WHERE id = $1 RETURNING *`,
-      dono ? [req.params.id, dono] : [req.params.id]
-    );
+
+    if (vis.lead.status === "convertido") {
+      const existing = await pool.query("SELECT * FROM customers WHERE lead_id = $1 ORDER BY created_at ASC LIMIT 1", [vis.lead.id]);
+      if (existing.rows[0]) {
+        return res.json({
+          message: "Lead já convertida — cliente devolvido sem duplicar",
+          data: { lead: mapLead(vis.lead), customer: existing.rows[0], duplicado: true, idempotent: true },
+        });
+      }
+    }
+
+    const email = String(vis.lead.email || "").trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Email da lead é inválido" });
+    }
+    const rawPhone = String(vis.lead.whatsapp || vis.lead.phone || "").trim();
+    const phoneKeys = contactPhoneKeys(vis.lead.whatsapp, vis.lead.phone)
+      .filter((key) => key.length >= 9 && key.length <= 15);
+    if (!email && !phoneKeys.length) {
+      return res.status(400).json({ error: "Lead sem email ou telefone válido para converter" });
+    }
+
+    const client = await pool.connect();
+    let r;
+    let customer = null;
+    let duplicado = false;
+    let created = false;
+    try {
+      await client.query("BEGIN");
+      const conds = [];
+      const condParams = [];
+      if (email) {
+        condParams.push(email);
+        conds.push(`lower(email) = $${condParams.length}`);
+      }
+      for (const key of phoneKeys) {
+        condParams.push(key);
+        conds.push(
+          `regexp_replace(coalesce(whatsapp_phone, ''), '\\D', '', 'g') = $${condParams.length}`,
+          `regexp_replace(coalesce(phone, ''), '\\D', '', 'g') = $${condParams.length}`,
+          `right(regexp_replace(coalesce(whatsapp_phone, ''), '\\D', '', 'g'), 9) = right($${condParams.length}, 9)`,
+          `right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 9) = right($${condParams.length}, 9)`
+        );
+      }
+      if (conds.length) {
+        const found = await client.query(
+          `SELECT * FROM customers WHERE ${conds.join(" OR ")} ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+          condParams
+        );
+        if (found.rows[0]) {
+          duplicado = true;
+          const upd = await client.query(
+            `UPDATE customers SET lead_id = COALESCE(lead_id, $1), updated_at = NOW()
+              WHERE id = $2 RETURNING *`,
+            [vis.lead.id, found.rows[0].id]
+          );
+          customer = upd.rows[0];
+        }
+      }
+      if (!customer) {
+        for (let attempt = 0; attempt < 5 && !customer; attempt += 1) {
+          const code = `CL-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+          try {
+            const ins = await client.query(
+              `INSERT INTO customers
+                 (id, code, name, email, phone, company, nif, state, whatsapp_phone, lead_id, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULL, 'activo', $6, $7, NOW(), NOW())
+               RETURNING *`,
+              [code, vis.lead.name, email || null, phoneKeys.length ? rawPhone : null, vis.lead.company || null,
+               phoneKeys.length ? rawPhone : null, vis.lead.id]
+            );
+            customer = ins.rows[0];
+            created = true;
+          } catch (err) {
+            if (String(err.code) !== "23505" || attempt === 4) throw err;
+          }
+        }
+      }
+      r = await client.query(
+        `UPDATE leads SET status = 'convertido', converted_at = NOW(), updated_at = NOW()${dono ? ", owner_id = $2" : ""} WHERE id = $1 RETURNING *`,
+        dono ? [req.params.id, dono] : [req.params.id]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
-    if (dono) await notificarLeadAssumida(mapLead(r.rows[0]), dono);
-    res.json({ data: mapLead(r.rows[0]) });
+
+    const lead = r.rows[0];
+    const events = [];
+    if (created) {
+      events.push(await automation.enqueue("customer_created", {
+        customerId: customer.id,
+        customerName: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        whatsapp: customer.whatsapp_phone,
+        leadId: lead.id,
+      }, { dedupeKey: `customer_created:${customer.id}` }));
+    }
+    events.push(await automation.enqueue("lead_converted", {
+      leadId: lead.id,
+      leadName: lead.name,
+      customerId: customer.id,
+      customerName: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      whatsapp: customer.whatsapp_phone,
+      source: lead.source,
+    }, { dedupeKey: `lead_converted:${lead.id}` }));
+    audit(req, "lead.converted", {
+      entity: "lead",
+      entityId: lead.id,
+      details: { customerId: customer.id, duplicado, created },
+    });
+    if (dono) await notificarLeadAssumida(mapLead(lead), dono);
+    res.json({
+      message: duplicado ? "Cliente já existente — lead associada ao cliente atual" : "Lead convertido com sucesso",
+      data: { lead: mapLead(lead), customer, duplicado, created, eventIds: events.filter(Boolean) },
+    });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -4194,3 +4607,26 @@ setInterval(async () => {
   catch (err) { console.error("[FIT90-SYNC] Error:", err.message); }
   finally { _fit90Running = false; }
 }, FIT90_SYNC_INTERVAL_MS);
+
+// Automações: outbox persistente (retry/backoff) + higiene diária de estado.
+const AUTOMATION_TICK_MS = Number(process.env.AUTOMATION_TICK_MS || 60 * 1000);
+const AUTOMATION_HYGIENE_MS = Number(process.env.AUTOMATION_HYGIENE_MS || 24 * 60 * 60 * 1000);
+let _automationRunning = false;
+setInterval(async () => {
+  if (_automationRunning) return;
+  _automationRunning = true;
+  try { await automation.processPending(20); }
+  catch (err) { console.error("[AUTOMATION] fila:", err.message); }
+  finally { _automationRunning = false; }
+}, AUTOMATION_TICK_MS);
+
+let _hygieneRunning = false;
+async function runAutomationHygiene() {
+  if (_hygieneRunning) return;
+  _hygieneRunning = true;
+  try { await automation.runScheduledHygiene(); }
+  catch (err) { console.error("[AUTOMATION] higiene:", err.message); }
+  finally { _hygieneRunning = false; }
+}
+setTimeout(runAutomationHygiene, 15000);
+setInterval(runAutomationHygiene, AUTOMATION_HYGIENE_MS);
