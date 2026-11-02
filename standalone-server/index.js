@@ -9,6 +9,7 @@ import { dirname, join } from "path";
 import { registerStudioIntegration } from "./studio-integration.js";
 import { createWhatsAppService } from "./whatsapp.js";
 import { createAutomationEngine } from "./automation.js";
+import { createJourneyEngine } from "./journey.js";
 import { createPortalRoutes } from "./portal.js";
 
 const { Pool } = pg;
@@ -97,6 +98,13 @@ async function cfg(key, envVal = "") {
   if (e) return e;
   const v = await getSetting(key);
   return (v ?? "").toString().trim();
+}
+
+// Interruptor geral da automação. Ligado por omissão; pode ser pausado no CRM.
+async function automationEnabled() {
+  const raw = String(await cfg("automation_enabled", process.env.AUTOMATION_ENABLED || "")).toLowerCase();
+  if (!raw) return true;
+  return raw === "true" || raw === "1" || raw === "sim";
 }
 
 function apiKeyMatches(provided, expected) {
@@ -513,8 +521,10 @@ const automation = createAutomationEngine({
   pool,
   whatsapp,
   onSyncCademi: (code) => sendCademiDelivery(code, true),
-  getSetting: (key) => cfg(key, ""),
+  getSetting: (key) =>
+    cfg(key, key === "automation_enabled" ? (process.env.AUTOMATION_ENABLED || "") : ""),
 });
+const journey = createJourneyEngine({ pool, whatsapp, env: process.env });
 app.use(rateLimit(200));
 
 // Integração SamoraFit Studio: ingestão autenticada por chave dedicada + leitura no CRM.
@@ -572,6 +582,32 @@ pool.query(`CREATE TABLE IF NOT EXISTS notifications (
   read_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
 pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications (user_id, created_at DESC)`).catch(() => {});
 pool.query(`CREATE INDEX IF NOT EXISTS notifications_unread_idx ON notifications (user_id) WHERE read_at IS NULL`).catch(() => {});
+// Interesses/campanhas secundárias de uma lead (uma pessoa pode voltar em várias
+// campanhas). O par (lead_id, source) deixou de ser único: a mesma campanha pode
+// trazer produtos diferentes. A deduplicação fina é feita na aplicação.
+pool.query(`CREATE TABLE IF NOT EXISTS lead_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  source VARCHAR(100) NOT NULL,
+  produto_interesse VARCHAR(255),
+  external_id VARCHAR(100),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`).catch(() => {});
+pool.query(`DO $$
+  DECLARE c record;
+  BEGIN
+    FOR c IN
+      SELECT conname FROM pg_constraint
+       WHERE conrelid = 'lead_campaigns'::regclass
+         AND contype = 'u'
+         AND pg_get_constraintdef(oid) LIKE '%(lead_id, source)%'
+    LOOP
+      EXECUTE format('ALTER TABLE lead_campaigns DROP CONSTRAINT %I', c.conname);
+    END LOOP;
+  END $$`).catch(() => {});
+// Fallback para nomes gerados por versões antigas do Drizzle.
+pool.query(`ALTER TABLE lead_campaigns DROP CONSTRAINT IF EXISTS lead_campaigns_lead_id_source_unique`).catch(() => {});
+pool.query(`ALTER TABLE lead_campaigns DROP CONSTRAINT IF EXISTS lead_campaigns_lead_id_source_key`).catch(() => {});
+pool.query(`CREATE INDEX IF NOT EXISTS lead_campaigns_lead_idx ON lead_campaigns (lead_id)`).catch(() => {});
 // Equipa: contador de acessos por utilizador (quem acedeu mais)
 pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0`).catch(() => {});
 // Subscricoes: aulas incluídas/consumidas (ausentes das migrations antigas; a BD
@@ -827,7 +863,15 @@ function ensurePromoSchema() {
 ensurePromoSchema().catch(() => {});
 
 whatsapp.ensureSchema().catch((err) => console.error("[WHATSAPP] schema:", err.message));
-automation.ensureSchema().catch((err) => console.error("[AUTOMATION] schema:", err.message));
+automation.ensureSchema()
+  .then(() => automation.ensureDefaults())
+  .catch((err) => console.error("[AUTOMATION] schema:", err.message));
+journey.ensureSchema().catch((err) => console.error("[JOURNEY] schema:", err.message));
+// Ativa o motor de automação por omissão (pode ser pausado no CRM).
+pool.query(
+  `INSERT INTO settings (key, value, updated_at) VALUES ('automation_enabled', 'true'::jsonb, NOW())
+   ON CONFLICT (key) DO NOTHING`
+).catch(() => {});
 const portalRoutes = createPortalRoutes({
   app,
   pool,
@@ -3338,6 +3382,141 @@ app.get("/api/v1/automations/events", requireAuth, requireManager, async (req, r
   }
 });
 
+// ─── Jornada do membro (sequência WhatsApp) ─────────────────────────────────
+
+// Estado consolidado: interruptor geral, regras, jornada e WhatsApp.
+app.get("/api/v1/automations/status", requireAuth, async (_req, res) => {
+  try {
+    const [rules, steps, runStats, wa] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE active)::int AS active FROM automations").catch(() => ({ rows: [{}] })),
+      journey.listSteps().catch(() => []),
+      journey.stats().catch(() => ({})),
+      whatsapp.health().catch(() => ({ configured: false, connected: false, status: "erro" })),
+    ]);
+    const row = rules.rows[0] || {};
+    res.json({
+      data: {
+        enabled: await automationEnabled(),
+        dryRun: automation.isDryRun,
+        rules: { total: Number(row.total || 0), active: Number(row.active || 0) },
+        journey: {
+          steps: steps.length,
+          activeSteps: steps.filter((s) => s.active).length,
+          stats: runStats,
+        },
+        whatsapp: {
+          configured: Boolean(wa.configured),
+          connected: Boolean(wa.connected),
+          status: wa.status || "desconhecido",
+          message: wa.message || "",
+          webhookConfigured: Boolean(wa.webhookConfigured),
+          displayName: wa.displayName || null,
+          lastError: wa.lastError || null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("[AUTOMATION] status:", err.message);
+    res.status(500).json({ error: "Erro a ler o estado da automação" });
+  }
+});
+
+// Liga tudo num clique: motor, regras, passos da jornada e leads existentes.
+app.post("/api/v1/automations/activate-all", requireAuth, requireManager, async (req, res) => {
+  try {
+    await pool.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('automation_enabled', 'true'::jsonb, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = 'true'::jsonb, updated_at = NOW()`
+    );
+    _settingsCache = { at: 0, map: {} };
+    await automation.ensureDefaults();
+    const [rules, steps] = await Promise.all([
+      pool.query("UPDATE automations SET active = TRUE, updated_at = NOW() WHERE active = FALSE"),
+      pool.query("UPDATE member_journey_steps SET active = TRUE, updated_at = NOW() WHERE active = FALSE"),
+    ]);
+    const limit = Math.min(Math.max(Number.parseInt(req.body?.limit, 10) || 200, 1), 2000);
+    const leads = await journey.activateAllLeads(limit);
+    const events = await automation.processPending(20).catch(() => null);
+    const runs = await journey.processDue(20).catch(() => null);
+    audit(req, "automation.activate_all", {
+      entity: "automations",
+      details: {
+        rulesActivated: rules.rowCount || 0,
+        stepsActivated: steps.rowCount || 0,
+        leads,
+        events,
+        runs,
+      },
+    });
+    res.json({
+      data: {
+        enabled: true,
+        rulesActivated: rules.rowCount || 0,
+        stepsActivated: steps.rowCount || 0,
+        journey: leads,
+        events,
+        runs,
+      },
+    });
+  } catch (err) {
+    console.error("[AUTOMATION] activate-all:", err.message);
+    res.status(500).json({ error: "Erro a ativar a automação" });
+  }
+});
+
+app.get("/api/v1/member-journey", requireAuth, async (req, res) => {
+  try {
+    const [steps, runs, stats, whatsappReady] = await Promise.all([
+      journey.listSteps(),
+      journey.listRuns(req.query.limit),
+      journey.stats(),
+      journey.whatsappReady(),
+    ]);
+    res.json({ data: { steps, runs, stats, whatsappReady } });
+  } catch (err) {
+    console.error("[JOURNEY] list:", err.message);
+    res.status(500).json({ error: "Erro a ler a jornada do membro" });
+  }
+});
+
+app.patch("/api/v1/member-journey/steps/:id", requireAuth, requireManager, async (req, res) => {
+  try {
+    if (!LEAD_UUID_RE.test(req.params.id)) return res.status(400).json({ error: "Passo inválido" });
+    const step = await journey.updateStep(req.params.id, req.body || {});
+    if (!step) return res.status(404).json({ error: "Passo não encontrado" });
+    audit(req, "member_journey.updated", { entity: "member_journey_steps", entityId: step.id });
+    res.json({ data: step });
+  } catch (err) {
+    console.error("[JOURNEY] update:", err.message);
+    res.status(500).json({ error: "Erro a atualizar o passo" });
+  }
+});
+
+app.post("/api/v1/member-journey/activate", requireAuth, requireManager, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.body?.limit, 10) || 500, 1), 2000);
+    const result = await journey.activateAllLeads(limit);
+    audit(req, "member_journey.activated_all", { entity: "member_journey_runs", details: result });
+    res.json({ data: result });
+  } catch (err) {
+    console.error("[JOURNEY] activate:", err.message);
+    res.status(500).json({ error: "Erro a ativar a jornada para as leads existentes" });
+  }
+});
+
+app.post("/api/v1/member-journey/leads/:leadId", requireAuth, requireManager, async (req, res) => {
+  try {
+    if (!LEAD_UUID_RE.test(req.params.leadId)) return res.status(400).json({ error: "Lead inválida" });
+    const r = await pool.query("SELECT * FROM leads WHERE id = $1", [req.params.leadId]);
+    if (!r.rows[0]) return res.status(404).json({ error: "Lead não encontrada" });
+    const result = await journey.scheduleLead(r.rows[0], { reason: "manual" });
+    res.json({ data: result });
+  } catch (err) {
+    console.error("[JOURNEY] schedule:", err.message);
+    res.status(500).json({ error: "Erro a agendar a jornada" });
+  }
+});
+
 // ─── Users (adaptive: works with whatever columns exist) ────────────────────
 
 async function usersColumns() {
@@ -3508,6 +3687,102 @@ const LEAD_STATUS = ["novo_lead", "contacto", "qualificado", "proposta", "negoci
 // estáticas (/leads/fit90-pendentes) que caem no handler de /leads/:id.
 const LEAD_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Origens canónicas apresentadas no CRM. Os valores antigos continuam legíveis
+// (srcLabel no frontend), mas tudo o que entra de novo é normalizado para uma
+// destas duas categorias.
+const CANON_SOURCES = ["Campanhas comerciais", "Studio"];
+function canonSource(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const exact = CANON_SOURCES.find((s) => s.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  return /studio|fit\s*90|fit90|samora|balc/i.test(raw) ? "Studio" : "Campanhas comerciais";
+}
+
+const normEmail = (e) => String(e ?? "").trim().toLowerCase() || null;
+const normName = (n) => String(n ?? "").trim().toLowerCase();
+const contactKeys = (w, p) => {
+  const raw = String(w || p || "").replace(/\D+/g, "");
+  if (!raw) return [];
+  const keys = [raw];
+  const noCc = raw.replace(/^(00244|0024|0244|244)/, "");
+  if (noCc && noCc !== raw) keys.push(noCc);
+  return [...new Set(keys)];
+};
+
+// Identidade: nome + TODOS os contactos fornecidos (email/telefone/whatsapp)
+// têm de coincidir. Se faltar um campo, compara-se apenas os que existem; sem
+// nenhum contacto não se funde (evita juntar homónimos).
+async function findLeadByIdentity({ name, email, phone, whatsapp } = {}) {
+  const n = normName(name);
+  const em = normEmail(email);
+  const keys = contactKeys(whatsapp, phone);
+  if (!em && !keys.length) return null;
+  const conds = [];
+  const params = [];
+  if (n) {
+    params.push(n);
+    conds.push(`LOWER(TRIM(l.name)) = $${params.length}`);
+  }
+  if (em) {
+    params.push(em);
+    conds.push(`LOWER(TRIM(l.email)) = $${params.length}`);
+  }
+  if (keys.length) {
+    params.push(keys);
+    const i = params.length;
+    conds.push(
+      `(regexp_replace(COALESCE(l.whatsapp, ''), '\\D', '', 'g') = ANY($${i}::text[]) OR regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') = ANY($${i}::text[]))`
+    );
+  }
+  const r = await pool.query(
+    `SELECT * FROM leads l WHERE ${conds.join(" AND ")} ORDER BY l.updated_at DESC LIMIT 1`,
+    params
+  );
+  return r.rows[0] || null;
+}
+
+async function withCampanhas(leads) {
+  if (!leads.length) return leads;
+  const r = await pool.query(
+    `SELECT lead_id, source, produto_interesse, external_id, created_at
+       FROM lead_campaigns WHERE lead_id = ANY($1::uuid[]) ORDER BY created_at ASC`,
+    [leads.map((l) => l.id)]
+  );
+  const byLead = new Map();
+  for (const row of r.rows) {
+    const arr = byLead.get(row.lead_id) || [];
+    arr.push({
+      source: row.source,
+      produtoInteresse: row.produto_interesse,
+      externalId: row.external_id,
+      createdAt: row.created_at,
+    });
+    byLead.set(row.lead_id, arr);
+  }
+  return leads.map((l) => ({ ...l, campanhas: byLead.get(l.id) || [] }));
+}
+
+// Regista um interesse novo sem duplicar (lead + origem + produto).
+async function registarInteresse(lead, { source, produtoInteresse, externalId } = {}) {
+  if (!lead?.id) return false;
+  const src = canonSource(source) || canonSource(lead.source) || "Campanhas comerciais";
+  const produto = String(produtoInteresse ?? "").trim() || null;
+  const exists = await pool.query(
+    `SELECT 1 FROM lead_campaigns
+      WHERE lead_id = $1 AND source = $2 AND COALESCE(produto_interesse, '') = COALESCE($3, '')
+      LIMIT 1`,
+    [lead.id, src, produto]
+  );
+  if (exists.rowCount) return false;
+  await pool.query(
+    `INSERT INTO lead_campaigns (lead_id, source, produto_interesse, external_id)
+     VALUES ($1, $2, $3, $4)`,
+    [lead.id, src, produto, externalId ? String(externalId).trim().slice(0, 100) : null]
+  );
+  return true;
+}
+
 const mapLead = (r) => ({
   id: r.id, code: r.code, name: r.name, email: r.email, phone: r.phone,
   company: r.company, source: r.source, status: r.status, ownerId: r.owner_id,
@@ -3517,6 +3792,7 @@ const mapLead = (r) => ({
   contactosTotal: r.contactos_total != null ? Number(r.contactos_total) : null,
   ultimoContactoAt: r.ultimo_contacto_at || null, ultimoResultado: r.ultimo_resultado || null,
   ultimoStaff: r.ultimo_staff || null, convertedAt: r.converted_at || null,
+  campanhas: Array.isArray(r.campanhas) ? r.campanhas : [],
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -3581,31 +3857,25 @@ function donoPorEtapa(req, lead) {
 // Notificações internas (sino do CRM): uma linha por destinatário, para cada um
 // poder marcar a sua como lida sem afectar os restantes.
 const NOTIF_EQUIPA_PAPEIS = ["administrador", "gestor", "comercial"];
-async function notificarLeadNova(lead, { excludeUserId } = {}) {
+async function notificarLeadNova(lead, { reconciliado = false } = {}) {
   try {
-    let ids;
-    if (lead.owner_id) {
-      // Lead já atribuída: avisamos o responsável e a gestão.
-      const rec = await pool.query(
-        `SELECT id FROM users WHERE active = true AND (id = $1 OR role::text = ANY($2::text[]))`,
-        [lead.owner_id, ["administrador", "gestor"]]
-      );
-      ids = rec.rows.map((u) => u.id);
-    } else {
-      // Lead sem responsável: é o balcão — toda a equipa é avisada.
-      const rec = await pool.query(
-        `SELECT id FROM users WHERE active = true AND role::text = ANY($1::text[])`, [NOTIF_EQUIPA_PAPEIS]
-      );
-      ids = rec.rows.map((u) => u.id);
-    }
-    ids = ids.filter((id) => String(id) !== String(excludeUserId || ""));
+    // Toda a equipa comercial/gestão recebe o aviso, quer a lead tenha
+    // responsável quer esteja no balcão.
+    const rec = await pool.query(
+      `SELECT id FROM users WHERE active = true AND role::text = ANY($1::text[])`, [NOTIF_EQUIPA_PAPEIS]
+    );
+    const ids = rec.rows.map((u) => u.id);
     if (!ids.length) return;
     const origem = lead.source ? ` (${lead.source})` : "";
+    const titulo = reconciliado ? `Novo interesse: ${lead.name}` : `Nova lead: ${lead.name}`;
+    const corpo = reconciliado
+      ? `A mesma pessoa voltou com um novo interesse${origem}. A lead existente foi reaproveitada.`
+      : `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`;
     for (const uid of ids) {
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, body, lead_id)
          VALUES ($1, 'lead_nova', $2, $3, $4)`,
-        [uid, `Nova lead: ${lead.name}`, `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`, lead.id]
+        [uid, titulo, corpo, lead.id]
       );
     }
   } catch (e) {
@@ -3641,17 +3911,32 @@ app.get("/api/v1/leads", requireAuth, async (req, res) => {
     if (vis) where.push(vis);
     const wc = where.length ? "WHERE " + where.join(" AND ") : "";
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS} ${wc} ORDER BY l.updated_at DESC LIMIT 500`, params);
-    res.json({ data: r.rows.map(mapLead), total: r.rows.length });
+    const leads = await withCampanhas(r.rows);
+    res.json({ data: leads.map(mapLead), total: leads.length });
   } catch (err) {
     console.error("[LEADS LIST] Error:", err.message);
     res.status(500).json({ error: "Erro a ler leads. Ver logs do servidor." });
   }
 });
 
+function payloadLeadCreated(lead) {
+  return {
+    leadId: lead.id,
+    leadName: lead.name,
+    customerName: lead.name,
+    email: lead.email,
+    phone: lead.phone,
+    whatsapp: lead.whatsapp,
+    source: lead.source,
+    ownerId: lead.owner_id,
+  };
+}
+
 app.post("/api/v1/leads", requireAuth, async (req, res) => {
   try {
-    const { name, email, phone, company, source, status, ownerId, estimatedValue, notes, externalId, whatsapp, produtoInteresse, motivoPerda } = req.body;
+    const { name, email, phone, company, status, ownerId, estimatedValue, notes, externalId, whatsapp, produtoInteresse, motivoPerda } = req.body;
     if (!name || name.trim().length < 2) return res.status(400).json({ error: "Nome é obrigatório" });
+    const source = canonSource(req.body.source);
     const st = LEAD_STATUS.includes(status) ? status : "novo_lead";
     const extId = externalId ? String(externalId).trim() : null;
     // Idempotência: o Supabase/Fit 90 reenvia o mesmo external_id → atualiza sem duplicar.
@@ -3660,13 +3945,44 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
       if (existing.rows[0]) {
         const r = await pool.query(
           `UPDATE leads SET name = $1, email = $2, phone = $3, company = $4, source = $5,
-           estimated_value = $6, notes = $7, updated_at = NOW() WHERE id = $8 RETURNING *`,
+           estimated_value = $6, notes = $7, whatsapp = $8, produto_interesse = $9, updated_at = NOW()
+           WHERE id = $10 RETURNING *`,
           [name.trim(), email || null, phone || null, company || null, source || null,
-           estimatedValue || 0, notes || null, existing.rows[0].id]
+           estimatedValue || 0, notes || null, whatsapp || null, produtoInteresse || null, existing.rows[0].id]
         );
-        return res.json({ data: mapLead(r.rows[0]) });
+        await registarInteresse(r.rows[0], { source, produtoInteresse, externalId: extId });
+        await journey.scheduleLead(r.rows[0], { reason: "external_id" }).catch(() => {});
+        return res.json({ data: (await withCampanhas([r.rows[0]]).then((x) => x.map(mapLead)))[0] });
       }
     }
+
+    // Deduplicação: a mesma pessoa (nome + todos os contactos fornecidos) não
+    // cria outra lead. Regista-se o novo interesse e preserva-se o histórico.
+    const existente = await findLeadByIdentity({ name, email, phone, whatsapp });
+    if (existente) {
+      const refresh = ["updated_at = NOW()"];
+      const params = [];
+      if (email) { refresh.push(`email = $${params.length + 1}`); params.push(normEmail(email)); }
+      if (whatsapp) { refresh.push(`whatsapp = $${params.length + 1}`); params.push(String(whatsapp).trim()); }
+      if (phone) { refresh.push(`phone = $${params.length + 1}`); params.push(String(phone).trim()); }
+      if (company) { refresh.push(`company = $${params.length + 1}`); params.push(String(company).trim()); }
+      if (produtoInteresse) { refresh.push(`produto_interesse = $${params.length + 1}`); params.push(String(produtoInteresse).trim()); }
+      params.push(existente.id);
+      const r = await pool.query(
+        `UPDATE leads SET ${refresh.join(", ")} WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      await registarInteresse(r.rows[0], { source, produtoInteresse, externalId: extId });
+      // A equipa é avisada de que a mesma pessoa voltou com um novo interesse.
+      await notificarLeadNova(r.rows[0], { reconciliado: true });
+      automation.enqueue("lead_created", payloadLeadCreated(r.rows[0]), {
+        dedupeKey: `lead_reconciliado:${r.rows[0].id}:${Date.now()}`,
+      }).catch(() => {});
+      await journey.scheduleLead(r.rows[0], { reason: "reconciliado" }).catch(() => {});
+      const data = (await withCampanhas([r.rows[0]]).then((x) => x.map(mapLead)))[0];
+      return res.status(200).json({ data, duplicado: true, reconciliado: true });
+    }
+
     const code = "LD-" + Date.now().toString(36).toUpperCase().slice(-6);
     // Quem entra a lead fica com ela: o comercial que a registou é o responsável
     // (a gestão pode atribuir a outro no campo "Responsável"). Sem dono, a lead
@@ -3677,26 +3993,17 @@ app.post("/api/v1/leads", requireAuth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO leads (code, name, email, phone, company, source, status, owner_id, estimated_value, notes, external_id, whatsapp, produto_interesse, motivo_perda)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [code, name.trim(), email || null, phone || null, company || null, source || null, st, donoInicial, estimatedValue || 0, notes || null, extId,
+      [code, name.trim(), normEmail(email), phone || null, company || null, source, st, donoInicial, estimatedValue || 0, notes || null, extId,
        whatsapp || null, produtoInteresse || null, motivoPerda || null]
     );
-    // Lead nova: a equipa é avisada (sino do CRM).
-    await notificarLeadNova(r.rows[0], { excludeUserId: req.user?.userId });
-    automation.enqueue(
-      "lead_created",
-      {
-        leadId: r.rows[0].id,
-        leadName: r.rows[0].name,
-        customerName: r.rows[0].name,
-        email: r.rows[0].email,
-        phone: r.rows[0].phone,
-        whatsapp: r.rows[0].whatsapp,
-        source: r.rows[0].source,
-        ownerId: r.rows[0].owner_id,
-      },
-      { dedupeKey: `lead_created:${r.rows[0].id}` }
-    ).catch(() => {});
-    res.status(201).json({ data: mapLead(r.rows[0]) });
+    // Lead nova: toda a equipa é avisada (sino do CRM), incluindo quem a criou.
+    await notificarLeadNova(r.rows[0]);
+    automation.enqueue("lead_created", payloadLeadCreated(r.rows[0]), {
+      dedupeKey: `lead_created:${r.rows[0].id}`,
+    }).catch(() => {});
+    await journey.scheduleLead(r.rows[0], { reason: "lead_created" }).catch(() => {});
+    const data = (await withCampanhas([r.rows[0]]).then((x) => x.map(mapLead)))[0];
+    res.status(201).json({ data, duplicado: false });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -3821,6 +4128,7 @@ app.post("/api/v1/leads/:id/contacts", requireAuth, async (req, res) => {
     up.push(req.params.id);
     const lr = await pool.query(upd, up);
     if (dono) await notificarLeadAssumida(mapLead(lr.rows[0]), dono);
+    if (lr.rows[0].status === "convertido") await journey.cancelLead(lr.rows[0].id, "convertido").catch(() => {});
     const c = ins.rows[0];
     res.status(201).json({ data: {
       id: c.id, canal: c.canal, resultado: c.resultado, proximoPasso: c.proximo_passo,
@@ -3841,7 +4149,8 @@ app.get("/api/v1/leads/:id", requireAuth, async (req, res, next) => {
     if (!vis.ok) return res.status(404).json({ error: "Lead não encontrada" });
     const r = await pool.query(`SELECT ${LEAD_WITH_STATS} WHERE l.id = $1`, [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: "Lead não encontrada" });
-    res.json({ data: mapLead(r.rows[0]) });
+    const [lead] = await withCampanhas(r.rows);
+    res.json({ data: mapLead(lead) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -3857,8 +4166,12 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     const cur = { rows: [vis.lead] };
     const fields = [];
     const params = [];
-    for (const k of ["name", "email", "phone", "company", "source", "notes"]) {
+    for (const k of ["name", "email", "phone", "company", "notes"]) {
       if (req.body[k] !== undefined) { fields.push(`${k} = $${params.length + 1}`); params.push(req.body[k]); }
+    }
+    if (req.body.source !== undefined) {
+      fields.push(`source = $${params.length + 1}`);
+      params.push(canonSource(req.body.source));
     }
     const camelMap = { whatsapp: "whatsapp", produtoInteresse: "produto_interesse", proximoContato: "proximo_contato", motivoPerda: "motivo_perda" };
     for (const [ck, col] of Object.entries(camelMap)) {
@@ -3916,7 +4229,14 @@ app.patch("/api/v1/leads/:id", requireAuth, async (req, res) => {
     const donoFinal = r.rows[0].owner_id || null;
     const donoNovo = donoFinal && String(donoFinal) !== String(cur.rows[0].owner_id || "") ? String(donoFinal) : null;
     if (donoNovo) await notificarLeadAssumida(mapLead(r.rows[0]), donoNovo);
-    res.json({ data: mapLead(r.rows[0]) });
+    if (["convertido", "perdido"].includes(r.rows[0].status)) {
+      await journey.cancelLead(r.rows[0].id, r.rows[0].status).catch(() => {});
+    } else if (req.body.whatsapp !== undefined || req.body.phone !== undefined) {
+      // Contacto adicionado mais tarde: a jornada pode finalmente começar.
+      await journey.scheduleLead(r.rows[0], { reason: "contacto_adicionado" }).catch(() => {});
+    }
+    const [leadFinal] = await withCampanhas([r.rows[0]]);
+    res.json({ data: mapLead(leadFinal) });
   } catch (err) {
     console.error("[API]", err?.message || err); res.status(500).json({ error: "Erro interno. Tente de novo." });
   }
@@ -4325,11 +4645,12 @@ app.post("/api/v1/leads/fit90-hook", rateLimit(60), async (req, res) => {
     const r = await pool.query(
       `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
        VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING *`,
-      [code, name, rec.email || null, rec.phone || null, rec.company || null,
-       rec.source || "fit90_landing", 0, rec.notes || null, extId || null]);
+      [code, name, normEmail(rec.email), rec.phone || null, rec.company || null,
+       canonSource(rec.source || "fit90_landing"), 0, rec.notes || null, extId || null]);
     console.log(`[FIT90-HOOK] ${name} -> lead ${r.rows[0].id}`);
     // Lead vinda da landing: a equipa comercial é avisada no sino do CRM.
     await notificarLeadNova(r.rows[0]);
+    await journey.scheduleLead(r.rows[0], { reason: "fit90_hook" }).catch(() => {});
     res.status(201).json({ ok: true, id: r.rows[0].id, code });
   } catch (err) {
     console.error("[FIT90-HOOK]", err?.message || err);
@@ -4587,11 +4908,12 @@ async function syncFit90Leads() {
         const r = await pool.query(
           `INSERT INTO leads (code, name, email, phone, company, source, status, estimated_value, notes, external_id)
            VALUES ($1,$2,$3,$4,$5,$6,'novo_lead',$7,$8,$9) RETURNING *`,
-          [code, name, row.email || null, row.phone || null, row.company || null,
-           row.source || "fit90_landing", 0, row.notes || null, extId]);
+          [code, name, normEmail(row.email), row.phone || null, row.company || null,
+           canonSource(row.source || "fit90_landing"), 0, row.notes || null, extId]);
         cid = r.rows[0].id;
         // Lead vinda da landing: a equipa comercial é avisada no sino do CRM.
         await notificarLeadNova(r.rows[0]);
+        await journey.scheduleLead(r.rows[0], { reason: "fit90_sync" }).catch(() => {});
       }
       await patch(`fit90_leads?id=eq.${row.id}`, { pushed: true, pushed_at: new Date().toISOString(), crm_lead_id: String(cid) });
       pushed++;
@@ -4619,6 +4941,17 @@ setInterval(async () => {
   catch (err) { console.error("[AUTOMATION] fila:", err.message); }
   finally { _automationRunning = false; }
 }, AUTOMATION_TICK_MS);
+
+// Jornada do membro: envia os passos cujo prazo já venceu.
+let _journeyRunning = false;
+setInterval(async () => {
+  if (_journeyRunning) return;
+  _journeyRunning = true;
+  try {
+    if (await automationEnabled()) await journey.processDue(20);
+  } catch (err) { console.error("[JOURNEY] fila:", err.message); }
+  finally { _journeyRunning = false; }
+}, journey.tickMs);
 
 let _hygieneRunning = false;
 async function runAutomationHygiene() {

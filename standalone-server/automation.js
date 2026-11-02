@@ -211,6 +211,125 @@ export function createAutomationEngine({ pool, whatsapp, onSyncCademi, getSettin
     await pool.query("CREATE INDEX IF NOT EXISTS automation_events_type_created_idx ON automation_events (event_type, created_at DESC)");
   }
 
+  // Regras base do funil. Só são criadas quando ainda não existe nenhuma regra,
+  // para nunca sobrepor configuração feita pela equipa. Ficam ativas e usam
+  // apenas avisos internos (o WhatsApp ao membro é tratado pela jornada).
+  const DEFAULT_RULES = [
+    {
+      name: "Lead convertida — avisar equipa",
+      trigger: "lead_converted",
+      action: [
+        {
+          type: "send_notification",
+          params: {
+            title: "Lead convertida",
+            message: "{{leadName}} tornou-se cliente (origem: {{source}}).",
+          },
+        },
+        {
+          type: "send_whatsapp",
+          params: {
+            message:
+              "Olá {{customerName}}! 🎉 Bem-vindo(a) à SamoraFit. O teu onboarding começa agora — a equipa vai acompanhar-te nos próximos passos.",
+          },
+        },
+      ],
+    },
+    {
+      name: "Novo cliente — avisar equipa",
+      trigger: "customer_created",
+      action: {
+        type: "send_notification",
+        params: { title: "Novo cliente", message: "Novo cliente registado: {{customerName}}." },
+      },
+    },
+    {
+      name: "Pagamento confirmado — avisar equipa",
+      trigger: "payment_confirmed",
+      action: {
+        type: "send_notification",
+        params: {
+          title: "Pagamento confirmado",
+          message: "Pagamento confirmado: {{customerName}} — {{amount}} Kz ({{code}}).",
+        },
+      },
+    },
+    {
+      name: "Pagamento pendente — avisar equipa",
+      trigger: "payment_pending",
+      action: {
+        type: "send_notification",
+        params: {
+          title: "Pagamento pendente",
+          message: "Pagamento pendente: {{customerName}} — {{amount}} Kz ({{code}}).",
+        },
+      },
+    },
+    {
+      name: "Pagamento em atraso — avisar equipa",
+      trigger: "payment_overdue",
+      action: {
+        type: "send_notification",
+        params: {
+          title: "Pagamento em atraso",
+          message: "Pagamento em atraso: {{customerName}} ({{code}}).",
+        },
+      },
+    },
+    {
+      name: "Pagamento recusado — avisar equipa",
+      trigger: "payment_rejected",
+      action: {
+        type: "send_notification",
+        params: { title: "Pagamento recusado", message: "O pagamento de {{customerName}} não foi concluído." },
+      },
+    },
+    {
+      name: "Subscrição a expirar — avisar equipa",
+      trigger: "subscription_expiring",
+      action: {
+        type: "send_notification",
+        params: { title: "Subscrição a expirar", message: "A subscrição de {{customerName}} está a expirar." },
+      },
+    },
+    {
+      name: "Acesso negado — avisar equipa",
+      trigger: "access_denied",
+      action: {
+        type: "send_notification",
+        params: { title: "Acesso negado", message: "Acesso bloqueado para {{customerName}}." },
+      },
+    },
+  ];
+
+  async function ensureDefaults() {
+    try {
+      const existing = await pool.query("SELECT COUNT(*)::int AS total FROM automations");
+      if (Number(existing.rows[0]?.total || 0) > 0) return { seeded: 0 };
+      let seeded = 0;
+      for (const rule of DEFAULT_RULES) {
+        const r = await pool.query(
+          `INSERT INTO automations (name, trigger, action, active)
+           VALUES ($1, $2, $3, TRUE)
+           ON CONFLICT DO NOTHING RETURNING id`,
+          [rule.name, rule.trigger, JSON.stringify(rule.action)]
+        );
+        seeded += r.rowCount || 0;
+      }
+      if (seeded) {
+        await pool.query(
+          `INSERT INTO audit_logs (actor, action, entity, details)
+           VALUES ('automation', 'automation.defaults_seeded', 'automations', $1::jsonb)`,
+          [JSON.stringify({ seeded })]
+        ).catch(() => {});
+      }
+      return { seeded };
+    } catch (err) {
+      console.error("[AUTOMATION] defaults:", err.message);
+      return { seeded: 0, error: err.message };
+    }
+  }
+
   async function enqueue(eventType, payload = {}, { dedupeKey = null, availableAt = null, client = null } = {}) {
     const type = canonicalTrigger(eventType);
     if (!KNOWN_TRIGGERS.has(type)) return null;
@@ -594,6 +713,7 @@ export function createAutomationEngine({ pool, whatsapp, onSyncCademi, getSettin
 
   async function processPending(limit = 20) {
     if (processing) return { busy: true };
+    if (!(await settingEnabled("automation_enabled", true))) return { paused: true };
     processing = true;
     try {
       await pool.query(
@@ -880,6 +1000,7 @@ export function createAutomationEngine({ pool, whatsapp, onSyncCademi, getSettin
     applyPaymentConfirmed,
     canonicalTrigger,
     enqueue,
+    ensureDefaults,
     ensureSchema,
     executeAction,
     isDryRun,

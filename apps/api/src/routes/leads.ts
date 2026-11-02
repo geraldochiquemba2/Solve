@@ -54,24 +54,25 @@ function donoPorEtapa(req: any, lead: any): string | null {
 // Sino do CRM: uma linha por destinatÃ¡rio, para cada um marcar a sua como lida.
 const NOTIF_EQUIPA = ["administrador", "gestor", "comercial"] as const;
 
-async function notificarLeadNova(lead: any, opts: { excludeUserId?: string } = {}) {
+async function notificarLeadNova(lead: any, opts: { reconciliado?: boolean } = {}) {
   try {
-    const alvo = lead.owner_id
-      ? or(eq(usersTable.id, lead.owner_id), inArray(usersTable.role, ["administrador", "gestor"]))
-      : inArray(usersTable.role, [...NOTIF_EQUIPA]);
     const rec = await db
       .select({ id: usersTable.id })
       .from(usersTable)
-      .where(and(eq(usersTable.active, true), alvo as any));
-    const ids = rec.map((u) => u.id).filter((id) => String(id) !== String(opts.excludeUserId || ""));
+      .where(and(eq(usersTable.active, true), inArray(usersTable.role, [...NOTIF_EQUIPA])));
+    const ids = rec.map((u) => u.id);
     if (!ids.length) return;
     const origem = lead.source ? ` (${lead.source})` : "";
+    const titulo = opts.reconciliado ? `Novo interesse: ${lead.name}` : `Nova lead: ${lead.name}`;
+    const corpo = opts.reconciliado
+      ? `A mesma pessoa voltou com um novo interesse${origem}. A lead existente foi reaproveitada.`
+      : `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`;
     await db.insert(notificationsTable).values(
       ids.map((uid) => ({
         userId: uid,
         type: "lead_nova",
-        title: `Nova lead: ${lead.name}`,
-        body: `${lead.company || lead.email || lead.phone || "Sem contacto"}${origem}`,
+        title: titulo,
+        body: corpo,
         leadId: lead.id,
       })),
     );
@@ -185,13 +186,19 @@ async function withStats(lead: any) {
 }
 
 // â”€â”€â”€ Identidade de cliente (deduplicaÃ§Ã£o) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Uma pessoa Ã© a MESMA em vÃ¡rias campanhas se partilhar um identificador forte:
-// email (normalizado) OU whatsapp/telefone (dÃ­gitos, com e sem +244). O nome
-// NUNCA Ã© usado para fundir â€” duas pessoas com o mesmo nome e identificadores
-// diferentes continuam pessoas distintas (nunca se fundem incorretamente).
-// Sem nenhum identificador, cria-se uma lead nova de cada vez (impossÃ­vel provar
-// que Ã© a mesma pessoa).
+// A MESMA pessoa exige nome + todos os contactos fornecidos (email e/ou
+// whatsapp/telefone). Quando falta um campo compara-se apenas os existentes;
+// sem nenhum contacto nao se funde (evita juntar homonimos).
 const normEmail = (e?: string | null) => (e ?? "").trim().toLowerCase() || undefined;
+const normName = (n?: string | null) => (n ?? "").trim().toLowerCase();
+const CANON_SOURCES = ["Campanhas comerciais", "Studio"];
+const canonSource = (value?: string | null) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const exact = CANON_SOURCES.find((s) => s.toLowerCase() === raw.toLowerCase());
+  if (exact) return exact;
+  return /studio|fit\s*90|fit90|samora|balc/i.test(raw) ? "Studio" : "Campanhas comerciais";
+};
 const contactKeys = (w?: string | null, p?: string | null): string[] => {
   const raw = String(w || p || "").replace(/\D+/g, "");
   if (!raw) return [];
@@ -201,16 +208,46 @@ const contactKeys = (w?: string | null, p?: string | null): string[] => {
   return [...new Set(keys)];
 };
 
-async function findLeadByIdentity(body: { email?: string; phone?: string; whatsapp?: string | null }) {
+// Identidade: nome + TODOS os contactos fornecidos têm de coincidir. Se faltar
+// um campo, compara-se apenas os que existem; sem contacto não se funde.
+async function findLeadByIdentity(body: { name?: string; email?: string; phone?: string; whatsapp?: string | null }) {
   const email = normEmail(body.email);
+  const name = normName(body.name);
   const keys = contactKeys(body.whatsapp as any, body.phone as any);
   if (!email && !keys.length) return null;
   const conds: any[] = [];
-  if (email) conds.push(sql`lower(${leadsTable.email}) = ${email}`);
-  for (const k of keys) {
-    conds.push(eq(leadsTable.whatsapp, k), eq(leadsTable.phone, k));
+  if (name) conds.push(sql`lower(trim(${leadsTable.name})) = ${name}`);
+  if (email) conds.push(sql`lower(trim(${leadsTable.email})) = ${email}`);
+  if (keys.length) {
+    conds.push(
+      sql`(regexp_replace(coalesce(${leadsTable.whatsapp}, ''), '\\D', '', 'g') = any(${keys}::text[]) or regexp_replace(coalesce(${leadsTable.phone}, ''), '\\D', '', 'g') = any(${keys}::text[]))`,
+    );
   }
-  return db.query.leadsTable.findFirst({ where: or(...conds) });
+  return db.query.leadsTable.findFirst({ where: and(...conds) });
+}
+
+async function registarInteresse(
+  lead: any,
+  body: { source?: string | null; produtoInteresse?: string | null; externalId?: string | null },
+) {
+  const produto = String(body.produtoInteresse ?? "").trim() || null;
+  const source = String(body.source ?? lead.source ?? "").trim() || null;
+  if (!source && !produto) return false;
+  const existing = await db.query.leadCampaignsTable.findFirst({
+    where: and(
+      eq(leadCampaignsTable.leadId, lead.id),
+      source ? eq(leadCampaignsTable.source, source) : isNull(leadCampaignsTable.source),
+      produto ? eq(leadCampaignsTable.produtoInteresse, produto) : isNull(leadCampaignsTable.produtoInteresse),
+    ),
+  });
+  if (existing) return false;
+  await db.insert(leadCampaignsTable).values({
+    leadId: lead.id,
+    source: source || "Campanhas comerciais",
+    produtoInteresse: produto,
+    externalId: body.externalId ? String(body.externalId).trim().slice(0, 100) : undefined,
+  });
+  return true;
 }
 
 // Campanhas/interesses secundÃ¡rios de cada lead (a principal Ã© `lead.source`).
@@ -436,7 +473,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         if (req.body.email !== undefined) updateData.email = req.body.email;
         if (req.body.phone !== undefined) updateData.phone = req.body.phone;
         if (req.body.company !== undefined) updateData.company = req.body.company;
-        if (req.body.source !== undefined) updateData.source = req.body.source;
+        if (req.body.source !== undefined) updateData.source = canonSource(req.body.source);
         if (req.body.estimatedValue !== undefined) updateData.estimatedValue = req.body.estimatedValue;
         if (req.body.notes !== undefined) updateData.notes = req.body.notes;
         const [lead] = await db
@@ -455,20 +492,11 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
     // observaÃ§Ãµes, etapa, enquanto continuar em Leads Totais).
     const existingByIdentity = await findLeadByIdentity(req.body as any);
     if (existingByIdentity) {
-      const novoInteresse: any = {
-        leadId: existingByIdentity.id,
-        source: req.body.source ?? undefined,
-        produtoInteresse: req.body.produtoInteresse ?? undefined,
-        externalId: externalId ?? undefined,
-      };
-      if (novoInteresse.source && novoInteresse.source !== (existingByIdentity as any).source) {
-        try {
-          await db
-            .insert(leadCampaignsTable)
-            .values(novoInteresse)
-            .onConflictDoNothing({ target: [leadCampaignsTable.leadId, leadCampaignsTable.source] });
-        } catch { /* corrida: o Ã­ndice Ãºnico garante que nÃ£o duplica */ }
-      }
+      await registarInteresse(existingByIdentity, {
+        source: req.body.source,
+        produtoInteresse: req.body.produtoInteresse,
+        externalId,
+      });
       // Atualiza unicamente os identificadores para o valor mais recente.
       const refresh: Record<string, unknown> = { updatedAt: new Date() };
       const emailNorm = normEmail(req.body.email);
@@ -482,6 +510,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         .set(refresh)
         .where(eq(leadsTable.id, existingByIdentity.id))
         .returning();
+      await notificarLeadNova(lead, { reconciliado: true });
       res.json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: true, reconciliado: true });
       return;
     }
@@ -502,7 +531,7 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
         email: req.body.email ?? null,
         phone: req.body.phone ?? null,
         company: req.body.company ?? null,
-        source: req.body.source ?? null,
+        source: canonSource(req.body.source) ?? null,
         status: canonStatus(req.body.status ?? "novo_lead"),
         owner_id: donoInicial,
         estimatedValue: req.body.estimatedValue ?? 0,
@@ -517,8 +546,8 @@ router.post("/leads", authenticate, authorize("administrador", "gestor", "comerc
       } as any)
       .returning();
 
-    // Lead nova: a equipa Ã© avisada no sino (quem a registou nÃ£o recebe eco).
-    await notificarLeadNova(lead, { excludeUserId: uidCriador ?? undefined });
+    // Lead nova: toda a equipa Ã© avisada no sino, incluindo quem a registou.
+    await notificarLeadNova(lead);
 
     res.status(201).json({ data: (await withCampanhas([await withStats(lead)]))[0], duplicado: false });
   } catch (err) {
@@ -558,6 +587,7 @@ router.patch("/leads/:id", authenticate, authorize("administrador", "gestor", "c
       if (k === "ownerId") { if (isGestao(req)) patch.owner_id = v; }
       else if (k === "ultimoContactoAt") patch.ultimoContatoAt = v;
       else if (k === "status") patch.status = canonStatus(v);
+      else if (k === "source") patch.source = canonSource(v == null ? null : String(v));
       else patch[k] = v;
     }
     // Regra do funil: o comercial que muda a etapa fica com a lead.

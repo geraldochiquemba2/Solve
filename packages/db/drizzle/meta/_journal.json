@@ -64,6 +64,13 @@
       "when": 1793600000000,
       "version": "7",
       "tag": "0008_studio"
+    },
+    {
+      "idx": 9,
+      "breakpoints": true,
+      "when": 1794000000000,
+      "version": "7",
+      "tag": "0009_lead_interests_journey"
     }
   ]
 }

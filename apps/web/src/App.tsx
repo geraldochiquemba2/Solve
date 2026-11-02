@@ -133,12 +133,15 @@ const LEAD_SOURCE_ALIASES: Record<string, string> = {
   linkedin: 'LinkedIn',
   balcao: 'Balcão',
   'balcão': 'Balcão',
+  'campanhas comerciais': 'Campanhas comerciais',
+  campanhas_comerciais: 'Campanhas comerciais',
+  studio: 'Studio',
 };
 const srcLabel = (s?: string | null) => { const k = String(s || '').toLowerCase().trim(); return k ? (LEAD_SOURCE_ALIASES[k] ?? s!) : '—'; };
 // Canal de entrada: com externalId veio de fora (integração/landing); sem externalId foi criado no CRM.
 const canalOf = (l: Lead) => ((l as any).externalId ? 'Integração' : 'CRM');
-// Sugestões para o campo Origem (input livre — o gestor pode adicionar novas campanhas).
-const LEAD_SOURCE_SUGG = ['Website', 'WhatsApp', 'Indicação', 'LinkedIn', 'Fit90 Landing', 'Landing Bruno Samora', 'Balcão'];
+// Origens do CRM: apenas as duas categorias comerciais.
+const LEAD_SOURCE_SUGG = ['Campanhas comerciais', 'Studio'];
 
 // Fetch autenticado para seguimento de leads (Bearer staff; recurso X-API-Key).
 const leadApiBase = () => import.meta.env.VITE_API_URL || '';
@@ -244,7 +247,7 @@ const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: s
   { label: 'Visão geral', items: [{ href: '/admin', label: 'Dashboard', icon: LayoutDashboard }] },
   { label: 'Operação comercial', items: [{ href: '/admin/meu-progresso', label: 'Meu Progresso', icon: TrendingUp }, { href: '/admin/leads', label: 'Leads', icon: Target }, { href: '/admin/pipeline', label: 'Funil', icon: Filter }, { href: '/admin/clientes', label: 'Clientes', icon: Building2 }] },
   { label: 'Receita e acesso', items: [{ href: '/admin/pagamentos', label: 'Pagamentos', icon: WalletCards }, { href: '/admin/promocodes', label: 'Promoções', icon: Ticket, roles: ['administrador', 'gestor'] }] },
-   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/samorafit-studio', label: 'SamoraFit Studio', icon: Activity, roles: ['administrador', 'gestor'] }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
+   { label: 'Ecossistema', items: [{ href: '/admin/academia', label: 'SamoraFit Workout', icon: BookOpen }, { href: '/admin/samorafit-studio', label: 'SamoraFit Studio', icon: Activity, roles: ['administrador', 'gestor'] }, { href: '/admin/automacoes', label: 'Automações', icon: Zap, roles: ['administrador', 'gestor'] }, { href: '/admin/integracoes', label: 'Integrações', icon: Link2 }] },
   { label: 'Governação', roles: ['administrador', 'gestor'], items: [{ href: '/admin/equipa', label: 'Equipa', icon: Users }, { href: '/admin/utilizadores', label: 'Utilizadores', icon: ShieldCheck }] },
 ];
 
@@ -1163,12 +1166,14 @@ function Fit90LeadsPage({ leads, onChanged }: { leads: Lead[]; onChanged?: () =>
 }
 
 function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated, currentUserId, allowCreate = true, readOnlyOwner = false }: { initial: Lead | null; onClose: () => void; onSave: (x: Lead) => void; userName?: string; staff?: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void>; currentUserId?: string; allowCreate?: boolean; readOnlyOwner?: boolean }) {
-  const [name, setName] = useState(initial?.name ?? ''); const [company, setCompany] = useState(initial?.company ?? ''); const [email, setEmail] = useState(initial?.email ?? ''); const [source, setSource] = useState(initial?.source ?? 'Website');
+  const [name, setName] = useState(initial?.name ?? ''); const [company, setCompany] = useState(initial?.company ?? ''); const [email, setEmail] = useState(initial?.email ?? ''); const [source, setSource] = useState(initial?.source ?? 'Campanhas comerciais');
   const [phone, setPhone] = useState(initial?.phone ?? ''); const [zap, setZap] = useState(initial?.whatsapp ?? ''); const [produto, setProduto] = useState(initial?.produtoInteresse ?? '');
   const [estado, setEstado] = useState(TRACK_PT[(initial as any)?.statusApi ?? ''] || initial?.status || TRACK_FICHA_OPTS[0]);
   const [resp, setResp] = useState(initial?.owner ?? currentUserId ?? ''); const [prox, setProx] = useState(initial?.proximoContato ?? ''); const [motivo, setMotivo] = useState(initial?.motivoPerda ?? '');
   // "Nova" s\u00f3 fica dispon\u00edvel se a lead ainda l\u00e1 estiver (sentido \u00fanico).
   const estadoIsNova = !initial || (TRACK_LABEL_TO_API[estado] || LEAD_PT_TO_API[estado]) === 'novo_lead';
+  // Só existem duas origens; um valor antigo (legado) continua visível na edição.
+  const sourceOptions = source && !LEAD_SOURCE_SUGG.includes(source) ? [...LEAD_SOURCE_SUGG, source] : LEAD_SOURCE_SUGG;
   const [erro, setErro] = useState('');
   const guardar = () => {
     const nome = name.trim();
@@ -1177,7 +1182,7 @@ function LeadModal({ initial, onClose, onSave, userName, staff, onStaffCreated, 
     setErro('');
     onSave({ id: initial?.id ?? 'LD-' + Date.now().toString(36).slice(-6).toUpperCase(), name: nome, company: company.trim(), email: email.trim(), source, status: estado, owner: resp || initial?.owner || '', value: initial?.value ?? 0, last: 'Agora', phone, whatsapp: zap, produtoInteresse: produto, proximoContato: prox || null, motivoPerda: motivo || null, notes: initial?.notes ?? '', code: initial?.code ?? '', createdAt: initial?.createdAt ?? '' });
   };
-  return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem / campanha</span><input className="input" style={{ width: '100%' }} list="lead-source-datalist" value={source} onChange={e => setSource(e.target.value)} placeholder="Ex.: Website, WhatsApp ou nova campanha" /><datalist id="lead-source-datalist">{LEAD_SOURCE_SUGG.map(x => <option key={x} value={x} />)}</datalist></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x} disabled={x === 'Nova' && !estadoIsNova}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} allowCreate={allowCreate} readOnly={readOnlyOwner} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}{erro ? <div role="alert" style={{ color: 'hsl(var(--destructive))', fontSize: '.72rem', marginTop: '.5rem' }}>{erro}</div> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" onClick={guardar}><Check size={14} /> Guardar lead</button></div></div></Modal>;
+  return <Modal title={initial ? 'Editar lead' : 'Adicionar lead'} subtitle="Registo comercial interno · origem CRM" onClose={onClose}><div className="form-grid"><FormField label="Nome completo" value={name} onChange={setName} placeholder="Ex.: Joana Manuel" /><FormField label="Empresa" value={company} onChange={setCompany} placeholder="Nome da organização" /><FormField label="Email profissional" value={email} onChange={setEmail} type="email" /><FormField label="Telefone" value={phone} onChange={setPhone} placeholder="Ex.: 943412688" /><FormField label="WhatsApp" value={zap} onChange={setZap} placeholder="Ex.: 943412688" /><FormField label="Produto / serviço de interesse" value={produto} onChange={setProduto} placeholder="Ex.: Plano Mensal" /><label><span className="form-label">Origem</span><select className="select" style={{ width: '100%' }} value={source} onChange={e => setSource(e.target.value)}>{sourceOptions.map(x => <option key={x} value={x}>{srcLabel(x)}</option>)}</select></label><label><span className="form-label">Estado</span><select className="select" style={{ width: '100%' }} value={estado} onChange={e => setEstado(e.target.value)}>{TRACK_FICHA_OPTS.map(x => <option key={x} disabled={x === 'Nova' && !estadoIsNova}>{x}</option>)}</select></label><StaffSelect value={resp} onChange={setResp} staff={staff ?? []} onStaffCreated={onStaffCreated} allowCreate={allowCreate} readOnly={readOnlyOwner} /><label><span className="form-label">Próximo contacto</span><input className="input" type="date" style={{ width: '100%' }} value={prox} onChange={(e) => setProx(e.target.value)} /></label>{estado === 'Perdida' ? <label><span className="form-label">Motivo (perdida)</span><input className="input" style={{ width: '100%' }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: sem interesse neste momento" /></label> : null}{erro ? <div role="alert" style={{ color: 'hsl(var(--destructive))', fontSize: '.72rem', marginTop: '.5rem' }}>{erro}</div> : null}<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', marginTop: '.35rem' }}><button className="btn-secondary" onClick={onClose}>Cancelar</button><button className="btn-primary" onClick={guardar}><Check size={14} /> Guardar lead</button></div></div></Modal>;
 }
 
 function PipelinePage({ leads, userName, onChanged }: { leads: Lead[]; userName?: string; onChanged?: () => void }) {
@@ -2785,6 +2790,159 @@ function IntegrationConfigModal({ name, onClose }: { name: string; onClose: () =
   </div></div>;
 }
 
+function AutomationStatusPanel() {
+  const { user } = useAuth();
+  const canManage = user?.role === 'administrador' || user?.role === 'gestor';
+  const [status, setStatus] = useState<any | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const load = async () => {
+    try {
+      const j = await leadFetch('/api/v1/automations/status');
+      setStatus(j.data || null);
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a carregar')); }
+  };
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
+  const toggleMaster = async () => {
+    if (!status) return;
+    setBusy(true); setMsg('');
+    try {
+      await leadFetch('/api/v1/settings', { method: 'PUT', body: JSON.stringify({ settings: { automation_enabled: !status.enabled } }) });
+      setMsg(status.enabled ? 'Automação pausada.' : 'Automação ligada.');
+      await load();
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a guardar')); }
+    setBusy(false);
+  };
+  const activateAll = async () => {
+    if (!confirm('Ativar todas as regras, passos da jornada e agendar as leads existentes?')) return;
+    setBusy(true); setMsg('');
+    try {
+      const j = await leadFetch('/api/v1/automations/activate-all', { method: 'POST', body: JSON.stringify({ limit: 200 }) });
+      const d = j.data || {};
+      setMsg(`Tudo ativo. Regras: ${d.rulesActivated ?? 0}, passos: ${d.stepsActivated ?? 0}, leads agendadas: ${d.journey?.leads ?? 0}.`);
+      await load();
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a ativar')); }
+    setBusy(false);
+  };
+  const wa = status?.whatsapp;
+  const waLabel = !wa ? 'a verificar' : wa.connected ? 'WhatsApp ligado' : wa.configured ? `WhatsApp ${wa.status}` : 'WhatsApp sem credenciais';
+  return <Section title="Ativação geral" note="Motor, regras, jornada e WhatsApp num só painel.">
+    {!status ? <div className="skeleton" style={{ height: 10 }} /> : <>
+      <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.6rem' }}>
+        <Status tone={status.enabled ? 'good' : 'warn'}>{status.enabled ? 'Automação ligada' : 'Automação pausada'}</Status>
+        <Status tone={status.rules.active > 0 ? 'good' : 'pending'}>{`Regras ${status.rules.active}/${status.rules.total}`}</Status>
+        <Status tone={status.journey.activeSteps > 0 ? 'good' : 'pending'}>{`Jornada ${status.journey.activeSteps}/${status.journey.steps}`}</Status>
+        <Status tone={wa?.connected ? 'good' : wa?.configured ? 'warn' : 'pending'}>{waLabel}</Status>
+        {status.dryRun && <Status tone="warn">Simulação</Status>}
+      </div>
+      <div className="section-note" style={{ marginBottom: '.55rem' }}>
+        {wa?.configured
+          ? (wa.connected ? (wa.message || 'Graph API ligada.') : `Configurado, mas sem ligação: ${wa.message || wa.status}.`)
+          : 'Falta configurares o token e o phone number ID em Integrações. Até lá, os envios ficam em espera.'}
+      </div>
+      <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}>
+        {canManage && <button className="btn-primary" onClick={activateAll} disabled={busy}><Zap size={14} /> {busy ? 'A ativar.' : 'Ativar tudo'}</button>}
+        {canManage && <button className="btn-secondary" onClick={toggleMaster} disabled={busy}>{status.enabled ? <><Pause size={14} /> Pausar automação</> : <><Play size={14} /> Ligar automação</>}</button>}
+        <Link href="/admin/integracoes" className="btn-secondary"><Link2 size={14} /> Configurar WhatsApp</Link>
+      </div>
+      {msg && <div style={{ fontSize: '.72rem', marginTop: '.5rem' }}>{msg}</div>}
+    </>}
+  </Section>;
+}
+
+function MemberJourneySection() {
+  const [steps, setSteps] = useState<any[]>([]);
+  const [runs, setRuns] = useState<any[]>([]);
+  const [stats, setStats] = useState<Record<string, number>>({});
+  const [whatsappReady, setWhatsappReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
+  const [edit, setEdit] = useState<any | null>(null);
+  const load = async () => {
+    try {
+      const j = await leadFetch('/api/v1/member-journey');
+      setSteps(j.data?.steps || []);
+      setRuns(j.data?.runs || []);
+      setStats(j.data?.stats || {});
+      setWhatsappReady(Boolean(j.data?.whatsappReady));
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a carregar')); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+  const saveStep = async () => {
+    if (!edit) return;
+    try {
+      await leadFetch(`/api/v1/member-journey/steps/${edit.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: edit.name, message: edit.message, delayHours: edit.delay_hours,
+          templateName: edit.template_name || null, language: edit.language, active: edit.active,
+        }),
+      });
+      setEdit(null); setMsg('Passo guardado.'); await load();
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a guardar')); }
+  };
+  const toggleStep = async (step: any) => {
+    try {
+      await leadFetch(`/api/v1/member-journey/steps/${step.id}`, { method: 'PATCH', body: JSON.stringify({ active: !step.active }) });
+      await load();
+    } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a guardar')); }
+  };
+  const total = Object.values(stats).reduce((a, b) => a + b, 0);
+  return <Section title="Jornada do membro" note="Sequência WhatsApp automática: boas-vindas → follow-ups → conversão. Os envios ficam em espera até a API do WhatsApp estar configurada.">
+    {loading ? <div className="skeleton" style={{ height: 10 }} /> : <>
+      <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.7rem', alignItems: 'center' }}>
+        <Status tone={whatsappReady ? 'good' : 'warn'}>{whatsappReady ? 'WhatsApp pronto' : 'À espera da API WhatsApp'}</Status>
+        {['pending', 'sent', 'skipped', 'failed', 'cancelled'].map(k => <Status key={k} tone={k === 'sent' ? 'good' : k === 'failed' ? 'danger' : k === 'cancelled' ? 'neutral' : 'pending'}>{`${k}: ${stats[k] || 0}`}</Status>)}
+        <span className="section-note" style={{ marginLeft: 'auto' }}>{total} envios agendados</span>
+      </div>
+      <div style={{ display: 'flex', gap: '.4rem', marginBottom: '.7rem' }}>
+        <button className="btn-secondary" onClick={async () => {
+          setMsg('');
+          try {
+            const j = await leadFetch('/api/v1/member-journey/activate', { method: 'POST', body: JSON.stringify({ limit: 500 }) });
+            setMsg(`Jornada ativada: ${j.data?.leads ?? 0} leads, ${j.data?.scheduled ?? 0} envios agendados.`);
+            await load();
+          } catch (e: any) { setMsg('Erro: ' + (e.message || 'falha a ativar')); }
+        }}><Play size={14} /> Ativar para leads existentes</button>
+      </div>
+      <div style={{ display: 'grid', gap: '.45rem' }}>{steps.map((s, i) => <div key={s.id} className="card" style={{ boxShadow: 'none', padding: '.7rem', display: 'grid', gridTemplateColumns: '1fr auto', gap: '.6rem', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '.74rem' }}>{String(i + 1).padStart(2, '0')} · {s.name}{s.template_name ? ` · template ${s.template_name}` : ''}</div>
+          <div className="section-note">Atraso: {s.delay_hours}h · {s.active ? 'Ativo' : 'Inativo'} · {String(s.message || '').slice(0, 110)}{String(s.message || '').length > 110 ? '…' : ''}</div>
+        </div>
+        <div style={{ display: 'flex', gap: '.3rem' }}>
+          <button className="btn-quiet" aria-label={s.active ? 'Desativar passo' : 'Ativar passo'} onClick={() => toggleStep(s)}>{s.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />}</button>
+          <button className="btn-secondary" onClick={() => setEdit({ ...s })}>Editar</button>
+        </div>
+      </div>)}</div>
+      <div style={{ marginTop: '.8rem' }}>
+        <div className="eyebrow" style={{ marginBottom: '.35rem' }}>Últimos envios</div>
+        {runs.length === 0 ? <div className="section-note">Sem envios agendados ainda.</div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Lead</th><th>Passo</th><th>Estado</th><th>Prazo</th><th>Erro</th></tr></thead><tbody>{runs.slice(0, 8).map(r => <tr key={r.id}><td>{r.lead_name}</td><td>{r.step_name}</td><td>{r.status}</td><td>{r.due_at ? new Date(r.due_at).toLocaleString('pt-PT') : '—'}</td><td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.last_error || '—'}</td></tr>)}</tbody></table></div>}
+      </div>
+      {msg && <div style={{ fontSize: '.72rem', marginTop: '.5rem' }}>{msg}</div>}
+    </>}
+    {edit && <div className="modal-backdrop" onClick={() => setEdit(null)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px', padding: '1.2rem' }}>
+      <h3 style={{ marginBottom: '.6rem' }}>Editar passo</h3>
+      <label className="form-label">Nome</label>
+      <input className="input" style={{ width: '100%' }} value={edit.name || ''} onChange={e => setEdit({ ...edit, name: e.target.value })} />
+      <div className="fila-dupla" style={{ marginTop: '.55rem' }}>
+        <div style={{ flex: 1 }}><label className="form-label">Atraso (horas)</label><input className="input" type="number" min={0} value={edit.delay_hours ?? 0} onChange={e => setEdit({ ...edit, delay_hours: e.target.value })} /></div>
+        <div style={{ flex: 1 }}><label className="form-label">Template (opcional)</label><input className="input" value={edit.template_name || ''} onChange={e => setEdit({ ...edit, template_name: e.target.value })} placeholder="ex: boas_vindas" /></div>
+      </div>
+      <label className="form-label" style={{ marginTop: '.55rem' }}>Mensagem (variáveis: {'{{nome}}'}, {'{{produto}}'})</label>
+      <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }} value={edit.message || ''} onChange={e => setEdit({ ...edit, message: e.target.value })} />
+      <label className="form-label" style={{ marginTop: '.55rem' }}>Idioma</label>
+      <input className="input" value={edit.language || 'pt_PT'} onChange={e => setEdit({ ...edit, language: e.target.value })} />
+      <label style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginTop: '.65rem', fontSize: '.75rem' }}><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} /> Passo ativo</label>
+      <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
+        <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setEdit(null)}>Cancelar</button>
+        <button className="btn-primary" style={{ flex: 1 }} onClick={saveStep}><Check size={14} /> Guardar</button>
+      </div>
+    </div></div>}
+  </Section>;
+}
+
 function AutomationsPage() {
   const { data, refetch } = useListAutomations({ refetchInterval: 300000 });
   const toggleMut = useToggleAutomation();
@@ -2829,7 +2987,7 @@ function AutomationsPage() {
       onError: (e: any) => setFMsg('Erro: ' + (e.message || 'desconhecido')),
     });
   };
-  return <><PageHeader eyebrow="Ecossistema · Orquestração" title="Automações" subtitle="Regras orientadas a eventos, com execução auditável." action={<button className="btn-primary" onClick={() => { setFMsg(''); setOpen(true); }}><Plus size={14} /> Nova automação</button>} /><Section title="Regras activas" note={`${rules.filter((x: any) => x.active).length} de ${rules.length} activas`}><div style={{ display: 'grid', gap: '.55rem' }}>{rules.map((r: any, i: number) => <div key={r.id} className="card" style={{ boxShadow: 'none', padding: '.8rem', display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr auto', gap: '.8rem', alignItems: 'center' }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}><div style={{ width: 29, height: 29, borderRadius: 7, display: 'grid', placeItems: 'center', background: r.active ? 'hsl(var(--accent) / .25)' : 'hsl(var(--muted))', color: r.active ? 'hsl(38 60% 35%)' : 'hsl(var(--muted-foreground))' }}><Zap size={14} /></div><div><div style={{ fontWeight: 700, fontSize: '.75rem' }}>{r.name}</div><div className="section-note">Regra {String(i + 1).padStart(2, '0')} · {r.runCount || 0} execuções</div></div></div><div><div className="eyebrow">Quando</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{triggerLabel(r.trigger)}</div></div><div><div className="eyebrow">Executar</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{describeAction(r.action)}</div><div className="section-note">{r.lastRunAt ? `Última: ${new Date(r.lastRunAt).toLocaleString('pt-PT')}` : 'Ainda não executou'}</div></div><div style={{ textAlign: 'right' }}><button className="btn-quiet" onClick={() => toggleMut.mutate(r.id)}>{r.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />} {r.active ? 'Activo' : 'Inactivo'}</button><button className="btn-quiet" onClick={() => { if (confirm('Eliminar automação?')) deleteMut.mutate(r.id); }}><Trash2 size={14} /></button></div></div>)}</div></Section>
+  return <><PageHeader eyebrow="Ecossistema · Orquestração" title="Automações" subtitle="Regras orientadas a eventos, com execução auditável." action={<button className="btn-primary" onClick={() => { setFMsg(''); setOpen(true); }}><Plus size={14} /> Nova automação</button>} /><AutomationStatusPanel /><MemberJourneySection /><Section title="Regras activas" note={`${rules.filter((x: any) => x.active).length} de ${rules.length} activas`}><div style={{ display: 'grid', gap: '.55rem' }}>{rules.map((r: any, i: number) => <div key={r.id} className="card" style={{ boxShadow: 'none', padding: '.8rem', display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr auto', gap: '.8rem', alignItems: 'center' }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}><div style={{ width: 29, height: 29, borderRadius: 7, display: 'grid', placeItems: 'center', background: r.active ? 'hsl(var(--accent) / .25)' : 'hsl(var(--muted))', color: r.active ? 'hsl(38 60% 35%)' : 'hsl(var(--muted-foreground))' }}><Zap size={14} /></div><div><div style={{ fontWeight: 700, fontSize: '.75rem' }}>{r.name}</div><div className="section-note">Regra {String(i + 1).padStart(2, '0')} · {r.runCount || 0} execuções</div></div></div><div><div className="eyebrow">Quando</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{triggerLabel(r.trigger)}</div></div><div><div className="eyebrow">Executar</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{describeAction(r.action)}</div><div className="section-note">{r.lastRunAt ? `Última: ${new Date(r.lastRunAt).toLocaleString('pt-PT')}` : 'Ainda não executou'}</div></div><div style={{ textAlign: 'right' }}><button className="btn-quiet" onClick={() => toggleMut.mutate(r.id)}>{r.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />} {r.active ? 'Activo' : 'Inactivo'}</button><button className="btn-quiet" onClick={() => { if (confirm('Eliminar automação?')) deleteMut.mutate(r.id); }}><Trash2 size={14} /></button></div></div>)}</div></Section>
   <Section title="Últimas execuções" note="Eventos processados pelo motor (mais recentes primeiro)">
     {events.length === 0 ? <div className="section-note">Sem eventos registados.</div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Evento</th><th>Estado</th><th>Tentativas</th><th>Criado</th><th>Erro</th></tr></thead><tbody>{events.map((e: any) => <tr key={e.id}><td>{triggerLabel(e.event_type)}</td><td>{e.status}</td><td>{e.attempts ?? 0}</td><td>{e.created_at ? new Date(e.created_at).toLocaleString('pt-PT') : '—'}</td><td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.last_error || '—'}</td></tr>)}</tbody></table></div>}
   </Section>

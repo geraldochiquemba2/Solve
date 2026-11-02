@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, varchar, integer, decimal, boolean, timestamp, date, jsonb, pgEnum, index } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["administrador", "gestor", "comercial", "financeiro", "operacional"]);
@@ -79,7 +79,7 @@ export const leadCampaignsTable = pgTable(
     externalId: varchar("external_id", { length: 100 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [unique().on(t.leadId, t.source)],
+  (t) => [index("lead_campaigns_lead_idx").on(t.leadId)],
 );
 
 // Avisos internos da equipa (sino do CRM). Uma linha por destinatÃ¡rio: assim
