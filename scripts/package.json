@@ -7,7 +7,10 @@
     "push-schema": "node ./push-schema.mjs",
     "backup-neon": "node ./backup-neon.mjs",
     "bootstrap-db": "node ./bootstrap-db.mjs",
-    "import-leads": "node ./import-leads.mjs"
+    "import-leads": "node ./import-leads.mjs",
+    "configure-automation": "node ./configure-automation.mjs",
+    "create-wa-templates": "node ./create-whatsapp-templates.mjs",
+    "check-wa-readiness": "node ./check-whatsapp-readiness.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
