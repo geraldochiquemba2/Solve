@@ -9,6 +9,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
 import { triggerWebhooks } from "./webhook-delivery";
+import { whatsappClient } from "./whatsapp";
 
 export type AutomationEventType =
   | "payment_confirmed"
@@ -23,7 +24,7 @@ interface AutomationContext {
 }
 
 interface AutomationAction {
-  type: "update_customer_state" | "create_task" | "send_notification" | "sync_to_cademi";
+  type: "update_customer_state" | "create_task" | "send_notification" | "sync_to_cademi" | "send_whatsapp";
   params: Record<string, unknown>;
 }
 
@@ -128,6 +129,9 @@ async function executeAction(
     case "sync_to_cademi":
       await handleSyncToCademi(action.params, context);
       break;
+    case "send_whatsapp":
+      await handleSendWhatsApp(action.params, context);
+      break;
     default:
       logger.warn({ actionType: action.type }, "Unknown automation action type");
   }
@@ -172,15 +176,87 @@ async function handleCreateTask(
   });
 }
 
+function renderTemplate(text: string, ctx: Record<string, unknown>): string {
+  return text.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_, key: string) => {
+    const val = key.split(".").reduce<unknown>((acc, k) => (acc && typeof acc === "object" ? (acc as any)[k] : undefined), ctx);
+    return val == null ? "" : String(val);
+  });
+}
+
+async function resolveCustomerPhone(context: AutomationContext): Promise<string | null> {
+  const direct = (context.data.customerPhone as string) || (context.data.phone as string) || (context.data.to as string);
+  if (direct && String(direct).trim()) return String(direct).trim();
+
+  const customerId = context.data.customerId as string | undefined;
+  if (!customerId) return null;
+  const customer = await db.query.customersTable.findFirst({
+    where: eq(customersTable.id, customerId),
+  });
+  return customer?.phone || null;
+}
+
+async function handleSendWhatsApp(
+  params: Record<string, unknown>,
+  context: AutomationContext,
+): Promise<void> {
+  const mode = ((params.mode as string) || "text") as "text" | "template";
+  const to = (params.to as string) || (await resolveCustomerPhone(context));
+  if (!to) {
+    logger.warn({ context: context.data }, "send_whatsapp skipped: no destination phone");
+    return;
+  }
+  if (!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)) {
+    logger.warn("send_whatsapp skipped: WhatsApp not configured");
+    return;
+  }
+
+  const ctx = { ...context.data, eventType: context.eventType };
+
+  if (mode === "template") {
+    const templateName = params.template_name as string;
+    if (!templateName) {
+      logger.warn("send_whatsapp template skipped: missing template_name");
+      return;
+    }
+    const languageCode = (params.language_code as string) || "pt_BR";
+    const vars = Array.isArray(params.variables)
+      ? (params.variables as string[]).map((v) => renderTemplate(String(v), ctx))
+      : [];
+    const resp = await whatsappClient.sendTemplate(to, templateName, vars, languageCode);
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      throw new Error(`WhatsApp template failed (${resp.status}): ${body.slice(0, 500)}`);
+    }
+    logger.info({ to, templateName }, "WhatsApp template sent by automation");
+    return;
+  }
+
+  const textRaw = (params.message as string) || (params.text as string) || "";
+  if (!textRaw.trim()) {
+    logger.warn("send_whatsapp text skipped: empty message");
+    return;
+  }
+  const text = renderTemplate(textRaw, ctx);
+  const resp = await whatsappClient.sendText(to, text);
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`WhatsApp text failed (${resp.status}): ${body.slice(0, 500)}`);
+  }
+  logger.info({ to }, "WhatsApp text sent by automation");
+}
+
 async function handleSendNotification(
   params: Record<string, unknown>,
   context: AutomationContext,
 ): Promise<void> {
   const channel = (params.channel as string) || "internal";
-  const message = (params.message as string) || `Evento: ${context.eventType}`;
+  const message = renderTemplate((params.message as string) || `Evento: ${context.eventType}`, {
+    ...context.data,
+    eventType: context.eventType,
+  });
   const recipients = params.recipients as string[] | undefined;
 
-  logger.info({ channel, message, recipients }, "Notification sent by automation");
+  logger.info({ channel, message, recipients }, "Notification logged by automation");
 
   await db.insert(auditLogsTable).values({
     actor: "automation",

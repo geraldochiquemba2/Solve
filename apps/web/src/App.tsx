@@ -252,6 +252,18 @@ const navGroups: Array<{ label: string; roles?: string[]; items: Array<{ href: s
 ];
 
 const money = (n: number) => new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(n);
+const iniciais = (nome?: string | null) => {
+  const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return '?';
+  return (partes[0][0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+};
+const ROLE_LABELS: Record<string, string> = {
+  administrador: 'Administrador',
+  gestor: 'Gestor',
+  comercial: 'Comercial',
+  cliente: 'Cliente',
+};
+const roleLabel = (role?: string | null) => ROLE_LABELS[String(role || '').toLowerCase()] || 'Membro da equipa';
 
 // Tempo relativo para estados de sincronização (evita ISO cru no UI).
 const fmtRel = (d?: string | null) => {
@@ -285,16 +297,35 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 function PageHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle?: string; action?: ReactNode }) {
   return <div className="section-header" style={{ marginBottom: '.9rem' }}><div><div className="eyebrow">{eyebrow}</div><h1 className="page-title">{title}</h1>{subtitle && <p className="page-subtitle">{subtitle}</p>}</div>{action}</div>;
 }
-function Metric({ label, value, note, trend, negative = false, onClick, active = false, loading = false, testId }: { label: string; value: string; note: string; trend?: string; negative?: boolean; onClick?: () => void; active?: boolean; loading?: boolean; testId?: string }) {
-  // Sem clique é um cartão informative; com clique é um botão de filtro: `<div
+function Metric({ label, value, note, trend, negative = false, onClick, active = false, loading = false, testId, icon: Icon, tone = 'neutral' }: { label: string; value: string; note: string; trend?: string; negative?: boolean; onClick?: () => void; active?: boolean; loading?: boolean; testId?: string; icon?: any; tone?: 'neutral' | 'navy' | 'good' | 'warn' | 'bad' }) {
+  // Sem clique é um cartão informativo; com clique é um botão de filtro: `<div
   // onClick>` não recebe foco nem é anunciável, e estes KPIs são o filtro
   // principal da página de leads (WCAG 2.1.1 / 4.1.2).
-  const conteudo = loading ? <><div className="skeleton" style={{ width: '55%', height: '.66rem' }} /><div className="skeleton" style={{ width: '85%', height: '1.45rem', marginTop: '.35rem' }} /><div className="skeleton" style={{ width: '75%', height: '.7rem', marginTop: '.32rem' }} /></> : <><div className="eyebrow">{label}</div><div className="metric-value">{value}</div><div className={`metric-note${trend ? (negative ? ' text-bad' : ' text-good') : ''}`}>{trend && (negative ? <ArrowDownRight size={12} style={{ verticalAlign: 'middle' }} /> : <ArrowUpRight size={12} style={{ verticalAlign: 'middle' }} />)} {trend}{trend && ' · '}{note}</div></>;
+  const conteudo = loading ? (
+    <>
+      <div className="metric-head">
+        <span className="skeleton" style={{ width: 26, height: 26, borderRadius: 8 }} />
+        <span className="skeleton" style={{ width: '52%', height: '.6rem' }} />
+      </div>
+      <div className="skeleton" style={{ width: '78%', height: '1.5rem', marginTop: '.6rem' }} />
+      <div className="skeleton" style={{ width: '64%', height: '.6rem', marginTop: '.5rem' }} />
+    </>
+  ) : (
+    <>
+      <div className="metric-head">
+        {Icon ? <span className={`metric-icon metric-icon-${tone}`} aria-hidden="true"><Icon size={14} /></span> : null}
+        <span className="metric-label">{label}</span>
+        {trend ? <span className={`metric-trend ${negative ? 'text-bad' : 'text-good'}`}>{negative ? <ArrowDownRight size={12} /> : <ArrowUpRight size={12} />}{trend}</span> : null}
+      </div>
+      <div className="metric-value">{value}</div>
+      <div className={`metric-note${negative ? ' is-negative' : ''}`}>{note}</div>
+    </>
+  );
   if (!onClick) return <div className="card metric" data-testid={testId}>{conteudo}</div>;
-  return <button type="button" className="card metric" data-testid={testId} aria-pressed={active} onClick={onClick} style={{ textAlign: 'left', font: 'inherit', color: 'inherit', ...(active ? { backgroundColor: 'hsl(var(--accent) / .1)' } : {}) }}>{conteudo}</button>;
+  return <button type="button" className={`card metric metric-btn${active ? ' is-active' : ''}`} data-testid={testId} aria-pressed={active} onClick={onClick}>{conteudo}</button>;
 }
 function Section({ title, note, action, children, className = '' }: { title: string; note?: string; action?: ReactNode; children: ReactNode; className?: string }) {
-  return <section className={`card ${className}`} style={{ padding: '1.1rem' }}><div className="section-header"><div><h2 className="section-title">{title}</h2>{note && <p className="section-note">{note}</p>}</div>{action}</div>{children}</section>;
+  return <section className={`card section-card ${className}`}><div className="section-header"><div><h2 className="section-title">{title}</h2>{note && <p className="section-note">{note}</p>}</div>{action}</div>{children}</section>;
 }
 function EmptyState({ title, text, action }: { title: string; text: string; action?: ReactNode }) {
   return <div style={{ padding: '2.6rem 1rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}><Boxes size={25} style={{ margin: '0 auto .7rem', opacity: .55 }} /><div style={{ color: 'hsl(var(--foreground))', fontWeight: 700, fontSize: '.85rem' }}>{title}</div><p style={{ fontSize: '.75rem', margin: '.35rem auto 1rem', maxWidth: 330 }}>{text}</p>{action}</div>;
@@ -317,7 +348,7 @@ function FormField({ label, value, onChange, placeholder, type = 'text' }: { lab
   return <label><span className="form-label">{label}</span><input className="input" type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} /></label>;
 }
 
-function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClose: () => void; auditCount?: number; userRole?: string }) {
+function Sidebar({ open, onClose, auditCount, userRole, userName }: { open: boolean; onClose: () => void; auditCount?: number; userRole?: string; userName?: string }) {
   const [location] = useLocation();
   const { logout } = useAuth();
   useEffect(() => {
@@ -329,7 +360,7 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
     } catch {}
   }, []);
   const isSolve = solveAtivo;
-  // Comercial vê só o seu painel + Clientes + Leads; Governação só admin/gestor.
+  // Comercial vê só o seu painel + Clientes + Leads; Governança só admin/gestor.
   const COMERCIAL_HREFS = ['/admin/meu-progresso', '/admin/leads', '/admin/pipeline', '/admin/clientes'];
   const visibleGroups = navGroups
     .filter((g) => !g.roles || (userRole ? g.roles.includes(userRole) : true))
@@ -343,32 +374,139 @@ function Sidebar({ open, onClose, auditCount, userRole }: { open: boolean; onClo
   const shownGroups = isSolve
     ? visibleGroups.map((g) => ({ ...g, items: g.items.filter((i) => i.href !== '/admin/academia' && i.href !== '/admin/samorafit-studio' && i.href !== '/admin/integracoes') })).filter((g) => g.items.length > 0)
     : visibleGroups;
-  return <><aside className={`sidebar ${open ? 'open' : ''}`} style={{ width: 238, minHeight: '100dvh', padding: '1.25rem .8rem', position: 'fixed', inset: '0 auto 0 0', zIndex: 40, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-    {isSolve ? <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.15rem .55rem 1.4rem' }}><img src="/solve-corporate-logo.png" alt="Solve Corporate" style={{ height: 36, width: 'auto', maxWidth: '100%', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} /></div> : <div style={{ display: 'flex', alignItems: 'center', padding: '.15rem .55rem 1.4rem' }}><img src="/samorafit-logo-dark.png" alt="SamoraFit" style={{ height: 30, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} /></div>}
-    <div style={{ display: 'grid', gap: '1.15rem', flex: 1 }}>{shownGroups.map(group => <div key={group.label}><div className="eyebrow" style={{ color: 'hsl(var(--sidebar-foreground) / .62)', padding: '0 .7rem .42rem', fontSize: '.57rem' }}>{group.label}</div><nav style={{ display: 'grid', gap: '.15rem' }}>{group.items.map(item => { const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href); const I = item.icon; return <Link key={item.href} href={item.href} className={`sidebar-link ${active ? 'active' : ''}`} data-testid={`link-nav-${item.label.toLowerCase()}`} onClick={onClose}><I size={15} strokeWidth={active ? 2.4 : 1.8} /><span>{item.label}</span>{item.label === 'Auditoria' && auditCount ? <span style={{ marginLeft: 'auto', fontSize: '.6rem', padding: '.12rem .35rem', borderRadius: 5, background: 'hsl(var(--sidebar-primary) / .2)', color: 'hsl(var(--sidebar-primary))' }}>{auditCount}</span> : null}</Link>; })}</nav></div>)}</div>
-    <button onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }} className="sidebar-link" style={{ marginTop: 'auto', padding: '.55rem .7rem', borderRadius: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.75rem', color: 'hsl(3 67% 55%)', cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left' }}><LogOut size={15} /><span>Sair da sessão</span></button>
-  </aside>{open && <div className="mobile-overlay" onClick={onClose} />}</>;
+  const nome = userName?.trim() || 'A minha conta';
+  return <>
+    <aside className={`sidebar ${open ? 'open' : ''}`} aria-label="Navegação principal">
+      <div className="sidebar-brand">
+        {isSolve
+          ? <img src="/solve-corporate-logo.png" alt="Solve Corporate" style={{ filter: 'brightness(0) invert(1)' }} />
+          : <img src="/samorafit-logo-dark.png" alt="SamoraFit" />}
+      </div>
+      <div className="sidebar-workspace">
+        <span className="sidebar-workspace-dot" aria-hidden="true" />
+        <div>
+          <strong>{isSolve ? 'Solve Corporate' : 'SamoraFit'}</strong>
+          <span>{roleLabel(userRole)} · espaço de trabalho</span>
+        </div>
+      </div>
+      <div className="sidebar-nav">
+        {shownGroups.map(group => (
+          <div key={group.label} className="sidebar-group">
+            <div className="sidebar-group-label">{group.label}</div>
+            <nav aria-label={group.label} style={{ display: 'grid', gap: '.15rem' }}>
+              {group.items.map(item => {
+                const active = item.href === '/admin' ? location === '/admin' : location.startsWith(item.href);
+                const I = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`sidebar-link ${active ? 'active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                    data-testid={`link-nav-${item.label.toLowerCase()}`}
+                    onClick={onClose}
+                  >
+                    <I size={15} strokeWidth={active ? 2.3 : 1.8} />
+                    <span>{item.label}</span>
+                    {item.label === 'Auditoria' && auditCount ? <span className="sidebar-badge">{auditCount}</span> : null}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        ))}
+      </div>
+      <div className="sidebar-account">
+        <span className="sidebar-avatar" aria-hidden="true">{iniciais(userName)}</span>
+        <div className="sidebar-account-copy">
+          <strong>{nome}</strong>
+          <span>{roleLabel(userRole)}</span>
+        </div>
+        <button
+          type="button"
+          className="sidebar-logout"
+          aria-label="Sair da sessão"
+          title="Sair da sessão"
+          onClick={async () => { await logout(); onClose(); window.location.href = '/login'; }}
+        >
+          <LogOut size={15} />
+        </button>
+      </div>
+    </aside>
+    {open && <div className="mobile-overlay" onClick={onClose} />}
+  </>;
 }
 function Topbar({ onMenu, userName }: { onMenu: () => void; userName?: string }) {
+  const [location] = useLocation();
   const today = new Date().toLocaleDateString('pt-AO', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-  const displayName = userName || 'Utilizador';
-  const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-  const { user } = useAuth();
+  const todayCap = today.charAt(0).toUpperCase() + today.slice(1);
+  const { user, logout } = useAuth();
+  const displayName = userName?.trim() || user?.name?.trim() || 'Utilizador';
+  const initials = iniciais(displayName);
+  const atual = navGroups
+    .flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })))
+    .filter((i) => (i.href === '/admin' ? location === '/admin' : location.startsWith(i.href)))
+    .sort((a, b) => b.href.length - a.href.length)[0];
   // Só a equipa comercial/gestão recebe avisos de leads novas.
   const temAvisos = !!user && ['administrador', 'gestor', 'comercial'].includes(String(user.role));
   const { items, unread, marcarLida, marcarTodasLidas } = useNotifications(temAvisos);
   const [sinoAberto, setSinoAberto] = useState(false);
+  const [perfilAberto, setPerfilAberto] = useState(false);
   const refSino = useRef<HTMLDivElement | null>(null);
+  const refPerfil = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!sinoAberto) return;
     const fora = (e: MouseEvent) => { if (refSino.current && !refSino.current.contains(e.target as Node)) setSinoAberto(false); };
     document.addEventListener('mousedown', fora);
     return () => document.removeEventListener('mousedown', fora);
   }, [sinoAberto]);
-  return <header className="topbar" style={{ height: 65, borderBottom: '1px solid hsl(var(--border))', background: 'hsl(var(--card) / .84)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', gap: '1rem', padding: '0 1.7rem', position: 'sticky', top: 0, zIndex: 20 }}><button className="mobile-only btn-quiet" onClick={onMenu} data-testid="button-open-menu" aria-label="Abrir menu"><Menu size={19} /></button><div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.35rem' }}><span className="desktop-only" style={{ color: 'hsl(var(--muted-foreground))', fontSize: '.7rem', marginRight: '.45rem' }}>{today}</span><div className="desktop-only" style={{ height: 22, width: 1, background: 'hsl(var(--border))', margin: '0 .25rem' }} />{temAvisos && <div ref={refSino} style={{ position: 'relative' }}><button className="btn-quiet" data-testid="button-notificacoes" aria-label={`Notificações${unread ? ` (${unread} por ler)` : ''}`} aria-expanded={sinoAberto} onClick={() => setSinoAberto(v => !v)} style={{ position: 'relative', padding: '.4rem', borderRadius: '.45rem' }}><Bell size={17} />{unread > 0 && <span style={{ position: 'absolute', top: -2, right: -3, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8, background: 'hsl(3 67% 55%)', color: '#fff', fontSize: '.55rem', fontWeight: 700, display: 'grid', placeItems: 'center' }}>{unread > 9 ? '9+' : unread}</span>}</button>{sinoAberto && <div role="dialog" aria-label="Notificações" style={{ position: 'absolute', right: 0, top: 'calc(100% + .45rem)', width: 330, maxWidth: '88vw', maxHeight: 420, overflowY: 'auto', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.6rem', boxShadow: '0 18px 40px hsl(0 0% / .18)', zIndex: 40 }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.6rem .7rem', borderBottom: '1px solid hsl(var(--border))' }}><span style={{ fontWeight: 700, fontSize: '.75rem' }}>Notificações</span>{unread > 0 && <button className="btn-quiet" onClick={() => marcarTodasLidas()} style={{ fontSize: '.65rem' }}>Marcar todas como lidas</button>}</div>{items.length === 0 ? <div style={{ padding: '1rem .8rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))', textAlign: 'center' }}>Sem avisos por agora.</div> : items.map(n => <button key={n.id} onClick={() => { if (!n.read) marcarLida(n.id); setSinoAberto(false); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '.55rem .7rem', border: 'none', borderBottom: '1px solid hsl(var(--border) / .6)', background: n.read ? 'transparent' : 'hsl(var(--primary) / .06)', cursor: 'pointer' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>{!n.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--primary))', flexShrink: 0 }} />}<span style={{ fontWeight: n.read ? 600 : 700, fontSize: '.74rem' }}>{n.title}</span><span style={{ marginLeft: 'auto', fontSize: '.6rem', color: 'hsl(var(--muted-foreground))', flexShrink: 0 }}>{fmtRel(n.createdAt)}</span></div>{n.body && <div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))', marginTop: '.18rem', paddingLeft: n.read ? 0 : '.95rem' }}>{n.body}</div>}</button>)}</div>}</div>}<div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '.45rem', fontSize: '.75rem', fontWeight: 600 }}><div style={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', background: 'hsl(var(--primary))', color: 'white', fontSize: '.62rem' }}>{initials}</div>{displayName}</div></div></header>;
-}
-
-function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: Customer[]; userName?: string }) {
+  useEffect(() => {
+    if (!perfilAberto) return;
+    const fora = (e: MouseEvent) => { if (refPerfil.current && !refPerfil.current.contains(e.target as Node)) setPerfilAberto(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPerfilAberto(false); };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc); };
+  }, [perfilAberto]);
+  useEffect(() => { setPerfilAberto(false); }, [location]);
+  const terminarSessao = async () => { setPerfilAberto(false); await logout(); window.location.href = '/login'; };
+  return <header className="topbar">
+    <div className="topbar-context">
+      <button className="mobile-only btn-quiet" onClick={onMenu} data-testid="button-open-menu" aria-label="Abrir menu"><Menu size={19} /></button>
+      <div className="topbar-crumbs" aria-label="Localização atual">
+        <span className="topbar-crumb-group">{atual?.group || 'Workspace'}</span>
+        <ChevronRight size={12} className="crumb-sep" aria-hidden="true" />
+        <strong>{atual?.label || 'Dashboard'}</strong>
+      </div>
+    </div>
+    <div className="topbar-right">
+      <span className="desktop-only topbar-date">{todayCap}</span>
+      {temAvisos && <div ref={refSino} style={{ position: 'relative' }}>
+        <button className="btn-quiet" data-testid="button-notificacoes" aria-label={`Notificações${unread ? ` (${unread} por ler)` : ''}`} aria-expanded={sinoAberto} onClick={() => setSinoAberto(v => !v)} style={{ position: 'relative', padding: '.4rem', borderRadius: '.45rem' }}>
+          <Bell size={17} />
+          {unread > 0 && <span style={{ position: 'absolute', top: -2, right: -3, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 8, background: 'hsl(3 67% 55%)', color: '#fff', fontSize: '.55rem', fontWeight: 700, display: 'grid', placeItems: 'center' }}>{unread > 9 ? '9+' : unread}</span>}
+        </button>
+        {sinoAberto && <div role="dialog" aria-label="Notificações" style={{ position: 'absolute', right: 0, top: 'calc(100% + .45rem)', width: 330, maxWidth: '88vw', maxHeight: 420, overflowY: 'auto', background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '.6rem', boxShadow: '0 18px 40px hsl(0 0% / .18)', zIndex: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.6rem .7rem', borderBottom: '1px solid hsl(var(--border))' }}><span style={{ fontWeight: 700, fontSize: '.75rem' }}>Notificações</span>{unread > 0 && <button className="btn-quiet" onClick={() => marcarTodasLidas()} style={{ fontSize: '.65rem' }}>Marcar todas como lidas</button>}</div>
+          {items.length === 0 ? <div style={{ padding: '1rem .8rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))', textAlign: 'center' }}>Sem avisos por agora.</div> : items.map(n => <button key={n.id} onClick={() => { if (!n.read) marcarLida(n.id); setSinoAberto(false); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '.55rem .7rem', border: 'none', borderBottom: '1px solid hsl(var(--border) / .6)', background: n.read ? 'transparent' : 'hsl(var(--primary) / .06)', cursor: 'pointer' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>{!n.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--primary))', flexShrink: 0 }} />}<span style={{ fontWeight: n.read ? 600 : 700, fontSize: '.74rem' }}>{n.title}</span><span style={{ marginLeft: 'auto', fontSize: '.6rem', color: 'hsl(var(--muted-foreground))', flexShrink: 0 }}>{fmtRel(n.createdAt)}</span></div>{n.body && <div style={{ fontSize: '.67rem', color: 'hsl(var(--muted-foreground))', marginTop: '.18rem', paddingLeft: n.read ? 0 : '.95rem' }}>{n.body}</div>}</button>)}
+        </div>}
+      </div>}
+      <div className="desktop-only topbar-divider" />
+      <div className="topbar-profile" ref={refPerfil}>
+        <button type="button" className="topbar-user" aria-haspopup="menu" aria-expanded={perfilAberto} aria-label="Abrir menu da conta" onClick={() => setPerfilAberto(v => !v)}>
+          <span className="topbar-avatar" aria-hidden="true">{initials}</span>
+          <span className="topbar-user-copy"><strong>{displayName}</strong><span>{roleLabel(String(user?.role || ''))}</span></span>
+          <ChevronDown size={13} aria-hidden="true" />
+        </button>
+        {perfilAberto && <div className="topbar-menu" role="menu" aria-label="Conta">
+          <div className="topbar-menu-head"><strong>{displayName}</strong><span>{user?.email || roleLabel(String(user?.role || ''))}</span></div>
+          <Link className="topbar-menu-item" role="menuitem" href="/admin/definicoes" onClick={() => setPerfilAberto(false)}><Settings size={14} /> Definições</Link>
+          <button type="button" className="topbar-menu-item is-danger" role="menuitem" onClick={terminarSessao}><LogOut size={14} /> Terminar sessão</button>
+        </div>}
+      </div>
+    </div>
+  </header>;
+}function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: Customer[]; userName?: string }) {
   const [, setLocation] = useLocation();
   const statsQuery = useGetDashboardStats(REFETCH_5_MIN());
   const chartsQuery = useGetDashboardCharts(REFETCH_5_MIN());
@@ -502,16 +640,218 @@ function Dashboard({ leads, customers, userName }: { leads: Lead[]; customers: C
   };
   const [chartRange, setChartRange] = useState<'mes' | 'tudo'>('mes');
   const revenueShown = chartRange === 'mes' ? revenueData.slice(-4) : revenueData;
-  if (solveAtivo) return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita 30 dias" value="0 Kz" note="sem dados" /><Metric label="A receber" value="0 Kz" note="sem dados" /><Metric label="Em atraso" value="0 Kz" note="sem dados" /><Metric label="Leads" value="0" note="sem dados" /></div><Section title="Relatório do dia" note="Bloco de notas da operação"><div className="section-note">Sem dados para mostrar.</div></Section></>;
-  return <><PageHeader eyebrow="Operação · Hoje" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Receita 30 dias" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="pagamentos confirmados" loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} /><Metric label="A receber" value={money(pendTotal)} note={`${pendCount} transações pendentes`} loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} /><Metric label="Em atraso" value={money(lateTotal)} note={`${lateCount} em atenção`} negative loading={dashLoading} onClick={() => setLocation('/admin/pagamentos')} /><Metric label="Leads" value={String(totalLeads)} note={`${convRate}% conversão · ${newLeads7} novos 7d`} loading={dashLoading} onClick={() => setLocation('/admin/pipeline')} /></div>
-  <Section title="Relatório do dia" note="Bloco de notas da operação" action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={() => gerarRelatorioGeral('excel')} disabled={gerandoRelatorio}><FileSpreadsheet size={14} /> {gerandoRelatorio ? 'A gerar...' : 'Excel'}</button><button className="btn-secondary" onClick={() => gerarRelatorioGeral('pdf')} disabled={gerandoRelatorio}><FileText size={14} /> PDF</button><button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado!' : 'Copiar'}</button></div>}>
-    <div style={{ display: 'grid', gap: '.45rem', fontSize: '.76rem' }}>{reportLines.map(l => <div key={l} style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'hsl(var(--accent))', flexShrink: 0, transform: 'translateY(-1px)' }} />{l}</div>)}</div>
-  </Section>
-  <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1.35fr .85fr', gap: '.8rem', marginBottom: '.8rem' }}><Section title="Ritmo comercial" note="Receita confirmada por mês" action={<button className="btn-quiet" onClick={() => setChartRange(chartRange === 'mes' ? 'tudo' : 'mes')}>{chartRange === 'mes' ? 'Este mês' : 'Período total'} <ChevronDown size={13} /></button>}><div style={{ height: 165, display: 'flex', alignItems: 'end', gap: 'clamp(.4rem, 2.4vw, 1rem)', padding: '1rem .2rem .2rem', borderBottom: '1px solid hsl(var(--border))' }}>{dashLoading ? <div style={{ display: 'flex', gap: '.5rem', alignItems: 'end', flex: 1, width: '100%' }}><div className="skeleton" style={{ height: 60, flex: 1 }} /><div className="skeleton" style={{ height: 100, flex: 1 }} /><div className="skeleton" style={{ height: 80, flex: 1 }} /><div className="skeleton" style={{ height: 120, flex: 1 }} /></div> : (revenueShown.length > 0 ? revenueShown : []).map((d, i, arr) => { const max = Math.max(...arr.map(x => x.value ?? 0), 1); const pct = ((d.value ?? 0) / max) * 100; return <div key={i} style={{ flex: 1, height: `${Math.max(pct, 5)}%`, position: 'relative', minWidth: 7, background: i === arr.length - 1 ? 'hsl(var(--accent))' : 'hsl(var(--chart-2) / .72)', borderRadius: '3px 3px 0 0' }} title={`${d.value ?? 0} Kz`} />; })}</div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'hsl(var(--muted-foreground))', fontSize: '.65rem', paddingTop: '.45rem' }}>{dashLoading ? <span>A verificar…</span> : revenueShown.length > 0 ? revenueShown.map((d, i) => <span key={i}>{monthLabel(d.month) || `M${i + 1}`}</span>) : <span>Sem receita ainda — cria uma cobrança em Pagamentos</span>}</div></Section><Section title="Saúde do ecossistema" note={dashLoading ? 'A verificar…' : integrations.length > 0 ? `${integrations.length} canais` : 'Sem canais ligados'}><div style={{ display: 'grid', gap: '.72rem' }}>{integrations.length > 0 ? integrations.map((ig, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.72rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}><div style={{ width: 7, height: 7, borderRadius: '50%', background: ig.status === 'operacional' ? 'hsl(155 41% 43%)' : 'hsl(38 80% 50%)' }} />{ig.name}</div><Status tone={ig.status === 'operacional' ? 'good' : 'warn'}>{ig.status === 'operacional' ? 'Operacional' : ig.status}</Status></div>) : <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem dados de integração</div>}</div></Section></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.8rem' }}><Section title="Leads recentes" note="Últimas captações"><div style={{ display: 'grid', gap: '.5rem' }}>{(leads.length > 0 ? leads.slice(0, 5) : []).map(l => <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{l.company}</div></div><Status tone={l.status === 'Convertido' ? 'good' : l.status === 'Perdido' ? 'danger' : 'neutral'}>{l.status}</Status></div>)}</div></Section><Section title="Clientes activos" note="Estado das contas"><div style={{ display: 'grid', gap: '.5rem' }}>{(customers.length > 0 ? customers.slice(0, 5) : []).map(c => <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{c.name}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{c.company}</div></div><Status tone={c.state === 'Activo' ? 'good' : 'warn'}>{c.state}</Status></div>)}</div></Section></div><div className="content-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '.8rem', marginBottom: '.8rem' }}>
-<Section title="Funil de leads" note={`${totalLeads} oportunidades · ${convRate}% conversão`}><div style={{ display: 'grid', gap: '.55rem' }}>{dashLoading ? <><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /></> : funnel.map(f => { const max = Math.max(...funnel.map(x => x.count), 1); const isConv = f.key === 'convertido'; const isLost = f.key === 'perdido'; return <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600 }}>{f.label}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${f.count > 0 ? Math.max((f.count / max) * 100, 5) : 0}%`, background: isConv ? 'hsl(155 41% 43%)' : isLost ? 'hsl(0 84% 60%)' : 'hsl(var(--accent))', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{f.count}</span></div>; })}{!dashLoading && funnel.every(f => !f.count) && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Sem leads ainda — cria o primeiro em Leads</div>}</div></Section>
-<Section title="Origens de leads" note="De onde vêm as oportunidades"><div style={{ display: 'grid', gap: '.55rem' }}>{!dashLoading && sources.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Nada ainda — regista um lead para ver as origens</div>}{dashLoading ? <><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /><div className="skeleton" style={{ height: 8 }} /></> : sources.map(s => { const max = Math.max(...sources.map(x => x.count), 1); return <div key={s.source} style={{ display: 'grid', gridTemplateColumns: '104px 1fr 32px', alignItems: 'center', gap: '.6rem', fontSize: '.72rem' }}><span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{srcLabel(s.source)}</span><div style={{ height: 8, background: 'hsl(var(--secondary))', borderRadius: 4 }}><div style={{ height: '100%', width: `${s.count > 0 ? Math.max((s.count / max) * 100, 5) : 0}%`, background: 'hsl(var(--chart-2) / .8)', borderRadius: 4 }} /></div><span className="mono" style={{ textAlign: 'right', fontWeight: 700 }}>{s.count}</span></div>; })}</div></Section>
-<Section title="Métodos de pagamento" note="Transações por método"><div style={{ display: 'grid', gap: '.2rem' }}>{!dashLoading && payMethods.length === 0 && <div style={{ padding: '.7rem', fontSize: '.72rem', color: 'hsl(var(--muted-foreground))' }}>Nada ainda — confirma uma transação para ver os métodos</div>}{dashLoading ? <><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /><div className="skeleton" style={{ height: 28 }} /></> : payMethods.map(m => <div key={m.method} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.5rem 0', borderBottom: '1px solid hsl(var(--border))', fontSize: '.73rem' }}><div><div style={{ fontWeight: 600 }}>{m.method}</div><div style={{ color: 'hsl(var(--muted-foreground))' }}>{m.count} transações</div></div><span className="mono" style={{ fontWeight: 700 }}>{money(m.total)}</span></div>)}</div></Section>
-</div></>;
+  if (solveAtivo) return (
+    <>
+      <PageHeader eyebrow="Operação" title={metricTitle} subtitle="Resumo comercial e financeiro em tempo real." />
+      <div className="dash-kpis">
+        <Metric icon={CircleDollarSign} tone="navy" label="Receita 30 dias" value="0 Kz" note="sem dados" />
+        <Metric icon={Clock3} tone="warn" label="A receber" value="0 Kz" note="sem dados" />
+        <Metric icon={AlertTriangle} tone="bad" label="Em atraso" value="0 Kz" note="sem dados" negative />
+        <Metric icon={Target} tone="good" label="Leads" value="0" note="sem dados" />
+      </div>
+      <Section title="Relatório do dia" note="Bloco de notas da operação"><div className="section-note">Sem dados para mostrar.</div></Section>
+    </>
+  );
+
+  const revenueValues = revenueShown.map((d) => Number(d.value ?? 0));
+  const revenueTotal = revenueValues.reduce((soma, v) => soma + v, 0);
+  const revenueMax = Math.max(...revenueValues, 1);
+  const chartPts = revenueValues.map((v, i) => {
+    const x = revenueValues.length === 1 ? 50 : (i / (revenueValues.length - 1)) * 100;
+    const y = 31 - (v / revenueMax) * 25;
+    return [x, y] as const;
+  });
+  const linePts = chartPts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+  const areaPath = chartPts.length === 0 ? '' : `M ${chartPts[0][0].toFixed(2)},34 L ${chartPts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ')} L ${chartPts[chartPts.length - 1][0].toFixed(2)},34 Z`;
+  const ultimoPonto = chartPts[chartPts.length - 1];
+  const healthOk = integrations.filter((ig) => ig.status === 'operacional').length;
+
+  return (
+    <>
+      <header className="dash-hero">
+        <div className="dash-hero-copy">
+          <span className="dash-hero-kicker"><span className="dash-live-dot" />Painel de operação · {todayStr}</span>
+          <h1 className="dash-hero-title">{metricTitle}</h1>
+          <p className="dash-hero-sub">Receita, cobranças e oportunidades num só lugar. O que precisa de atenção hoje está à direita.</p>
+          <div className="dash-hero-actions">
+            <button type="button" className="dash-hero-btn dash-hero-btn-primary" onClick={() => setLocation('/admin/pagamentos')}><WalletCards size={15} /> Ver pagamentos</button>
+            <button type="button" className="dash-hero-btn" onClick={() => setLocation('/admin/leads')}><Target size={15} /> Abrir leads</button>
+          </div>
+        </div>
+        <div className="dash-focus">
+          <span className="dash-focus-label">Precisa de atenção</span>
+          <button type="button" className={`dash-focus-row${pendTotal > 0 ? ' is-warn' : ''}`} onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')}>
+            A receber <span>{pendCount} transações pendentes</span><strong>{money(pendTotal)}</strong>
+          </button>
+          <button type="button" className={`dash-focus-row${lateTotal > 0 ? ' is-bad' : ''}`} onClick={() => setLocation('/admin/pagamentos')}>
+            Em atraso <span>{lateCount} clientes em atenção</span><strong>{money(lateTotal)}</strong>
+          </button>
+          <div className="dash-focus-foot">
+            <span>Conversão de leads</span>
+            <strong>{convRate}%</strong>
+          </div>
+        </div>
+      </header>
+
+      <div className="dash-kpis">
+        <Metric icon={CircleDollarSign} tone="navy" label="Receita 30 dias" value={overview?.revenueLast30Days ? money(overview.revenueLast30Days) : '0 Kz'} note="pagamentos confirmados" loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Confirmado')} />
+        <Metric icon={Clock3} tone="warn" label="A receber" value={money(pendTotal)} note={`${pendCount} transações pendentes`} loading={dashLoading} onClick={() => setLocation('/admin/pagamentos?filtro=Pendente')} />
+        <Metric icon={AlertTriangle} tone="bad" label="Em atraso" value={money(lateTotal)} note={`${lateCount} em atenção`} negative loading={dashLoading} onClick={() => setLocation('/admin/pagamentos')} />
+        <Metric icon={Target} tone="good" label="Leads" value={String(totalLeads)} note={`${convRate}% conversão · ${newLeads7} novos em 7 dias`} loading={dashLoading} onClick={() => setLocation('/admin/pipeline')} />
+      </div>
+
+      <div className="dash-grid dash-main">
+        <Section
+          className="dash-chart-card"
+          title="Ritmo de receita"
+          note={chartRange === 'mes' ? `${revenueShown.length} meses · ${money(revenueTotal)} confirmados` : `Período total · ${money(revenueTotal)} confirmados`}
+          action={<button className="btn-quiet" onClick={() => setChartRange(chartRange === 'mes' ? 'tudo' : 'mes')}>{chartRange === 'mes' ? 'Últimos 4 meses' : 'Tudo'} <ChevronDown size={13} /></button>}
+        >
+          {dashLoading ? (
+            <div className="dash-chart"><div className="skeleton" style={{ position: 'absolute', inset: '18% 4% 22%' }} /></div>
+          ) : revenueShown.length === 0 ? (
+            <div className="dash-empty">
+              <TrendingUp size={20} />
+              <div><strong>Ainda sem receita confirmada</strong><span>Cria uma cobrança em Pagamentos para começar a ver o ritmo mensal.</span></div>
+              <button type="button" className="btn-secondary" onClick={() => setLocation('/admin/pagamentos')}>Ir para Pagamentos</button>
+            </div>
+          ) : (
+            <>
+              <div className="dash-chart">
+                <svg className="dash-spark" viewBox="0 0 100 34" preserveAspectRatio="none" role="img" aria-label={`Receita confirmada por mês: ${revenueShown.map((d) => `${monthLabel(d.month)} ${money(Number(d.value ?? 0))}`).join(', ')}`}>
+                  <defs>
+                    <linearGradient id="dashRevenueFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity=".2" />
+                      <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d={areaPath} fill="url(#dashRevenueFill)" />
+                  <polyline className="dash-spark-line" points={linePts} />
+                  {ultimoPonto && <circle className="dash-spark-dot" cx={ultimoPonto[0]} cy={ultimoPonto[1]} r="2.2" />}
+                </svg>
+              </div>
+              <div className="dash-chart-axis">{revenueShown.map((d, i) => <span key={i}>{monthLabel(d.month) || `M${i + 1}`}</span>)}</div>
+            </>
+          )}
+        </Section>
+
+        <Section title="Funil de leads" note={`${totalLeads} oportunidades · ${convRate}% conversão`}>
+          {dashLoading ? (
+            <div className="dash-funnel">{[0, 1, 2, 3].map((i) => <div className="skeleton" key={i} style={{ height: 9 }} />)}</div>
+          ) : (
+            <div className="dash-funnel">
+              {funnel.map((f) => {
+                const max = Math.max(...funnel.map((x) => x.count), 1);
+                const largura = f.count > 0 ? Math.max((f.count / max) * 100, 6) : 0;
+                return (
+                  <div key={f.key} className="dash-funnel-row">
+                    <span className="dash-funnel-label">{f.label}</span>
+                    <div className="dash-funnel-track"><div className={`dash-funnel-fill${f.key === 'convertido' ? ' is-conv' : f.key === 'perdido' ? ' is-lost' : ''}`} style={{ width: `${largura}%` }} /></div>
+                    <span className="dash-funnel-count">{f.count}</span>
+                  </div>
+                );
+              })}
+              {funnel.every((f) => !f.count) && <div className="dash-empty-inline">Sem leads ainda. <Link href="/admin/leads">Cria o primeiro lead</Link></div>}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      <div className="dash-grid dash-duo">
+        <Section title="Leads recentes" note="Últimas captações" action={<Link href="/admin/leads" className="dash-link">Ver todos <ChevronRight size={13} /></Link>}>
+          {leads.length === 0 ? <div className="dash-empty-inline">Ainda sem leads. <Link href="/admin/leads">Registar lead</Link></div> : (
+            <div className="dash-list">
+              {leads.slice(0, 5).map((l) => (
+                <Link key={l.id} href="/admin/leads" className="dash-row">
+                  <span className="dash-avatar" aria-hidden="true">{iniciais(l.name)}</span>
+                  <span className="dash-row-main">
+                    <span className="dash-row-title">{l.name}</span>
+                    <span className="dash-row-sub">{l.company || srcLabel(l.source)}</span>
+                  </span>
+                  <Status tone={l.status === 'Convertida' ? 'good' : l.status === 'Perdida' ? 'danger' : 'neutral'}>{l.status}</Status>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Clientes ativos" note="Estado das contas" action={<Link href="/admin/clientes" className="dash-link">Ver todos <ChevronRight size={13} /></Link>}>
+          {customers.length === 0 ? <div className="dash-empty-inline">Ainda sem clientes registados.</div> : (
+            <div className="dash-list">
+              {customers.slice(0, 5).map((c) => (
+                <Link key={c.id} href={`/admin/clientes/${c.id}`} className="dash-row">
+                  <span className="dash-avatar" aria-hidden="true">{iniciais(c.name)}</span>
+                  <span className="dash-row-main">
+                    <span className="dash-row-title">{c.name}</span>
+                    <span className="dash-row-sub">{c.company || c.plan || '—'}</span>
+                  </span>
+                  <Status tone={c.state === 'Activo' ? 'good' : c.state === 'Em atraso' ? 'danger' : 'neutral'}>{c.state}</Status>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      <div className="dash-grid dash-trio">
+        <Section title="Origens de leads" note="De onde vêm as oportunidades">
+          {sources.length === 0 ? <div className="dash-empty-inline">Nada ainda — regista um lead para ver as origens.</div> : (
+            <div className="dash-bars">
+              {sources.map((s) => {
+                const max = Math.max(...sources.map((x) => x.count), 1);
+                return (
+                  <div key={s.source} className="dash-bar-row">
+                    <span className="dash-bar-label">{srcLabel(s.source)}</span>
+                    <div className="dash-bar-track"><div className="dash-bar-fill is-teal" style={{ width: `${s.count > 0 ? Math.max((s.count / max) * 100, 6) : 0}%` }} /></div>
+                    <span className="dash-bar-count">{s.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Métodos de pagamento" note="Transações por método">
+          {payMethods.length === 0 ? <div className="dash-empty-inline">Nada ainda — confirma uma transação para ver os métodos.</div> : (
+            <div>{payMethods.map((m) => (
+              <div key={m.method} className="dash-method-row">
+                <div><span className="dash-row-title">{m.method}</span><span className="dash-row-sub">{m.count} transações</span></div>
+                <span className="dash-money">{money(m.total)}</span>
+              </div>
+            ))}</div>
+          )}
+        </Section>
+
+        <Section title="Saúde do ecossistema" note={dashLoading ? 'A verificar…' : integrations.length > 0 ? `${healthOk} de ${integrations.length} operacionais` : 'Sem canais ligados'}>
+          {integrations.length === 0 ? <div className="dash-empty-inline">Sem dados de integração.</div> : (
+            <div>{integrations.map((ig, i) => (
+              <div key={i} className="dash-health-row">
+                <span className={`dash-health-dot ${ig.status === 'operacional' ? 'is-good' : 'is-warn'}`} aria-hidden="true" />
+                <span className="dash-row-title">{ig.name}</span>
+                <Status tone={ig.status === 'operacional' ? 'good' : 'warn'}>{ig.status === 'operacional' ? 'Operacional' : ig.status}</Status>
+              </div>
+            ))}</div>
+          )}
+        </Section>
+      </div>
+
+      <Section
+        title="Fecho do dia"
+        note={`Resumo operacional · ${todayStr}`}
+        action={<div className="page-actions"><button className="btn-secondary" onClick={() => gerarRelatorioGeral('excel')} disabled={gerandoRelatorio}><FileSpreadsheet size={14} /> {gerandoRelatorio ? 'A gerar…' : 'Excel'}</button><button className="btn-secondary" onClick={() => gerarRelatorioGeral('pdf')} disabled={gerandoRelatorio}><FileText size={14} /> PDF</button><button className="btn-secondary" onClick={copyReport}><Code2 size={14} /> {copiedReport ? 'Copiado' : 'Copiar'}</button></div>}
+      >
+        <div className="dash-report-grid">
+          {reportLines.map((linha) => {
+            const separador = linha.indexOf(':');
+            const rotulo = separador > 0 ? linha.slice(0, separador) : 'Resumo';
+            const valor = separador > 0 ? linha.slice(separador + 1).trim() : linha;
+            return <div key={linha} className="dash-report-item"><span className="dash-report-label">{rotulo}</span><span className="dash-report-value">{valor}</span></div>;
+          })}
+        </div>
+      </Section>
+    </>
+  );
+
 }
 
 function StaffSelect({ value, onChange, staff, onStaffCreated, allowCreate = true, readOnly = false }: { value: string; onChange: (id: string) => void; staff: Array<{ id: string; name: string }>; onStaffCreated?: () => void | Promise<void>; allowCreate?: boolean; readOnly?: boolean }) {
@@ -2952,9 +3292,10 @@ function AutomationsPage() {
   const [fName, setFName] = useState('');
   const [fTrigger, setFTrigger] = useState('payment_confirmed');
   const [fAction, setFAction] = useState('send_notification');
-  const [fMessage, setFMessage] = useState('');
-  const [fTemplate, setFTemplate] = useState('');
-  const [fLanguage, setFLanguage] = useState('pt_PT');
+  const [fMessage, setFMessage] = useState('Olá {{customerName}}! O seu pagamento está confirmado.');
+  const [fTemplateName, setFTemplateName] = useState('');
+  const [fLanguage, setFLanguage] = useState('pt_BR');
+  const [fTemplateVars, setFTemplateVars] = useState('');
   const [fMsg, setFMsg] = useState('');
   const [events, setEvents] = useState<any[]>([]);
   const triggers = Object.keys(TRIGGER_LABELS);
@@ -2975,16 +3316,44 @@ function AutomationsPage() {
     return () => { active = false; };
   }, [data]);
   const save = () => {
-    if (!fName.trim()) { setFMsg('Nome é obrigatório'); return; }
-    if (fAction === 'send_whatsapp_template' && !fTemplate.trim()) { setFMsg('Indica o nome do template aprovado'); return; }
-    const action = fAction === 'send_whatsapp'
-      ? JSON.stringify({ type: 'send_whatsapp', params: { message: fMessage.trim() || 'Olá {{customerName}}!' } })
-      : fAction === 'send_whatsapp_template'
-        ? JSON.stringify({ type: 'send_whatsapp_template', params: { template: fTemplate.trim(), language: fLanguage.trim() || 'pt_PT' } })
-        : fAction;
-    createMut.mutate({ name: fName.trim(), trigger: fTrigger, action }, {
-      onSuccess: () => { setOpen(false); setFName(''); setFMsg(''); setFTemplate(''); setFMessage(''); refetch(); },
-      onError: (e: any) => setFMsg('Erro: ' + (e.message || 'desconhecido')),
+    if (!fName.trim()) { setFMsg('Indique um nome para a regra.'); return; }
+    let actionObj: any;
+    if (fAction === 'send_whatsapp') {
+      const msg = fMessage.trim();
+      if (!msg) { setFMsg('Escreva a mensagem do WhatsApp.'); return; }
+      actionObj = { type: 'send_whatsapp', params: { mode: 'text', message: msg } };
+    } else if (fAction === 'send_whatsapp_template') {
+      const tn = fTemplateName.trim();
+      if (!tn) { setFMsg('Indique o nome do template aprovado na Meta/WhatsApp.'); return; }
+      let vars: string[] = [];
+      if (fTemplateVars.trim()) {
+        try {
+          const parsed = JSON.parse(fTemplateVars);
+          if (!Array.isArray(parsed)) throw new Error('not array');
+          vars = parsed.map((v) => String(v));
+        } catch {
+          setFMsg('Variáveis do template: use um JSON (ex.: ["João","Plano A"]).');
+          return;
+        }
+      }
+      actionObj = {
+        type: 'send_whatsapp',
+        params: { mode: 'template', template_name: tn, language_code: fLanguage.trim() || 'pt_BR', variables: vars },
+      };
+    } else {
+      actionObj = { type: fAction, params: {} };
+    }
+    createMut.mutate({ name: fName.trim(), trigger: fTrigger, action: JSON.stringify(actionObj) }, {
+      onSuccess: () => {
+        setOpen(false);
+        setFName('');
+        setFMsg('');
+        setFTemplateName('');
+        setFTemplateVars('');
+        setFMessage('Olá {{customerName}}! O seu pagamento está confirmado.');
+        refetch();
+      },
+      onError: (e: any) => setFMsg('Erro: ' + (e.message || 'Não foi possível guardar.')),
     });
   };
   return <><PageHeader eyebrow="Ecossistema · Orquestração" title="Automações" subtitle="Regras orientadas a eventos, com execução auditável." action={<button className="btn-primary" onClick={() => { setFMsg(''); setOpen(true); }}><Plus size={14} /> Nova automação</button>} /><AutomationStatusPanel /><MemberJourneySection /><Section title="Regras activas" note={`${rules.filter((x: any) => x.active).length} de ${rules.length} activas`}><div style={{ display: 'grid', gap: '.55rem' }}>{rules.map((r: any, i: number) => <div key={r.id} className="card" style={{ boxShadow: 'none', padding: '.8rem', display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr auto', gap: '.8rem', alignItems: 'center' }}><div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}><div style={{ width: 29, height: 29, borderRadius: 7, display: 'grid', placeItems: 'center', background: r.active ? 'hsl(var(--accent) / .25)' : 'hsl(var(--muted))', color: r.active ? 'hsl(38 60% 35%)' : 'hsl(var(--muted-foreground))' }}><Zap size={14} /></div><div><div style={{ fontWeight: 700, fontSize: '.75rem' }}>{r.name}</div><div className="section-note">Regra {String(i + 1).padStart(2, '0')} · {r.runCount || 0} execuções</div></div></div><div><div className="eyebrow">Quando</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{triggerLabel(r.trigger)}</div></div><div><div className="eyebrow">Executar</div><div style={{ fontSize: '.71rem', marginTop: '.25rem' }}>{describeAction(r.action)}</div><div className="section-note">{r.lastRunAt ? `Última: ${new Date(r.lastRunAt).toLocaleString('pt-PT')}` : 'Ainda não executou'}</div></div><div style={{ textAlign: 'right' }}><button className="btn-quiet" onClick={() => toggleMut.mutate(r.id)}>{r.active ? <ToggleRight size={18} color="hsl(155 41% 43%)" /> : <ToggleLeft size={18} />} {r.active ? 'Activo' : 'Inactivo'}</button><button className="btn-quiet" onClick={() => { if (confirm('Eliminar automação?')) deleteMut.mutate(r.id); }}><Trash2 size={14} /></button></div></div>)}</div></Section>
@@ -3002,12 +3371,31 @@ function AutomationsPage() {
       <div style={{ flex: 1 }}><label className="form-label">Executar</label>
       <select className="select" value={fAction} onChange={e => setFAction(e.target.value)}>{actions.map(v => <option key={v} value={v}>{ACTION_LABELS[v]}</option>)}</select></div>
     </div>
-    {fAction === 'send_whatsapp' && <div style={{ marginTop: '.6rem' }}><label className="form-label">Mensagem WhatsApp</label><textarea className="input" rows={3} value={fMessage} onChange={e => setFMessage(e.target.value)} placeholder="Olá {{customerName}}, ..." style={{ width: '100%', resize: 'vertical' }} /></div>}
-    {fAction === 'send_whatsapp_template' && <div className="fila-dupla" style={{ marginTop: '.6rem' }}>
-      <div style={{ flex: 1 }}><label className="form-label">Template aprovado *</label><input className="input" value={fTemplate} onChange={e => setFTemplate(e.target.value)} placeholder="ex: renovacao_plano" /></div>
-      <div style={{ flex: 1 }}><label className="form-label">Idioma</label><input className="input" value={fLanguage} onChange={e => setFLanguage(e.target.value)} placeholder="pt_PT" /></div>
-    </div>}
-    {fMsg && <div style={{ fontSize: '.75rem', marginTop: '.6rem', color: 'hsl(0 70% 50%)' }}>{fMsg}</div>}
+    {fAction === 'send_whatsapp' && (
+      <div style={{ marginTop: '.75rem', display: 'grid', gap: '.5rem' }}>
+        <label className="form-label">Mensagem (WhatsApp)</label>
+        <textarea className="input" rows={4} value={fMessage} onChange={e => setFMessage(e.target.value)} placeholder="Olá {{customerName}}..." style={{ width: '100%', resize: 'vertical' }} />
+        <p className="section-note" style={{ margin: 0 }}>Use variáveis como <code>{'{{customerName}}'}</code>, <code>{'{{code}}'}</code>, <code>{'{{amount}}'}</code> conforme o evento. O número vem do cliente no registo (quando existir).</p>
+      </div>
+    )}
+    {fAction === 'send_whatsapp_template' && (
+      <div style={{ marginTop: '.75rem', display: 'grid', gap: '.6rem' }}>
+        <div>
+          <label className="form-label">Nome do template (Meta, aprovado)</label>
+          <input className="input" value={fTemplateName} onChange={e => setFTemplateName(e.target.value)} placeholder="ex: pagamento_confirmado" style={{ width: '100%' }} />
+        </div>
+        <div>
+          <label className="form-label">Idioma</label>
+          <input className="input" value={fLanguage} onChange={e => setFLanguage(e.target.value)} placeholder="pt_BR" style={{ width: '100%' }} />
+        </div>
+        <div>
+          <label className="form-label">Variáveis do corpo (JSON, opcional)</label>
+          <input className="input" value={fTemplateVars} onChange={e => setFTemplateVars(e.target.value)} placeholder='["João","10.000 Kz"]' style={{ width: '100%' }} />
+          <p className="section-note" style={{ margin: '.25rem 0 0' }}>Lista na ordem das variáveis no template. Deixe vazio se não usar.</p>
+        </div>
+      </div>
+    )}
+    {fMsg && <div style={{ fontSize: '.75rem', marginTop: '.75rem', color: 'hsl(0 70% 50%)' }}>{fMsg}</div>}
     <div style={{ display: 'flex', gap: '.5rem', marginTop: '1rem' }}>
       <button className="btn-secondary" onClick={() => setOpen(false)} style={{ flex: 1 }}>Cancelar</button>
       <button className="btn-primary" onClick={save} disabled={createMut.isPending} style={{ flex: 1 }}><Check size={14} /> Guardar</button>
@@ -3215,7 +3603,7 @@ function AppShell({ children, userName, auditCount, userRole }: { children: Reac
     mainAreaRef.current?.scrollTo({ top: 0, behavior: 'instant' });
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [location]);
-  return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} userRole={userRole} /><div className="main-area" ref={mainAreaRef}><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
+  return <div className="shell"><Sidebar open={menu} onClose={() => setMenu(false)} auditCount={auditCount} userRole={userRole} userName={userName} /><div className="main-area" ref={mainAreaRef}><Topbar onMenu={() => setMenu(true)} userName={userName} /><main className="page-content" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.65rem 1.7rem 3rem' }}>{children}</main></div></div>;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {

@@ -80,15 +80,23 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET
         sync: false
+      - key: WHATSAPP_WABA_ID
+        sync: false
       - key: WHATSAPP_API_VERSION
         value: v23.0
       - key: WHATSAPP_DISPLAY_NAME
-        value: SamoraFit
+        value: SamoraFit Studio
       - key: WHATSAPP_OTP_TEMPLATE
         sync: false
       - key: WHATSAPP_OTP_LANGUAGE
         value: pt_PT
+      - key: AUTOMATION_ENABLED
+        value: "true"
       - key: AUTOMATION_DRY_RUN
         value: "false"
+      - key: AUTOMATION_TICK_MS
+        value: "60000"
+      - key: MEMBER_JOURNEY_TICK_MS
+        value: "60000"
     healthCheckPath: /healthz
     autoDeploy: true

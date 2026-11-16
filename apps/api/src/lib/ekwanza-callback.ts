@@ -100,12 +100,18 @@ export async function processEkwanzaCallback(body: unknown): Promise<CallbackOut
 }
 
 async function flagUnverified(paymentId: string, payment: any, detail: Record<string, any>) {
-  const meta =
-    payment.metadata && typeof payment.metadata === "object" ? payment.metadata : {};
+  let meta: Record<string, any> = {};
+  if (payment.metadata) {
+    try {
+      meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : payment.metadata;
+    } catch {
+      meta = {};
+    }
+  }
   await db
     .update(paymentsTable)
     .set({
-      metadata: { ...meta, ekwanza_unverified_callback: { ...detail, at: new Date().toISOString() } },
+      metadata: JSON.stringify({ ...meta, ekwanza_unverified_callback: { ...detail, at: new Date().toISOString() } }),
       updatedAt: new Date(),
     })
     .where(eq(paymentsTable.id, paymentId));

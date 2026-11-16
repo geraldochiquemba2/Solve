@@ -8,7 +8,6 @@ import { validate } from "../middlewares/validate";
 import { AppError } from "../middlewares/error";
 import { whatsappClient, WhatsAppMessage, WhatsAppWebhookEvent, WhatsAppMessageType, WhatsAppMessageStatusType } from "../lib/whatsapp";
 import { auditLogsTable } from "@workspace/db/schema";
-import { sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -27,6 +26,19 @@ router.get("/whatsapp/health", authenticate, (req, res) => {
   });
 });
 
+// Webhook verification (Meta) - GET
+router.get("/whatsapp/webhook", (req, res) => {
+  const mode = req.query["hub.mode"] as string | undefined;
+  const token = req.query["hub.verify_token"] as string | undefined;
+  const challenge = req.query["hub.challenge"] as string | undefined;
+  const expected = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+  if (mode === "subscribe" && expected && token === expected && challenge) {
+    res.status(200).send(challenge);
+    return;
+  }
+  res.status(403).json({ error: "Forbidden" });
+});
+
 // Webhook receiver for WhatsApp messages (public - receive from WhatsApp)
 router.post("/whatsapp/webhook", async (req, res, next) => {
   try {
@@ -38,7 +50,6 @@ router.post("/whatsapp/webhook", async (req, res, next) => {
       return;
     }
 
-    // Log do evento no audit
     await db.insert(auditLogsTable).values({
       actor: "WhatsApp System",
       action: "Webhook received",

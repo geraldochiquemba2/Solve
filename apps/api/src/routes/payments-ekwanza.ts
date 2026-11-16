@@ -154,8 +154,15 @@ router.post(
         payment = { ...payment, status: "confirmado" };
         const { broadcastPaymentUpdate } = await import("../app");
         broadcastPaymentUpdate({ type: "payment_updated", code, status: "confirmado" });
-        // Pagamento confirmado → entrega do acesso na Cademi (fundo, idempotente).
         deliverInBackground(code);
+        const { processEvent } = await import("../lib/automation-engine");
+        processEvent("payment_confirmed", {
+          customerId: payment.customerId,
+          paymentId: payment.id,
+          amount: Number(payment.amount),
+          code: payment.code,
+          method: payment.method,
+        }).catch((e) => logger.error({ e }, "automation payment_confirmed failed"));
       } else if (gpoStatus === "Failed" || gpoStatus === "Cancelled" || gpoStatus === "Expired") {
         await db.update(paymentsTable).set({
           status: "rejeitado",
