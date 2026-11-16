@@ -2999,26 +2999,9 @@ const INTEGRATION_CONFIG_FIELDS: Record<string, Array<{ key: string; label: stri
 
 const TRIGGER_LABELS: Record<string, string> = {
   payment_confirmed: 'Pagamento confirmado',
-  payment_pending: 'Pagamento pendente',
-  payment_overdue: 'Pagamento em atraso',
-  payment_rejected: 'Pagamento recusado',
-  payment_failed: 'Pagamento falhado',
-  lead_created: 'Nova lead',
-  lead_converted: 'Lead convertida',
-  lead_no_activity: 'Lead sem atividade',
-  customer_created: 'Novo cliente',
-  client_blocked: 'Cliente bloqueado',
-  client_inactive: 'Cliente inativo',
-  access_denied: 'Acesso negado',
-  access_granted: 'Acesso concedido',
-  course_access_granted: 'Acesso a curso concedido',
-  lessons_exhausted: 'Aulas esgotadas',
-  subscription_activated: 'Subscrição ativada',
-  subscription_renewed: 'Subscrição renovada',
-  subscription_expiring: 'Subscrição a expirar',
-  subscription_expired: 'Subscrição expirada',
-  customer_birthday: 'Aniversário do cliente',
-  nps_requested: 'Pedido de NPS',
+  payment_overdue: 'Pagamento em atraso (manual)',
+  lead_created: 'Lead criada',
+  lead_no_activity: 'Lead sem atividade (7 dias)',
 };
 
 const LEGACY_TRIGGERS: Record<string, string> = {
