@@ -2096,6 +2096,14 @@ function PromoCodesPage() {
   </>;
 }
 
+function primeiroTexto(...valores: any[]): string {
+  for (const valor of valores) {
+    const texto = valor == null ? '' : String(valor).trim();
+    if (texto) return texto;
+  }
+  return '';
+}
+
 function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () => void }) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<any>(null);
@@ -2155,9 +2163,9 @@ function PaymentDetailModal({ payment, onClose }: { payment: any; onClose: () =>
     ['Entidade', payment.entity || raw.entity || meta.entity || '—'],
     ['Código É-kwanza', payment.ekwanzaCode || raw.ekwanzaCode || raw.ekwanza_code || '—'],
     ['Código Operação É-kwanza', payment.ekwanzaOperationCode || raw.ekwanzaOperationCode || raw.ekwanza_operation_code || '—'],
-    ['Cliente', payment.customerName || raw.customerName || raw.customer_name || '—'],
-    ['Telefone', payment.customerPhone || raw.customerPhone || raw.customer_phone || '—'],
-    ['Email', payment.customerEmail || raw.customerEmail || raw.customer_email || '—'],
+    ['Cliente', primeiroTexto(payment.customerName, raw.customerName, raw.customer_name, meta.name, meta.customer_name, meta.nome) || '—'],
+    ['Telefone', primeiroTexto(payment.customerPhone, raw.customerPhone, raw.customer_phone, meta.phone, meta.customer_phone) || '—'],
+    ['Email', primeiroTexto(payment.customerEmail, raw.customerEmail, raw.customer_email, meta.email, meta.customer_email) || '—'],
     ['Montante', payment.amount ? money(payment.amount) : '—'],
     ['Método', payment.method || payment.methodLabel || '—'],
     ['Estado', payment.state || raw.status || '—'],
@@ -2425,9 +2433,9 @@ function PaymentsPage() {
   const payments = useMemo(() =>
     paymentsData.map((p: any) => {
       const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
-      const phone = p.customer_phone ?? p.customerPhone ?? meta.phone ?? meta.customer_phone ?? '';
-      const name = p.customer_name ?? p.customerName ?? meta.customer_name ?? '';
-      const email = p.customer_email ?? p.customerEmail ?? meta.email ?? '';
+      const phone = primeiroTexto(p.customer_phone, p.customerPhone, meta.phone, meta.customer_phone);
+      const name = primeiroTexto(p.form_customer_name, p.customer_name, p.customerName, meta.name, meta.customer_name, meta.nome);
+      const email = primeiroTexto(p.customer_email, p.customerEmail, meta.email, meta.customer_email);
       const customerId = p.customer_id ?? p.customerId ?? '';
       const shortRef = customerId ? `#${String(customerId).slice(0, 8)}` : '';
       const paidAt = p.paid_at ?? p.paidAt ?? null;
@@ -2466,7 +2474,11 @@ function PaymentsPage() {
   const [selected, setSelected] = useState<any>(null);
   const visible = payments.filter(p => {
     if (filter !== 'Todas' && p.state !== filter) return false;
-    if (search && !p.customer.toLowerCase().includes(search.toLowerCase()) && !p.id.toLowerCase().includes(search.toLowerCase()) && !(p.customerPhone || '').includes(search)) return false;
+    if (search) {
+      const termo = search.toLowerCase();
+      const alvo = [p.customer, p.customerName, p.id, p.customerPhone, p.customerEmail].map(v => String(v || '').toLowerCase()).join(' ');
+      if (!alvo.includes(termo)) return false;
+    }
     if (dateFrom && p.date && p.date < dateFrom) return false;
     if (dateTo && p.date && p.date > dateTo + 'T23:59:59') return false;
     return true;
@@ -2480,7 +2492,7 @@ function PaymentsPage() {
   };
   return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('pdf')}><FileText size={14} /> PDF</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setCPromo(''); setCPromoRes(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
   <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', flexWrap: 'wrap' }}>
-    <input className="input" placeholder="Pesquisar cliente ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
+    <input className="input" placeholder="Pesquisar nome, cliente, telefone ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
     <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '140px' }} />
     <input className="input" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '140px' }} />
     {(search || dateFrom || dateTo) && <button className="btn-secondary" onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}><RefreshCw size={12} /> Limpar</button>}

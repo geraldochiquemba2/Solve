@@ -1614,8 +1614,9 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
       params.push(req.query.status);
     }
     if (req.query.customer_name) {
-      where.push("(LOWER(p.code) LIKE $" + (params.length + 1) + " OR p.customer_id::text LIKE $" + (params.length + 1) + ")");
-      params.push("%" + req.query.customer_name.toLowerCase() + "%");
+      const i = params.length + 1;
+      where.push(`(LOWER(p.code) LIKE $${i} OR p.customer_id::text LIKE $${i} OR LOWER(COALESCE(p.metadata->>'name', p.metadata->>'customer_name', p.metadata->>'nome', p.metadata->>'customerName', '')) LIKE $${i})`);
+      params.push("%" + String(req.query.customer_name).toLowerCase() + "%");
     }
     if (req.query.date_from) {
       where.push("p.created_at >= $" + (params.length + 1));
@@ -1636,7 +1637,8 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
-      `SELECT p.* FROM payments p
+      `SELECT p.*, COALESCE(NULLIF(p.metadata->>'name',''), NULLIF(p.metadata->>'customer_name',''), NULLIF(p.metadata->>'nome',''), NULLIF(p.metadata->>'customerName','')) AS form_customer_name
+       FROM payments p
        ${whereClause} ORDER BY p.created_at DESC, p.id DESC LIMIT 200`, params
     );
 
