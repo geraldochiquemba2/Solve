@@ -2434,6 +2434,14 @@ app.get("/api/v1/plans", requireAuth, async (req, res) => {
 // Docs: https://ajuda.cademi.com.br/configuracoes/api
 // Auth: header Authorization: <api-key> | Limite: 2 req/seg
 
+function cademiRetryDelay(header) {
+  const raw = String(header || "").trim();
+  if (!raw) return 1000;
+  const seconds = Number(raw);
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(raw) - Date.now();
+  return Math.max(0, Math.min(Number.isFinite(ms) ? ms : 1000, 30000));
+}
+
 let _cademiLastCall = 0;
 async function cademiFetch(path, options = {}) {
   let base = (await cfg("cademi_api_url", CADEMI_API_URL)).replace(/\/$/, "");
@@ -2444,24 +2452,36 @@ async function cademiFetch(path, options = {}) {
   if (!key) {
     return { success: false, error: "Cademi não configurado (Integrações > Configurar)" };
   }
-  // Throttle: máx 2 req/seg
-  const wait = 550 - (Date.now() - _cademiLastCall);
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  _cademiLastCall = Date.now();
-  try {
-    const resp = await fetch(`${base}${path}`, {
-      ...options,
-      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", Authorization: `Bearer ${key}`, ...(options.headers || {}) },
-    });
-    const data = await resp.json();
-    if (!resp.ok || data.success === false) {
-      return { success: false, error: data.msg || `HTTP ${resp.status}` };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // Throttle: máx 2 req/seg
+    const wait = 550 - (Date.now() - _cademiLastCall);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    _cademiLastCall = Date.now();
+    try {
+      const resp = await fetch(`${base}${path}`, {
+        ...options,
+        headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", Authorization: `Bearer ${key}`, ...(options.headers || {}) },
+      });
+      let data = {};
+      try { data = await resp.json(); } catch {}
+      if (resp.status === 429) {
+        const delay = cademiRetryDelay(resp.headers.get("retry-after"));
+        if (attempt === 0) {
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        return { success: false, error: data.msg || "HTTP 429", rateLimited: true, retryAfterMs: delay };
+      }
+      if (!resp.ok || data.success === false) {
+        return { success: false, error: data.msg || `HTTP ${resp.status}` };
+      }
+      return data;
+    } catch (err) {
+      console.error("[CADEMI]", err?.message || err);
+      return { success: false, error: "Falha de rede ao contactar a Cademi" };
     }
-    return data;
-  } catch (err) {
-    console.error("[CADEMI]", err?.message || err);
-    return { success: false, error: "Falha de rede ao contactar a Cademi" };
   }
+  return { success: false, error: "Cademi: limite de requisições", rateLimited: true, retryAfterMs: 1000 };
 }
 
 app.get("/api/v1/cademi/health", requireAuth, async (req, res) => {
@@ -2748,7 +2768,8 @@ async function sendCademiDelivery(paymentCode, force = false) {
     if (meta.cademi_delivery === "sent" && !force) return { ok: false, skipped: "já enviado" };
     // Contagem de tentativas: o job de reentrega usa-a como teto para não
     // martelar a Cademi indefinidamente quando o acesso nunca é criado (conta
-    // também as tentativas bloqueadas por falta de config).
+    // também as tentativas bloqueadas por falta de config, mas não as que a
+    // Cademi rejeitou com 429).
     meta.cademi_attempts = (Number(meta.cademi_attempts) || 0) + 1;
     meta.cademi_last_attempt_at = new Date().toISOString();
     try { await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]); } catch {}
@@ -2781,6 +2802,13 @@ async function sendCademiDelivery(paymentCode, force = false) {
         cliente_nome: nome || email, cliente_email: email,
       }),
     });
+    if (r.rateLimited) {
+      meta.cademi_attempts = Math.max(0, (Number(meta.cademi_attempts) || 0) - 1);
+      meta.cademi_rate_limited_at = new Date().toISOString();
+      meta.cademi_retry_after_ms = r.retryAfterMs || 0;
+      try { await pool.query("UPDATE payments SET metadata = $1 WHERE code = $2", [JSON.stringify(meta), payment.code]); } catch {}
+      return { ok: false, skipped: `Cademi: limite de requisições (429); reintentar em ${Math.ceil((r.retryAfterMs || 0) / 1000)}s` };
+    }
     if (!r.success) return { ok: false, skipped: `Cademi: ${r.error}` };
     // Guarda a resposta crua da Cademi (truncada) para diagnóstico.
     try { meta.cademi_resp = JSON.stringify(r.data ?? r).slice(0, 500); } catch {}
@@ -4850,7 +4878,7 @@ setInterval(async () => {
 // transitório, `sent_unverified` (Cademi aceitou mas não criou acesso) e o caso
 // em que a entrega só dispara uma vez na transição pendente -> confirmado.
 // Só paga o custo da Cademi enquanto o acesso não estiver confirmado.
-const CADEMI_RETRY_INTERVAL_MS = Number(process.env.CADEMI_RETRY_INTERVAL_MS || 10 * 60 * 1000);
+const CADEMI_RETRY_INTERVAL_MS = Number(process.env.CADEMI_RETRY_INTERVAL_MS || 2 * 60 * 1000);
 const CADEMI_RETRY_MAX = Number(process.env.CADEMI_RETRY_MAX || 25);
 let _cademiRetryRunning = false;
 setInterval(async () => {

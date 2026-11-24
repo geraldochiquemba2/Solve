@@ -101,6 +101,18 @@ export async function sendCademiDelivery(paymentCode: string, force = false): Pr
       cliente_nome: nome || email,
       cliente_email: email,
     });
+    if (sent.rateLimited) {
+      meta.cademi_rate_limited_at = new Date().toISOString();
+      meta.cademi_retry_after_ms = sent.retryAfterMs || 0;
+      await db
+        .update(paymentsTable)
+        .set({ metadata: meta, updatedAt: new Date() })
+        .where(eq(paymentsTable.id, payment.id));
+      return {
+        ok: false,
+        skipped: `Cademi: limite de requisições (429); reintentar em ${Math.ceil((sent.retryAfterMs || 0) / 1000)}s`,
+      };
+    }
     if (!sent.success) return { ok: false, skipped: `Cademi: ${sent.error || "falha no envio"}` };
 
     meta.cademi_resp = JSON.stringify(sent.data ?? sent).slice(0, 500);

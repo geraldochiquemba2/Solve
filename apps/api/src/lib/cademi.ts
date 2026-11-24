@@ -42,7 +42,19 @@ interface CademiApiResponse<T> {
   data?: T;
   error?: string;
   msg?: string;
+  rateLimited?: boolean;
+  retryAfterMs?: number;
 }
+
+function retryDelay(header: string | null): number {
+  const raw = String(header ?? "").trim();
+  if (!raw) return 1000;
+  const seconds = Number(raw);
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(raw) - Date.now();
+  return Math.max(0, Math.min(Number.isFinite(ms) ? ms : 1000, 30000));
+}
+
+let lastCall = 0;
 
 class CademiClient {
   private baseUrl: string;
@@ -71,24 +83,49 @@ class CademiClient {
       Authorization: `Bearer ${this.apiKey}`,
     };
 
-    try {
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const wait = 550 - (Date.now() - lastCall);
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      lastCall = Date.now();
 
-      const data = (await response.json()) as CademiApiResponse<T>;
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        });
 
-      if (!response.ok) {
-        return { success: false, error: data.msg || `HTTP ${response.status}` };
+        let data: CademiApiResponse<T> = { success: false };
+        try {
+          data = (await response.json()) as CademiApiResponse<T>;
+        } catch {}
+
+        if (response.status === 429) {
+          const delay = retryDelay(response.headers.get("retry-after"));
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          return {
+            success: false,
+            error: data.msg || "HTTP 429",
+            rateLimited: true,
+            retryAfterMs: delay,
+          };
+        }
+
+        if (!response.ok) {
+          return { success: false, error: data.msg || `HTTP ${response.status}` };
+        }
+
+        return data;
+      } catch (err) {
+        logger.error({ err, path }, "Cademi: Request falhou");
+        return { success: false, error: (err as Error).message };
       }
-
-      return data;
-    } catch (err) {
-      logger.error({ err, path }, "Cademi: Request falhou");
-      return { success: false, error: (err as Error).message };
     }
+
+    return { success: false, error: "Cademi: limite de requisições", rateLimited: true, retryAfterMs: 1000 };
   }
 
   async isConfigured(): Promise<boolean> {

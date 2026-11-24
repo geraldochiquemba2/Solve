@@ -32,7 +32,8 @@ deles e pode falhar/atrasar):
 3. **Reentrega periódica (`[CADEMI-RETRY]`, a cada 2 min):** rede de segurança.
    Pagamentos confirmados com `metadata.cademi_delivery != 'sent'` são
    reenviados até 25 tentativas (`metadata.cademi_attempts`), dentro de 48h.
-   Cobre erros persistentes e `sent_unverified`.
+   Cobre erros persistentes e `sent_unverified`. Um `429` da Cademi é esperado
+   pelo `Retry-After` e repetido uma vez sem gastar tentativa.
 
 Uma entrega com **produto explícito** no pagamento (`metadata.cademi_produto`,
 escolhido no widget) entrega mesmo que `cademi_auto_delivery` não esteja a `1`;

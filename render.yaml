@@ -26,7 +26,7 @@ services:
       - key: AUTOSYNC_INTERVAL_MS
         value: "900000"
       - key: CADEMI_RETRY_INTERVAL_MS
-        value: "600000"
+        value: "120000"
       - key: FIT90_SYNC_INTERVAL_MS
         value: "900000"
       - key: JWT_SECRET
