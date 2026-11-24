@@ -220,7 +220,11 @@ export function createJourneyEngine({ pool, whatsapp, env = process.env }) {
   async function whatsappReady() {
     try {
       const c = await whatsapp.config();
-      return Boolean(c?.token && c?.phoneNumberId);
+      if (!c?.token || !c?.phoneNumberId) return false;
+      // Credenciais presentes não bastam: o número tem de estar ligado à Cloud
+      // API. Sem isto, a fila ficaria a tentar enviar para um número inativo.
+      const verification = await whatsapp.verifyConnection();
+      return Boolean(verification?.connected);
     } catch {
       return false;
     }

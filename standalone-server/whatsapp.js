@@ -466,7 +466,7 @@ export function createWhatsAppService({ pool, cfg, env = process.env, fetchImpl 
       const timer = setTimeout(() => ctrl.abort(), CHECK_TIMEOUT_MS);
       try {
         const response = await fetchImpl(
-          `https://graph.facebook.com/${c.apiVersion}/${encodeURIComponent(c.phoneNumberId)}?fields=verified_name,display_phone_number,quality_rating,status`,
+          `https://graph.facebook.com/${c.apiVersion}/${encodeURIComponent(c.phoneNumberId)}?fields=verified_name,display_phone_number,quality_rating,status,platform_type`,
           { headers: { authorization: `Bearer ${c.token}`, accept: "application/json" }, signal: ctrl.signal }
         );
         const data = await response.json().catch(() => ({}));
@@ -486,17 +486,27 @@ export function createWhatsAppService({ pool, cfg, env = process.env, fetchImpl 
           return result;
         }
         const webhookReady = Boolean(c.verifyToken && c.appSecret);
+        const accountStatus = String(data?.status || "").toUpperCase();
+        const platformType = String(data?.platform_type || "").toUpperCase();
+        const blockedStatus = ["DISCONNECTED", "RESTRICTED", "BLOCKED", "FLAGGED", "PENDING"].includes(accountStatus);
+        const onPremise = platformType === "ON_PREMISE";
+        const operational = !blockedStatus && !onPremise;
         const result = {
           configured: true,
-          connected: true,
-          status: webhookReady ? "operacional" : "configurado_nao_verificado",
-          message: webhookReady
-            ? `Ligado à Meta como ${data?.verified_name || c.displayName}`
-            : `Graph API OK (${data?.verified_name || c.displayName}), mas o webhook está incompleto (verify token/app secret)`,
+          connected: operational,
+          status: operational
+            ? (webhookReady ? "operacional" : "configurado_nao_verificado")
+            : "numero_nao_operacional",
+          message: operational
+            ? (webhookReady
+              ? `Ligado à Meta como ${data?.verified_name || c.displayName}`
+              : `Graph API OK (${data?.verified_name || c.displayName}), mas o webhook está incompleto (verify token/app secret)`)
+            : `Número ${data?.display_phone_number || c.phoneNumberId} está ${accountStatus || "sem estado"}${platformType ? ` (${platformType})` : ""}. Migra/religa o número à Cloud API e conclui a verificação.`,
           verifiedName: data?.verified_name || null,
           displayPhoneNumber: data?.display_phone_number || null,
           qualityRating: data?.quality_rating || null,
           accountStatus: data?.status || null,
+          platformType: platformType || null,
           checkedAt: new Date().toISOString(),
         };
         healthCache = { at: Date.now(), value: result };

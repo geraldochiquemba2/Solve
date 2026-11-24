@@ -180,6 +180,30 @@ test("whatsapp: 401 da Meta classifica erro_autenticacao sem marcar operacional"
   assert.equal(health.status, "erro_autenticacao");
 });
 
+test("whatsapp: numero DISCONNECTED/ON_PREMISE nao conta como ligado", async () => {
+  const svc = createWhatsAppService({
+    pool: emptyPool,
+    cfg: cfgDefaults,
+    env: {
+      WHATSAPP_TOKEN: "token",
+      WHATSAPP_PHONE_NUMBER_ID: "123",
+      WHATSAPP_VERIFY_TOKEN: "verify",
+      WHATSAPP_APP_SECRET: "app-secret",
+    },
+    fetchImpl: async () => jsonResponse(200, {
+      verified_name: "Sf Workout",
+      display_phone_number: "+244 945 175 063",
+      status: "DISCONNECTED",
+      platform_type: "ON_PREMISE",
+    }),
+  });
+  const health = await svc.health({ force: true });
+  assert.equal(health.configured, true);
+  assert.equal(health.connected, false);
+  assert.equal(health.status, "numero_nao_operacional");
+  assert.equal(health.platformType, "ON_PREMISE");
+});
+
 test("whatsapp: sendText normaliza telefone, envia payload e nao duplica idempotente", async () => {
   const pool = messagePool();
   let fetchCalls = 0;
