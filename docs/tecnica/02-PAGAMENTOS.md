@@ -6,7 +6,11 @@ Fluxo 100% hospedado: `POST /v1/credentials/token` (scope `payment`, 1h)
 método e paga → callback assinado (HMAC, chave = token scope `signature`).
 **Não há push automático para o Express** — o cliente abre sempre o link.
 - Código: `standalone-server/index.js` (`getWipayToken`, `fireWipayCharge`,
-  `POST /webhooks/wipay`, sync 5min); widget mostra botão "Pagar agora".
+  `POST /webhooks/wipay`) e `standalone-server/wipay.js` (mapeamento de estado e
+  HMAC); widget mostra botão "Pagar agora".
+- A confirmação vem **só do callback assinado**. A WiPay não publica GET de
+  consulta para `POST /v1/hosts/payments`; se o callback falhar, reenvie-o no
+  painel WiPay. Nunca aceitar `status` sem HMAC válido.
 - Env: `WIPAY_CLIENT_ID` + `WIPAY_CLIENT_SECRET` (Render). Sem elas, cai no
   GPO É-kwanza legado.
 - Sandbox vs produção: mesmo host, credenciais diferentes (portal

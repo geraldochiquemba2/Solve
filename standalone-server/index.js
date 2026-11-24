@@ -11,6 +11,7 @@ import { createWhatsAppService } from "./whatsapp.js";
 import { createAutomationEngine } from "./automation.js";
 import { createJourneyEngine } from "./journey.js";
 import { createPortalRoutes } from "./portal.js";
+import { mapWipayStatus, verifyWipaySignature } from "./wipay.js";
 
 const { Pool } = pg;
 
@@ -1404,23 +1405,8 @@ async function wipayReady() {
 function wipayBase() {
   return (process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173").replace(/\/$/, "");
 }
-// Estado WiPay -> interno. accepted=confirmado; falhas explicitas=rejeitado;
-// resto (requested/...) mantem pendente.
-function mapWipayStatus(s) {
-  const v = String(s || "").toLowerCase();
-  if (["accepted", "success", "successful", "paid", "completed"].includes(v)) return "confirmado";
-  if (["rejected", "failed", "fail", "cancelled", "canceled", "expired", "error"].includes(v)) return "rejeitado";
-  return null;
-}
-async function applyWipayConfirm(code, wipayId) {
-  const tok = await getWipayToken("payment");
-  const r = await fetch(`${WIPAY_HOST}/v1/hosts/payments/${encodeURIComponent(wipayId)}`, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${tok}` },
-  });
-  if (!r.ok) return null;
-  const j = await r.json().catch(() => null);
-  const mapped = mapWipayStatus(j?.status);
-  if (!mapped) return j?.status || null;
+async function settleWipayPayment(code, mapped, rawStatus = null, reason = null) {
+  if (mapped !== "confirmado" && mapped !== "rejeitado") return null;
   let pay = null;
   if (mapped === "confirmado") {
     const upd = await pool.query(
@@ -1446,14 +1432,14 @@ async function applyWipayConfirm(code, wipayId) {
         phone: pm.phone || null,
         amount: pay.amount ?? null,
         method: "wipay",
-        reason: String(j?.status || "rejeitado").slice(0, 80),
+        reason: String(reason || rawStatus || "rejeitado").slice(0, 80),
       }, { dedupeKey: `payment_rejected:${code}` }).catch((e) => {
         console.error("[AUTOMATION] payment_rejected (wipay):", e.message);
       });
     }
   }
   broadcastPaymentUpdate({ type: "payment_updated", code, status: mapped });
-  console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${j?.status})`);
+  console.log(`[WIPAY] ${code}: pendente -> ${mapped} (status: ${String(rawStatus || "desconhecido").slice(0, 40)})`);
   if (mapped === "confirmado") kickCademiDelivery(code);
   return mapped;
 }
@@ -1565,12 +1551,9 @@ async function fireWipayCharge({ code, amt, customer_phone, description, return_
   }
 }
 
-// Webhook WiPay: confirmação autoritativa via GET (igual ao padrão É-kwanza).
-// A assinatura HMAC (chave = token scope=signature) é verificada quando o
-// header `signature` vem; sem ele, confirma-se na mesma pelo estado oficial.
 app.post("/webhooks/wipay", rateLimit(60), async (req, res) => {
   try {
-    const { id, reference_id, status } = req.body || {};
+    const { id, reference_id, status, status_reason, status_datetime } = req.body || {};
     if (!reference_id && !id) return res.json({ received: true, verified: false });
     const prow = await pool.query(
       "SELECT code, metadata FROM payments WHERE code = $1 OR metadata->>'wipay_id' = $2 LIMIT 1",
@@ -1585,17 +1568,29 @@ app.post("/webhooks/wipay", rateLimit(60), async (req, res) => {
     } catch {}
     const wid = meta.wipay_id || id;
     if (!wid) return res.json({ received: true, verified: false });
+    let signatureValid = false;
     try {
       const signKey = await getWipayToken("signature");
       const sig = req.headers["signature"];
-      if (sig && req.rawBody) {
-        const h = crypto.createHmac("sha256", signKey).update(req.rawBody).digest("hex");
-        if (h !== String(sig)) console.log(`[WIPAY-WEBHOOK] ${code}: assinatura divergente (segue p/ confirmação oficial)`);
-        else console.log(`[WIPAY-WEBHOOK] ${code}: assinatura OK`);
-      }
-    } catch {}
-    const mapped = await applyWipayConfirm(code, wid);
-    return res.json({ received: true, verified: !!mapped, status: mapped || status || null });
+      signatureValid = verifyWipaySignature(req.rawBody, sig, signKey);
+      console.log(`[WIPAY-WEBHOOK] ${code}: assinatura ${signatureValid ? "OK" : sig ? "divergente" : "ausente"}`);
+    } catch (e) {
+      console.error(`[WIPAY-WEBHOOK] ${code}:`, e.message);
+    }
+    const mapped = signatureValid ? mapWipayStatus(status) : null;
+    if (!mapped) {
+      console.log(`[WIPAY-WEBHOOK] ${code}: callback nao confiavel ou sem estado final (${String(status || "ausente").slice(0, 40)})`);
+      return res.json({ received: true, verified: false, status: status || null, signature_valid: signatureValid });
+    }
+    await settleWipayPayment(code, mapped, status, status_reason);
+    return res.json({
+      received: true,
+      verified: true,
+      status: mapped,
+      wipay_status: status || null,
+      status_reason: status_reason || null,
+      status_datetime: status_datetime || null,
+    });
   } catch (err) {
     console.error("[WIPAY-WEBHOOK] Erro:", err.message);
     res.status(500).json({ error: "Erro interno. Tente de novo." });
@@ -4831,17 +4826,12 @@ setInterval(async () => {
     try { token = await getEkwanzaToken(); } catch (e) { console.error("[AUTO-SYNC] token falhou:", e.message); }
     const gpoUrl = (await cfg("ekwanza_gpo_url", process.env.EKWANZA_GPO_URL || "https://gwy-api.appypay.co.ao/v2.0")).replace(/\/$/, "");
     for (const { code, metadata } of pend.rows) {
-      // Pendentes WiPay confirmam-se na API WiPay.
-      let wid = null;
+      let isWipay = false;
       try {
         const cm = typeof metadata === "string" ? JSON.parse(metadata) : (metadata || {});
-        wid = cm?.wipay_id || null;
+        isWipay = Boolean(cm?.wipay_id);
       } catch {}
-      if (wid) {
-        try { await applyWipayConfirm(code, wid); } catch (e) { console.error(`[AUTO-SYNC] ${code} (wipay):`, e.message); }
-        await new Promise(r => setTimeout(r, 300));
-        continue;
-      }
+      if (isWipay) continue;
       if (!token) continue;
       try {
         const cr = await fetch(`${gpoUrl}/charges?merchantTransactionId=${encodeURIComponent(code)}`, {

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { createWhatsAppService } from "../whatsapp.js";
 import { createAutomationEngine, canonicalTrigger } from "../automation.js";
 import { createPortalRoutes } from "../portal.js";
+import { mapWipayStatus, verifyWipaySignature } from "../wipay.js";
 
 const cfgDefaults = async (_key, fallback) => fallback;
 const emptyPool = { query: async () => ({ rows: [] }) };
@@ -355,4 +356,23 @@ test("portal: regista rotas e devolve resposta generica para telefone sem client
   body = null;
   await logout.handler({}, res);
   assert.deepEqual(body, { data: { ok: true } });
+});
+
+test("wipay: so mapeia estados finais do callback", () => {
+  assert.equal(mapWipayStatus("accepted"), "confirmado");
+  assert.equal(mapWipayStatus(" ACCEPTED "), "confirmado");
+  assert.equal(mapWipayStatus("rejected"), "rejeitado");
+  assert.equal(mapWipayStatus("requested"), null);
+  assert.equal(mapWipayStatus(undefined), null);
+});
+
+test("wipay: verifica assinatura HMAC sobre o corpo cru", () => {
+  const body = Buffer.from('{"status":"accepted"}');
+  const token = "signature-token";
+  const sig = crypto.createHmac("sha256", token).update(body).digest("hex");
+  assert.equal(verifyWipaySignature(body, sig, token), true);
+  assert.equal(verifyWipaySignature(body, sig.toUpperCase(), token), false);
+  assert.equal(verifyWipaySignature(body, sig, "outro-token"), false);
+  assert.equal(verifyWipaySignature(body, null, token), false);
+  assert.equal(verifyWipaySignature(null, sig, token), false);
 });
