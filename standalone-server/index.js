@@ -1632,7 +1632,8 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
-      `SELECT p.*, COALESCE(NULLIF(p.metadata->>'name',''), NULLIF(p.metadata->>'customer_name',''), NULLIF(p.metadata->>'nome',''), NULLIF(p.metadata->>'customerName','')) AS form_customer_name
+      `SELECT p.*, COALESCE(NULLIF(p.metadata->>'name',''), NULLIF(p.metadata->>'customer_name',''), NULLIF(p.metadata->>'nome',''), NULLIF(p.metadata->>'customerName','')) AS form_customer_name,
+       COALESCE(NULLIF(p.metadata->>'wipay_id',''), NULLIF(p.metadata->>'wipayId','')) AS wipay_id
        FROM payments p
        ${whereClause} ORDER BY p.created_at DESC, p.id DESC LIMIT 200`, params
     );
@@ -1652,6 +1653,54 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[PAYMENTS LIST] Error:", err.message);
     res.status(500).json({ error: "Erro a ler pagamentos. Ver logs do servidor." });
+  }
+});
+
+app.post("/api/v1/payments/wipay/reconcile", requireAuth, requireManager, rateLimit(60), async (req, res) => {
+  try {
+    const raw = Array.isArray(req.body?.items) ? req.body.items : [req.body];
+    if (!raw.length || raw.length > 50) return res.status(400).json({ error: "Fornece entre 1 e 50 pagamentos." });
+    const data = [];
+    for (const item of raw) {
+      const code = String(item?.code || "").trim();
+      const mapped = mapWipayStatus(item?.status);
+      if (!code || !mapped) {
+        data.push({ code, ok: false, error: "Código ou estado inválido" });
+        continue;
+      }
+      const r = await pool.query("SELECT status, metadata FROM payments WHERE code = $1", [code]);
+      const row = r.rows[0];
+      if (!row) {
+        data.push({ code, ok: false, error: "Pagamento não encontrado" });
+        continue;
+      }
+      let meta = {};
+      try {
+        const cm = row.metadata;
+        meta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
+      } catch {}
+      if (!meta.wipay_id || row.status !== "pendente") {
+        data.push({ code, ok: false, error: "Não é um pagamento WiPay pendente" });
+        continue;
+      }
+      const settled = await settleWipayPayment(code, mapped, item.status, item.status_reason);
+      audit(req, "payments.wipay_reconciled", {
+        entity: "payments",
+        entityId: code,
+        details: {
+          status: mapped,
+          source: "manual",
+          wipay_status: item.status || null,
+          status_reason: item.status_reason || null,
+          status_datetime: item.status_datetime || null,
+        },
+      });
+      data.push({ code, ok: settled === mapped, status: settled });
+    }
+    res.json({ data });
+  } catch (err) {
+    console.error("[PAYMENTS WIPAY RECONCILE] Erro:", err.message);
+    res.status(500).json({ error: "Erro ao actualizar pagamentos. Ver logs do servidor." });
   }
 });
 

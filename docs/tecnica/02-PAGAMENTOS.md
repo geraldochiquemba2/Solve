@@ -11,6 +11,10 @@ método e paga → callback assinado (HMAC, chave = token scope `signature`).
 - A confirmação vem **só do callback assinado**. A WiPay não publica GET de
   consulta para `POST /v1/hosts/payments`; se o callback falhar, reenvie-o no
   painel WiPay. Nunca aceitar `status` sem HMAC válido.
+- Se a WiPay confirmar mas o callback já tiver sido marcado como entregue, use
+  `Pagamentos → Conciliar WiPay` (gestores): escolhe `accepted`/`rejected` por
+  transacção após conferir o painel WiPay. Aplica `POST
+  /api/v1/payments/wipay/reconcile`, dispara a entrega Cademi e grava auditoria.
 - Env: `WIPAY_CLIENT_ID` + `WIPAY_CLIENT_SECRET` (Render). Sem elas, cai no
   GPO É-kwanza legado.
 - Sandbox vs produção: mesmo host, credenciais diferentes (portal

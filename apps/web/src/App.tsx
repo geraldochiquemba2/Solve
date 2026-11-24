@@ -2432,7 +2432,8 @@ function PaymentsPage() {
 
   const payments = useMemo(() =>
     paymentsData.map((p: any) => {
-      const meta = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+      let meta: any = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+      if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = {}; } }
       const phone = primeiroTexto(p.customer_phone, p.customerPhone, meta.phone, meta.customer_phone);
       const name = primeiroTexto(p.form_customer_name, p.customer_name, p.customerName, meta.name, meta.customer_name, meta.nome);
       const email = primeiroTexto(p.customer_email, p.customerEmail, meta.email, meta.customer_email);
@@ -2460,6 +2461,7 @@ function PaymentsPage() {
       createdAt: createdAt ?? '',
       paidAt: paidAt ?? '',
       expiresAt: expiresAt ?? '',
+      wipayId: primeiroTexto(p.wipay_id, meta.wipay_id, meta.wipayId),
       raw: p,
       };
     })
@@ -2472,6 +2474,33 @@ function PaymentsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<any>(null);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileSel, setReconcileSel] = useState<Record<string, string>>({});
+  const [reconcileBusy, setReconcileBusy] = useState(false);
+  const [reconcileMsg, setReconcileMsg] = useState('');
+  const wipayPendentes = payments.filter(p => p.state === 'Pendente' && p.wipayId);
+  const reconcileWipay = async () => {
+    const items = wipayPendentes.filter(p => reconcileSel[p.id]).map(p => ({ code: p.id, status: reconcileSel[p.id] }));
+    if (!items.length) { setReconcileMsg('Seleciona pelo menos um pagamento.'); return; }
+    setReconcileBusy(true);
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBase}/api/v1/payments/wipay/reconcile`, {
+        method: 'POST',
+        headers: authHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ items }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Falha ao actualizar');
+      const ok = (json.data || []).filter((r: any) => r.ok).length;
+      setReconcileMsg(`${ok}/${items.length} actualizado(s).`);
+      await fetchPayments();
+    } catch (e: any) {
+      setReconcileMsg('Erro: ' + e.message);
+    }
+    setReconcileBusy(false);
+  };
   const visible = payments.filter(p => {
     if (filter !== 'Todas' && p.state !== filter) return false;
     if (search) {
@@ -2490,7 +2519,7 @@ function PaymentsPage() {
     if (formato === 'excel') exportarExcel('relatorio-pagamentos', [{ nome: 'Pagamentos', cabecalho: cab, linhas, larguras: [28, 26, 18, 16, 14, 16, 14] }]);
     else exportarPDF({ titulo: 'Relatório de Pagamentos — SamoraFit', subtitulo: subt, ficheiro: 'relatorio-pagamentos', seccoes: [{ cabecalho: cab, linhas }] });
   };
-  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('pdf')}><FileText size={14} /> PDF</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setCPromo(''); setCPromoRes(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
+  return <><PageHeader eyebrow="Receita · Tesouraria" title="Pagamentos" subtitle="Monitorização de transacções." action={<div className="page-actions" style={{ display: 'flex', gap: '.45rem' }}><button className="btn-secondary" onClick={syncNow} disabled={syncing}><RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'A sincronizar…' : 'Sincronizar Pay4All'}</button><button className="btn-secondary" onClick={() => { setReconcileMsg(''); setReconcileOpen(true); }} disabled={wipayPendentes.length === 0}><CheckCircle2 size={14} /> Conciliar WiPay{wipayPendentes.length ? ` (${wipayPendentes.length})` : ''}</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('excel')}><FileSpreadsheet size={14} /> Excel</button><button className="btn-secondary" onClick={() => exportarRelatorioPagamentos('pdf')}><FileText size={14} /> PDF</button><button className="btn-primary" onClick={() => { setCMsg(''); setCLink(null); setCPromo(''); setCPromoRes(null); setChargeOpen(true); }}><Plus size={14} /> Nova cobrança</button></div>} /><div className="metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '.8rem', marginBottom: '.8rem' }}><Metric label="Recebido" value={money(payments.filter(p => p.state === 'Confirmado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Confirmado').length} transacções`} /><Metric label="Pendente" value={money(payments.filter(p => p.state === 'Pendente').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Pendente').length} transacções`} /><Metric label="Em atraso" value={money(payments.filter(p => p.state === 'Em atraso').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Em atraso').length} cliente(s)`} negative /><Metric label="Cancelado" value={money(payments.filter(p => p.state === 'Cancelado').reduce((s, p) => s + p.amount, 0))} note={`${payments.filter(p => p.state === 'Cancelado').length} transacções`} negative /></div>
   <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.8rem', flexWrap: 'wrap' }}>
     <input className="input" placeholder="Pesquisar nome, cliente, telefone ou ID..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: '150px' }} />
     <input className="input" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '140px' }} />
@@ -2498,6 +2527,13 @@ function PaymentsPage() {
     {(search || dateFrom || dateTo) && <button className="btn-secondary" onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}><RefreshCw size={12} /> Limpar</button>}
   </div>
   <Section title="Movimentos recentes" note={`${visible.length} transacções`} action={<select className="select" value={filter} onChange={e => setFilter(e.target.value)} data-testid="select-payment-status"><option>Todas</option><option>Confirmado</option><option>Pendente</option><option>Em atraso</option><option>Cancelado</option><option>Expirado</option><option>Reembolsado</option></select>}><div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Método</th><th>Estado</th><th>Montante</th><th>Data</th><th /></tr></thead><tbody>{visible.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.67rem' }} title={p.id}>{p.id.length > 14 ? p.id.slice(0, 14) + '…' : p.id}</td><td><div style={{ fontWeight: 700 }}>{p.customer}</div>{p.customerPhone && <div style={{ fontSize: '.65rem', color: 'hsl(var(--muted-foreground))' }}>{p.customerPhone}</div>}</td><td>{p.methodLabel}</td><td><Status tone={p.state === 'Confirmado' ? 'good' : p.state === 'Pendente' ? 'pending' : p.state === 'Cancelado' ? 'danger' : p.state === 'Em atraso' ? 'danger' : p.state === 'Expirado' ? 'danger' : 'warn'}>{p.state}</Status></td><td className="mono" style={{ fontSize: '.68rem' }}>{money(p.amount)}</td><td style={{ color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>{p.dateFmt}</td><td>{p.state === 'Confirmado' && <span className="text-good" style={{ fontSize: '.7rem', display: 'inline-flex', gap: '.3rem', alignItems: 'center' }}><CheckCircle2 size={13} /> Conciliado</span>}</td><td><button className="btn-quiet" onClick={() => setSelected(p)} aria-label="Ver detalhes da transação"><Eye size={14} /></button></td></tr>)}</tbody></table></div></Section>{selected && <PaymentDetailModal payment={selected} onClose={() => setSelected(null)} />}
+  {reconcileOpen && <div className="modal-backdrop" onClick={() => setReconcileOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '760px', padding: '1.2rem' }}>
+    <h3 style={{ marginBottom: '.2rem' }}>Conciliar pagamentos WiPay</h3>
+    <div className="section-note" style={{ marginBottom: '1rem' }}>Confirma cada transacção no painel WiPay e escolhe o estado aqui. Só gestores podem aplicar e cada alteração fica auditada.</div>
+    {wipayPendentes.length === 0 ? <div style={{ fontSize: '.8rem' }}>Sem pagamentos WiPay pendentes.</div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Transacção</th><th>Cliente</th><th>Montante</th><th>Data</th><th>Estado no painel</th></tr></thead><tbody>{wipayPendentes.map(p => <tr key={p.id}><td className="mono" style={{ fontSize: '.68rem' }}>{p.id}</td><td>{p.customer}</td><td className="mono">{money(p.amount)}</td><td>{fmtPaymentDate(p.date)}</td><td><select className="select" value={reconcileSel[p.id] || ''} onChange={e => setReconcileSel(s => ({ ...s, [p.id]: e.target.value }))}><option value="">—</option><option value="accepted">Pago (accepted)</option><option value="rejected">Rejeitado</option></select></td></tr>)}</tbody></table></div>}
+    {reconcileMsg && <div style={{ fontSize: '.75rem', marginTop: '.8rem' }}>{reconcileMsg}</div>}
+    <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}><button className="btn-secondary" onClick={() => setReconcileOpen(false)}>Fechar</button><button className="btn-primary" onClick={reconcileWipay} disabled={reconcileBusy}>{reconcileBusy ? 'A aplicar…' : 'Aplicar estados'}</button></div>
+  </div></div>}
   {chargeOpen && <div className="modal-backdrop" onClick={() => setChargeOpen(false)}><div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.2rem' }}>
     <h3 style={{ marginBottom: '.2rem' }}>Nova cobrança</h3>
     <div className="section-note" style={{ marginBottom: '1rem' }}>Regista pendente e gera o link de pagamento (o método escolhe-se na página).</div>
