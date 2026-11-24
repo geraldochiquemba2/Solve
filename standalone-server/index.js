@@ -1381,6 +1381,7 @@ async function getEkwanzaToken() {
 // (24h, chave HMAC dos callbacks). Criar pagamento devolve 303 com a página
 // hospedada (location); o cliente escolhe o método e paga lá.
 const WIPAY_HOST = "https://api.wipay.ao";
+const WIPAY_CHECKOUT_API = (process.env.WIPAY_CHECKOUT_API || "https://api.wiza.ao").replace(/\/$/, "");
 const _wipayTok = {};
 async function getWipayToken(scope) {
   const c = _wipayTok[scope];
@@ -1597,6 +1598,92 @@ app.post("/webhooks/wipay", rateLimit(60), async (req, res) => {
   }
 });
 
+let _wipayConfirmRunning = false;
+async function confirmWipayPending(limit = 20) {
+  if (_wipayConfirmRunning) return { checked: 0, updated: 0, failed: 0 };
+  _wipayConfirmRunning = true;
+  const stats = { checked: 0, updated: 0, failed: 0 };
+  const max = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  try {
+    const pend = await pool.query(
+      "SELECT code, metadata FROM payments WHERE status='pendente' AND created_at > NOW() - INTERVAL '30 days' AND metadata->>'wipay_id' IS NOT NULL ORDER BY created_at DESC LIMIT $1",
+      [max]
+    );
+    for (const row of pend.rows) {
+      let meta = {};
+      try { meta = typeof row.metadata === "string" ? JSON.parse(row.metadata) : (row.metadata || {}); } catch {}
+      const wid = String(meta.wipay_id || meta.wipayId || "").trim();
+      if (!wid) continue;
+      stats.checked++;
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 10000);
+        let tx = null;
+        try {
+          const r = await fetch(`${WIPAY_CHECKOUT_API}/v1/hosts/transactions/${encodeURIComponent(wid)}`, {
+            headers: { Accept: "application/json" },
+            signal: ctrl.signal,
+          });
+          if (r.status === 404) continue;
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          tx = await r.json().catch(() => null);
+        } finally { clearTimeout(timer); }
+        const initialStatus = String(tx?.status || "");
+        const mapped = mapWipayStatus(initialStatus);
+        if (!mapped) continue;
+        let finalStatus = initialStatus;
+        let reason = tx?.status_code || tx?.status_reason || null;
+        if (tx?.id) {
+          const ctrl2 = new AbortController();
+          const timer2 = setTimeout(() => ctrl2.abort(), 10000);
+          try {
+            const cr = await fetch(`${WIPAY_CHECKOUT_API}/v1/hosts/jungleworks/${encodeURIComponent(tx.id)}/complete`, {
+              method: "PATCH",
+              headers: { Accept: "application/json", "Content-Type": "application/json" },
+              signal: ctrl2.signal,
+            });
+            if (cr.ok) {
+              const cj = await cr.json().catch(() => null);
+              if (cj?.status) {
+                finalStatus = String(cj.status);
+                reason = cj.status_code || reason;
+              }
+            }
+          } catch (e) {
+            console.error(`[WIPAY-CONFIRM] ${row.code}: complete falhou: ${e.message}`);
+          } finally { clearTimeout(timer2); }
+        }
+        const finalMapped = mapWipayStatus(finalStatus) || mapped;
+        const changed = await settleWipayPayment(row.code, finalMapped, finalStatus, reason);
+        if (changed) {
+          stats.updated++;
+          audit(null, "payments.wipay_auto_confirmed", {
+            entity: "payments",
+            entityId: row.code,
+            details: { status: finalMapped, source: "wipay_poll", wipay_status: finalStatus, status_code: reason },
+          });
+        }
+      } catch (e) {
+        stats.failed++;
+        console.error(`[WIPAY-CONFIRM] ${row.code}: ${e.message}`);
+      }
+    }
+  } finally {
+    _wipayConfirmRunning = false;
+  }
+  return stats;
+}
+
+app.post("/api/v1/payments/wipay/confirm", requireAuth, requireManager, rateLimit(60), async (req, res) => {
+  try {
+    const data = await confirmWipayPending(req.body?.limit || 20);
+    res.json({ data });
+  } catch (err) {
+    console.error("[WIPAY CONFIRM] Erro:", err.message);
+    res.status(500).json({ error: "Erro ao pedir confirmações. Ver logs do servidor." });
+  }
+});
+
 // ─── Payments ──────────────────────────────────────────────────────────────
 
 app.get("/api/v1/payments", requireAuth, async (req, res) => {
@@ -1632,8 +1719,7 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
     const result = await pool.query(
-      `SELECT p.*, COALESCE(NULLIF(p.metadata->>'name',''), NULLIF(p.metadata->>'customer_name',''), NULLIF(p.metadata->>'nome',''), NULLIF(p.metadata->>'customerName','')) AS form_customer_name,
-       COALESCE(NULLIF(p.metadata->>'wipay_id',''), NULLIF(p.metadata->>'wipayId','')) AS wipay_id
+      `SELECT p.*, COALESCE(NULLIF(p.metadata->>'name',''), NULLIF(p.metadata->>'customer_name',''), NULLIF(p.metadata->>'nome',''), NULLIF(p.metadata->>'customerName','')) AS form_customer_name
        FROM payments p
        ${whereClause} ORDER BY p.created_at DESC, p.id DESC LIMIT 200`, params
     );
@@ -1653,54 +1739,6 @@ app.get("/api/v1/payments", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[PAYMENTS LIST] Error:", err.message);
     res.status(500).json({ error: "Erro a ler pagamentos. Ver logs do servidor." });
-  }
-});
-
-app.post("/api/v1/payments/wipay/reconcile", requireAuth, requireManager, rateLimit(60), async (req, res) => {
-  try {
-    const raw = Array.isArray(req.body?.items) ? req.body.items : [req.body];
-    if (!raw.length || raw.length > 50) return res.status(400).json({ error: "Fornece entre 1 e 50 pagamentos." });
-    const data = [];
-    for (const item of raw) {
-      const code = String(item?.code || "").trim();
-      const mapped = mapWipayStatus(item?.status);
-      if (!code || !mapped) {
-        data.push({ code, ok: false, error: "Código ou estado inválido" });
-        continue;
-      }
-      const r = await pool.query("SELECT status, metadata FROM payments WHERE code = $1", [code]);
-      const row = r.rows[0];
-      if (!row) {
-        data.push({ code, ok: false, error: "Pagamento não encontrado" });
-        continue;
-      }
-      let meta = {};
-      try {
-        const cm = row.metadata;
-        meta = typeof cm === "string" ? JSON.parse(cm) : (cm || {});
-      } catch {}
-      if (!meta.wipay_id || row.status !== "pendente") {
-        data.push({ code, ok: false, error: "Não é um pagamento WiPay pendente" });
-        continue;
-      }
-      const settled = await settleWipayPayment(code, mapped, item.status, item.status_reason);
-      audit(req, "payments.wipay_reconciled", {
-        entity: "payments",
-        entityId: code,
-        details: {
-          status: mapped,
-          source: "manual",
-          wipay_status: item.status || null,
-          status_reason: item.status_reason || null,
-          status_datetime: item.status_datetime || null,
-        },
-      });
-      data.push({ code, ok: settled === mapped, status: settled });
-    }
-    res.json({ data });
-  } catch (err) {
-    console.error("[PAYMENTS WIPAY RECONCILE] Erro:", err.message);
-    res.status(500).json({ error: "Erro ao actualizar pagamentos. Ver logs do servidor." });
   }
 });
 
@@ -4861,6 +4899,16 @@ setInterval(async () => {
 // NOTA: 15min (era 5min) para poupar compute (Neon/Supabase). O webhook
 // /webhooks/ekwanza continua a confirmar em tempo real; isto é só rede de
 // segurança. Não baixar sem rever a cota mensal.
+const WIPAY_CONFIRM_INTERVAL_MS = Number(process.env.WIPAY_CONFIRM_INTERVAL_MS || 30 * 60 * 1000);
+setInterval(async () => {
+  try {
+    const stats = await confirmWipayPending(20);
+    if (stats.checked || stats.updated || stats.failed) console.log(`[WIPAY-CONFIRM] ${JSON.stringify(stats)}`);
+  } catch (e) {
+    console.error("[WIPAY-CONFIRM] erro:", e.message);
+  }
+}, WIPAY_CONFIRM_INTERVAL_MS);
+
 let _autoSyncRunning = false;
 const AUTOSYNC_INTERVAL_MS = Number(process.env.AUTOSYNC_INTERVAL_MS || 15 * 60 * 1000);
 setInterval(async () => {
